@@ -121,6 +121,94 @@ class TestUserService:
 
         assert authenticated is None
 
+    @pytest.mark.asyncio
+    async def test_count_active_admins_none(self, db_session: AsyncSession):
+        """Test counting admins when none exist."""
+        service = UserService(db_session)
+        count = await service.count_active_admins()
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_count_active_admins(self, db_session: AsyncSession):
+        """Test counting active admins."""
+        service = UserService(db_session)
+
+        # Create regular user
+        user1 = UserCreate(email="user1@test.com", password="password123", display_name="User 1")
+        await service.create(user1, role=UserRole.USER)
+
+        # Create two admins
+        admin1 = UserCreate(email="admin1@test.com", password="password123", display_name="Admin 1")
+        await service.create(admin1, role=UserRole.ADMIN)
+
+        admin2 = UserCreate(email="admin2@test.com", password="password123", display_name="Admin 2")
+        admin2_user = await service.create(admin2, role=UserRole.ADMIN)
+
+        count = await service.count_active_admins()
+        assert count == 2
+
+        # Deactivate one admin
+        await service.deactivate(admin2_user)
+        count = await service.count_active_admins()
+        assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_is_last_admin(self, db_session: AsyncSession):
+        """Test checking if user is the last admin."""
+        service = UserService(db_session)
+
+        # Create single admin
+        admin1 = UserCreate(email="admin1@test.com", password="password123", display_name="Admin 1")
+        admin1_user = await service.create(admin1, role=UserRole.ADMIN)
+
+        assert await service.is_last_admin(admin1_user) is True
+
+        # Create another admin
+        admin2 = UserCreate(email="admin2@test.com", password="password123", display_name="Admin 2")
+        await service.create(admin2, role=UserRole.ADMIN)
+
+        assert await service.is_last_admin(admin1_user) is False
+
+    @pytest.mark.asyncio
+    async def test_is_last_admin_non_admin(self, db_session: AsyncSession, test_user_data):
+        """Test is_last_admin returns False for non-admin users."""
+        service = UserService(db_session)
+        user_create = UserCreate(**test_user_data)
+        user = await service.create(user_create, role=UserRole.USER)
+
+        assert await service.is_last_admin(user) is False
+
+    @pytest.mark.asyncio
+    async def test_delete_user_credentials(self, db_session: AsyncSession, test_user_data):
+        """Test deleting all credentials for a user."""
+        from src.models.credential import Credential
+
+        service = UserService(db_session)
+        user_create = UserCreate(**test_user_data)
+        user = await service.create(user_create)
+
+        # Create some credentials
+        for i in range(3):
+            cred = Credential(
+                owner_id=user.id,
+                name=f"Test Cred {i}",
+                encrypted_data="test_data",
+            )
+            db_session.add(cred)
+        await db_session.flush()
+
+        # Verify credentials exist
+        count = await service.get_credential_count(user.id)
+        assert count == 3
+
+        # Delete credentials
+        deleted_count = await service.delete_user_credentials(user.id)
+        assert deleted_count == 3
+
+        # Verify credentials are gone
+        count = await service.get_credential_count(user.id)
+        assert count == 0
+
 
 class TestCredentialService:
     """Test CredentialService functions."""

@@ -81,6 +81,33 @@ class UserService:
         await self.db.flush()
         return user
 
+    async def delete_user_credentials(self, user_id: str) -> int:
+        """Delete all credentials for a user. Returns count of deleted credentials."""
+        from sqlalchemy import delete
+
+        result = await self.db.execute(
+            delete(Credential).where(Credential.owner_id == user_id)
+        )
+        await self.db.flush()
+        return result.rowcount
+
+    async def count_active_admins(self) -> int:
+        """Count active admin users."""
+        result = await self.db.execute(
+            select(func.count(User.id)).where(
+                User.role == UserRole.ADMIN,
+                User.is_active == True,
+            )
+        )
+        return result.scalar() or 0
+
+    async def is_last_admin(self, user: User) -> bool:
+        """Check if user is the last active admin."""
+        if user.role != UserRole.ADMIN:
+            return False
+        count = await self.count_active_admins()
+        return count <= 1
+
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[User]:
         """List all users (admin only)."""
         result = await self.db.execute(

@@ -1,6 +1,6 @@
 """User management endpoints."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from src.api.deps import AdminUser, CurrentUser, DbSession
 from src.models.user import UserRole
@@ -128,14 +128,25 @@ async def update_user_role(
     admin_user: AdminUser,
     db: DbSession,
 ):
-    """Update user role (admin only)."""
-    if user_id == admin_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot change your own role",
-        )
+    """Update user role (admin only).
 
+    Admins can demote themselves only if there is at least one other active admin.
+    """
     user_service = UserService(db)
+
+    # Check if trying to change own role
+    if user_id == admin_user.id:
+        # Allow self-demotion only if not the last admin
+        if data.role != UserRole.ADMIN:
+            if await user_service.is_last_admin(admin_user):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot demote yourself: you are the last admin",
+                )
+        else:
+            # No change needed if already admin
+            return admin_user
+
     user = await user_service.get_by_id(user_id)
 
     if not user:
@@ -155,8 +166,16 @@ async def deactivate_user(
     user_id: str,
     admin_user: AdminUser,
     db: DbSession,
+    delete_credentials: bool = Query(
+        False,
+        description="Also permanently delete all user's credentials",
+    ),
 ):
-    """Deactivate user (admin only). Does not delete credentials."""
+    """Deactivate user (admin only).
+
+    By default, credentials are preserved. Use delete_credentials=true to also
+    permanently delete all credentials owned by this user.
+    """
     if user_id == admin_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -171,5 +190,9 @@ async def deactivate_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+
+    # Optionally delete credentials first
+    if delete_credentials:
+        await user_service.delete_user_credentials(user.id)
 
     await user_service.deactivate(user)

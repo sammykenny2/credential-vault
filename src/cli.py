@@ -29,7 +29,7 @@ async def promote_admin(email: str) -> None:
         print(f"Successfully promoted '{email}' to admin.")
 
 
-async def demote_admin(email: str) -> None:
+async def demote_admin(email: str, force: bool = False) -> None:
     """Demote an admin to regular user."""
     async with AsyncSessionLocal() as db:
         user_service = UserService(db)
@@ -42,6 +42,15 @@ async def demote_admin(email: str) -> None:
         if user.role == UserRole.USER:
             print(f"User '{email}' is already a regular user.")
             return
+
+        # Check if this is the last admin
+        if await user_service.is_last_admin(user):
+            if not force:
+                print(f"Error: Cannot demote '{email}': this is the last admin.")
+                print("Use --force to demote anyway (WARNING: system will have no admin).")
+                sys.exit(1)
+            else:
+                print("WARNING: Demoting the last admin!")
 
         user.role = UserRole.USER
         await db.commit()
@@ -112,6 +121,11 @@ def main():
         help="Demote an admin to regular user"
     )
     demote_parser.add_argument("email", help="Email of the admin to demote")
+    demote_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force demote even if this is the last admin"
+    )
 
     # create-admin command
     create_parser = subparsers.add_parser(
@@ -139,7 +153,7 @@ def main():
     if args.command == "promote-admin":
         asyncio.run(promote_admin(args.email))
     elif args.command == "demote-admin":
-        asyncio.run(demote_admin(args.email))
+        asyncio.run(demote_admin(args.email, args.force))
     elif args.command == "create-admin":
         asyncio.run(create_admin(args.email, args.password, args.name))
     elif args.command == "list-admins":

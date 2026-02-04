@@ -90,10 +90,10 @@ class TestUserRoleAPI:
         assert data["role"] == "user"
 
     @pytest.mark.asyncio
-    async def test_admin_cannot_change_own_role(
+    async def test_last_admin_cannot_demote_self(
         self, client: AsyncClient, admin_token
     ):
-        """Test admin cannot change their own role."""
+        """Test last admin cannot demote themselves."""
         token, admin = admin_token
 
         response = await client.patch(
@@ -103,7 +103,35 @@ class TestUserRoleAPI:
         )
 
         assert response.status_code == 400
-        assert "Cannot change your own role" in response.json()["detail"]
+        assert "last admin" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_admin_can_demote_self_if_other_admin_exists(
+        self, client: AsyncClient, db_session, admin_token
+    ):
+        """Test admin can demote themselves if another admin exists."""
+        token, admin = admin_token
+
+        # Create another admin
+        service = UserService(db_session)
+        user_data = UserCreate(
+            email="admin2@example.com",
+            password="Admin2Password123!",
+            display_name="Admin User 2",
+        )
+        await service.create(user_data, role=UserRole.ADMIN)
+        await db_session.commit()
+
+        # Now the first admin can demote themselves
+        response = await client.patch(
+            f"/api/v1/users/{admin.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "user"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["role"] == "user"
 
     @pytest.mark.asyncio
     async def test_regular_user_cannot_change_roles(
@@ -232,3 +260,106 @@ class TestUserListAPI:
         )
 
         assert response.status_code == 403
+
+
+class TestUserDeactivateAPI:
+    """Test user deactivation endpoints."""
+
+    @pytest.fixture
+    async def admin_token(self, client: AsyncClient, db_session):
+        """Create an admin user and return their token."""
+        service = UserService(db_session)
+        user_data = UserCreate(
+            email="deactadmin@example.com",
+            password="AdminPassword123!",
+            display_name="Deactivate Admin",
+        )
+        admin = await service.create(user_data, role=UserRole.ADMIN)
+        await db_session.commit()
+
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "deactadmin@example.com",
+                "password": "AdminPassword123!",
+            },
+        )
+        return login_response.json()["access_token"], admin
+
+    @pytest.fixture
+    async def user_with_credentials(self, db_session):
+        """Create a user with some credentials."""
+        from src.models.credential import Credential
+
+        service = UserService(db_session)
+        user_data = UserCreate(
+            email="userwithcreds@example.com",
+            password="UserPassword123!",
+            display_name="User With Creds",
+        )
+        user = await service.create(user_data, role=UserRole.USER)
+
+        # Add some credentials
+        for i in range(3):
+            cred = Credential(
+                owner_id=user.id,
+                name=f"Test Credential {i}",
+                encrypted_data="encrypted_test_data",
+            )
+            db_session.add(cred)
+
+        await db_session.commit()
+        return user
+
+    @pytest.mark.asyncio
+    async def test_deactivate_user_preserves_credentials(
+        self, client: AsyncClient, db_session, admin_token, user_with_credentials
+    ):
+        """Test deactivating user preserves their credentials by default."""
+        token, _ = admin_token
+
+        response = await client.delete(
+            f"/api/v1/users/{user_with_credentials.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 204
+
+        # Verify credentials still exist
+        service = UserService(db_session)
+        count = await service.get_credential_count(user_with_credentials.id)
+        assert count == 3
+
+    @pytest.mark.asyncio
+    async def test_deactivate_user_with_delete_credentials(
+        self, client: AsyncClient, db_session, admin_token, user_with_credentials
+    ):
+        """Test deactivating user with delete_credentials=true removes credentials."""
+        token, _ = admin_token
+
+        response = await client.delete(
+            f"/api/v1/users/{user_with_credentials.id}?delete_credentials=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 204
+
+        # Verify credentials are deleted
+        service = UserService(db_session)
+        count = await service.get_credential_count(user_with_credentials.id)
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_deactivate_self(
+        self, client: AsyncClient, admin_token
+    ):
+        """Test admin cannot deactivate themselves."""
+        token, admin = admin_token
+
+        response = await client.delete(
+            f"/api/v1/users/{admin.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 400
+        assert "Cannot deactivate yourself" in response.json()["detail"]
