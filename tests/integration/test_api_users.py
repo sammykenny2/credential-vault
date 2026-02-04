@@ -362,4 +362,76 @@ class TestUserDeactivateAPI:
         )
 
         assert response.status_code == 400
-        assert "Cannot deactivate yourself" in response.json()["detail"]
+        assert "Cannot delete yourself" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_user(
+        self, client: AsyncClient, db_session, admin_token, user_with_credentials
+    ):
+        """Test hard deleting user removes user and credentials completely."""
+        token, _ = admin_token
+
+        response = await client.delete(
+            f"/api/v1/users/{user_with_credentials.id}?hard_delete=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 204
+
+        # Verify user is completely gone
+        service = UserService(db_session)
+        user = await service.get_by_id(user_with_credentials.id)
+        assert user is None
+
+    @pytest.mark.asyncio
+    async def test_reactivate_user(
+        self, client: AsyncClient, db_session, admin_token
+    ):
+        """Test reactivating a deactivated user."""
+        token, _ = admin_token
+
+        # Create and deactivate a user
+        service = UserService(db_session)
+        user_data = UserCreate(
+            email="toreactivate@example.com",
+            password="Password123!",
+            display_name="To Reactivate",
+        )
+        user = await service.create(user_data)
+        await service.deactivate(user)
+        await db_session.commit()
+
+        # Reactivate
+        response = await client.post(
+            f"/api/v1/users/{user.id}/reactivate",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_active"] is True
+
+    @pytest.mark.asyncio
+    async def test_reactivate_already_active_user(
+        self, client: AsyncClient, db_session, admin_token
+    ):
+        """Test reactivating an already active user returns error."""
+        token, _ = admin_token
+
+        # Create an active user
+        service = UserService(db_session)
+        user_data = UserCreate(
+            email="alreadyactive@example.com",
+            password="Password123!",
+            display_name="Already Active",
+        )
+        user = await service.create(user_data)
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/v1/users/{user.id}/reactivate",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 400
+        assert "already active" in response.json()["detail"]

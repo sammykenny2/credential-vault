@@ -81,6 +81,19 @@ class UserService:
         await self.db.flush()
         return user
 
+    async def reactivate(self, user: User) -> User:
+        """Reactivate user account."""
+        user.is_active = True
+        await self.db.flush()
+        return user
+
+    async def hard_delete(self, user: User) -> None:
+        """Permanently delete user and all their data from database."""
+        # Credentials are deleted via cascade, but let's be explicit
+        await self.delete_user_credentials(user.id)
+        await self.db.delete(user)
+        await self.db.flush()
+
     async def delete_user_credentials(self, user_id: str) -> int:
         """Delete all credentials for a user. Returns count of deleted credentials."""
         from sqlalchemy import delete

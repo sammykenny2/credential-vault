@@ -161,25 +161,56 @@ async def update_user_role(
     return user
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deactivate_user(
+@router.post("/{user_id}/reactivate", response_model=UserRead)
+async def reactivate_user(
     user_id: str,
     admin_user: AdminUser,
     db: DbSession,
+):
+    """Reactivate a deactivated user (admin only)."""
+    user_service = UserService(db)
+    user = await user_service.get_by_id(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is already active",
+        )
+
+    reactivated = await user_service.reactivate(user)
+    return reactivated
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: str,
+    admin_user: AdminUser,
+    db: DbSession,
+    hard_delete: bool = Query(
+        False,
+        description="Permanently delete user and all data (cannot be undone)",
+    ),
     delete_credentials: bool = Query(
         False,
-        description="Also permanently delete all user's credentials",
+        description="Also delete credentials (only used when hard_delete=false)",
     ),
 ):
-    """Deactivate user (admin only).
+    """Delete or deactivate user (admin only).
 
-    By default, credentials are preserved. Use delete_credentials=true to also
-    permanently delete all credentials owned by this user.
+    - Default: Soft delete (deactivate). User record and credentials preserved.
+    - delete_credentials=true: Deactivate and delete credentials.
+    - hard_delete=true: Permanently remove user and all credentials from database.
     """
     if user_id == admin_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot deactivate yourself",
+            detail="Cannot delete yourself",
         )
 
     user_service = UserService(db)
@@ -191,8 +222,11 @@ async def deactivate_user(
             detail="User not found",
         )
 
-    # Optionally delete credentials first
-    if delete_credentials:
-        await user_service.delete_user_credentials(user.id)
-
-    await user_service.deactivate(user)
+    if hard_delete:
+        # Permanently delete user and all data
+        await user_service.hard_delete(user)
+    else:
+        # Soft delete (deactivate)
+        if delete_credentials:
+            await user_service.delete_user_credentials(user.id)
+        await user_service.deactivate(user)

@@ -209,6 +209,52 @@ class TestUserService:
         count = await service.get_credential_count(user.id)
         assert count == 0
 
+    @pytest.mark.asyncio
+    async def test_reactivate_user(self, db_session: AsyncSession, test_user_data):
+        """Test reactivating a deactivated user."""
+        service = UserService(db_session)
+        user_create = UserCreate(**test_user_data)
+        user = await service.create(user_create)
+
+        # Deactivate
+        await service.deactivate(user)
+        assert user.is_active is False
+
+        # Reactivate
+        await service.reactivate(user)
+        assert user.is_active is True
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_user(self, db_session: AsyncSession, test_user_data):
+        """Test hard deleting a user removes them completely."""
+        from src.models.credential import Credential
+
+        service = UserService(db_session)
+        user_create = UserCreate(**test_user_data)
+        user = await service.create(user_create)
+        user_id = user.id
+
+        # Add some credentials
+        for i in range(2):
+            cred = Credential(
+                owner_id=user.id,
+                name=f"Test Cred {i}",
+                encrypted_data="test_data",
+            )
+            db_session.add(cred)
+        await db_session.flush()
+
+        # Hard delete
+        await service.hard_delete(user)
+
+        # Verify user is gone
+        deleted_user = await service.get_by_id(user_id)
+        assert deleted_user is None
+
+        # Verify credentials are gone
+        count = await service.get_credential_count(user_id)
+        assert count == 0
+
 
 class TestCredentialService:
     """Test CredentialService functions."""
