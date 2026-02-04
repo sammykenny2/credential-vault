@@ -12,7 +12,7 @@ from src.config import get_settings
 from src.models.base import Base
 
 # Import all models to ensure they are registered with Base.metadata
-from src.models import Credential, User  # noqa: F401
+from src.models import Credential, Template, TemplateUsage, User  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

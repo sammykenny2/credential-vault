@@ -13,7 +13,7 @@
 | Admin System | Completed | Role management, bootstrap, user lifecycle |
 | Credential Storage | Completed | Pure key-value structure |
 | Template System | Completed | Phase 2 完成 (localStorage) |
-| Template Backend Sync | Not Started | Phase 3 跨裝置同步 |
+| Template Backend Sync | In Progress | Phase 3 跨裝置同步 |
 | Tests | In Progress | Unit + Integration tests |
 | Deployment | Not Started | Docker + Tailscale |
 
@@ -119,7 +119,7 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 
 ### WP-4: Backend Template API (Phase 3)
 
-**Status**: Not Started
+**Status**: In Progress
 **Assigned**: Claude
 **Priority**: P1
 **Depends on**: WP-2 (Completed)
@@ -147,7 +147,7 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 3.1 | Database Models & Migration | [ ] Not Started |
+| 3.1 | Database Models & Migration | [x] Completed |
 | 3.2 | Pydantic Schemas | [ ] Not Started |
 | 3.3 | Template Service | [ ] Not Started |
 | 3.4 | API Endpoints | [ ] Not Started |

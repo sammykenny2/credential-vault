@@ -61,6 +61,16 @@ class User(Base, TimestampMixin):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    templates: Mapped[list["Template"]] = relationship(
+        "Template",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+    template_usage: Mapped[list["TemplateUsage"]] = relationship(
+        "TemplateUsage",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

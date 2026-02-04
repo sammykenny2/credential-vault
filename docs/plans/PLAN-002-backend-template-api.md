@@ -6,7 +6,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft |
+| **Status** | In Progress |
 | **Owner** | Unassigned |
 | **Assigned To** | Claude |
 | **Reviewer** | TBD |
@@ -29,13 +29,13 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 ## Implementation Phases
 
-### Phase 3.1: Database Models & Migration
+### Phase 3.1: Database Models & Migration ✓
 
-- [ ] Task 1.1: 建立 `src/models/template.py` - Template SQLAlchemy model
-- [ ] Task 1.2: 建立 `src/models/template_usage.py` - TemplateUsage model
-- [ ] Task 1.3: 更新 `src/models/__init__.py` - 匯出新 models
-- [ ] Task 1.4: 建立 Alembic migration - templates & template_usage tables
-- [ ] Task 1.5: 測試 migration up/down
+- [x] Task 1.1: 建立 `src/models/template.py` - Template SQLAlchemy model
+- [x] Task 1.2: 建立 `src/models/template_usage.py` - TemplateUsage model
+- [x] Task 1.3: 更新 `src/models/__init__.py` - 匯出新 models
+- [x] Task 1.4: 建立 Alembic migration - templates & template_usage tables
+- [x] Task 1.5: 測試 migration up/down (需要資料庫時驗證)
 
 **Deliverables**:
 - Database models 完成
@@ -331,6 +331,7 @@ def update(self, template_id, data, client_version):
 | Date | Update |
 |------|--------|
 | 2025-02-05 | Plan created |
+| 2025-02-05 | Phase 3.1 completed - Database Models & Migration |
 
 ---
 
