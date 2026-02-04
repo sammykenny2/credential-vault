@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
-import { Shield, Key, User } from 'lucide-react'
+import { Shield, Key, User, FileText } from 'lucide-react'
+import TemplateManager from '@/components/TemplateManager'
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore()
@@ -178,6 +179,15 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
+      </section>
+
+      {/* Templates Section */}
+      <section className="card mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText className="w-5 h-5 text-gray-600" />
+          <h2 className="text-lg font-semibold">Credential Templates</h2>
+        </div>
+        <TemplateManager />
       </section>
 
       {/* Password Section */}
