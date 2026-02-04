@@ -1,11 +1,19 @@
 /**
  * Form for creating/editing credentials with client-side encryption.
+ * Pure key-value storage - all fields are dynamic.
  */
 
 import { useState } from 'react'
-import { Eye, EyeOff, RefreshCw, X, Plus, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw, X, Plus, Trash2, GripVertical } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { CredentialData } from '@/lib/crypto'
+
+interface FieldEntry {
+  id: string
+  key: string
+  value: string
+  isSecret: boolean // Whether to mask the value
+}
 
 interface CredentialFormProps {
   isOpen: boolean
@@ -18,6 +26,31 @@ interface CredentialFormProps {
     category?: string
     credentialData?: CredentialData
   }
+}
+
+// Generate unique ID for field tracking
+const generateId = () => Math.random().toString(36).substring(2, 9)
+
+// Default fields for new credential
+const getDefaultFields = (): FieldEntry[] => [
+  { id: generateId(), key: 'Username', value: '', isSecret: false },
+  { id: generateId(), key: 'Password', value: '', isSecret: true },
+]
+
+// Convert stored data to field entries
+const dataToFields = (data?: CredentialData): FieldEntry[] => {
+  if (!data?.fields || Object.keys(data.fields).length === 0) {
+    return getDefaultFields()
+  }
+  return Object.entries(data.fields).map(([key, value]) => ({
+    id: generateId(),
+    key,
+    value,
+    isSecret: key.toLowerCase().includes('password') ||
+              key.toLowerCase().includes('secret') ||
+              key.toLowerCase().includes('key') ||
+              key.toLowerCase().includes('token'),
+  }))
 }
 
 export default function CredentialForm({
@@ -34,45 +67,61 @@ export default function CredentialForm({
   const [websiteUrl, setWebsiteUrl] = useState(initialData?.website_url || '')
   const [category, setCategory] = useState(initialData?.category || '')
 
-  // Credential data (will be encrypted)
-  const [username, setUsername] = useState(initialData?.credentialData?.username || '')
-  const [password, setPassword] = useState(initialData?.credentialData?.password || '')
+  // Credential fields (will be encrypted)
+  const [fields, setFields] = useState<FieldEntry[]>(() => dataToFields(initialData?.credentialData))
   const [notes, setNotes] = useState(initialData?.credentialData?.notes || '')
 
-  // Custom fields state
-  const initialCustomFields = initialData?.credentialData?.customFields
-    ? Object.entries(initialData.credentialData.customFields).map(([key, value]) => ({ key, value }))
-    : []
-  const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(initialCustomFields)
-
   // UI state
-  const [showPassword, setShowPassword] = useState(false)
+  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
-  const handleGeneratePassword = () => {
+  const toggleFieldVisibility = (fieldId: string) => {
+    setVisibleFields(prev => {
+      const next = new Set(prev)
+      if (next.has(fieldId)) {
+        next.delete(fieldId)
+      } else {
+        next.add(fieldId)
+      }
+      return next
+    })
+  }
+
+  const handleGeneratePassword = (fieldId: string) => {
     const newPassword = generatePassword(20, {
       uppercase: true,
       lowercase: true,
       numbers: true,
       symbols: true,
     })
-    setPassword(newPassword)
-    setShowPassword(true)
+    updateField(fieldId, 'value', newPassword)
+    setVisibleFields(prev => new Set(prev).add(fieldId))
   }
 
-  const addCustomField = () => {
-    setCustomFields([...customFields, { key: '', value: '' }])
+  const addField = () => {
+    setFields([...fields, { id: generateId(), key: '', value: '', isSecret: false }])
   }
 
-  const updateCustomField = (index: number, field: 'key' | 'value', newValue: string) => {
-    const updated = [...customFields]
-    updated[index][field] = newValue
-    setCustomFields(updated)
+  const updateField = (id: string, property: keyof FieldEntry, newValue: string | boolean) => {
+    setFields(fields.map(f => {
+      if (f.id !== id) return f
+      const updated = { ...f, [property]: newValue }
+      // Auto-detect secret fields based on key name
+      if (property === 'key' && typeof newValue === 'string') {
+        const keyLower = newValue.toLowerCase()
+        updated.isSecret = keyLower.includes('password') ||
+                          keyLower.includes('secret') ||
+                          keyLower.includes('key') ||
+                          keyLower.includes('token')
+      }
+      return updated
+    }))
   }
 
-  const removeCustomField = (index: number) => {
-    setCustomFields(customFields.filter((_, i) => i !== index))
+  const removeField = (id: string) => {
+    if (fields.length <= 1) return // Keep at least one field
+    setFields(fields.filter(f => f.id !== id))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,22 +134,31 @@ export default function CredentialForm({
       return
     }
 
+    // Validate at least one field has content
+    const validFields = fields.filter(f => f.key.trim() && f.value.trim())
+    if (validFields.length === 0 && !notes.trim()) {
+      setFormError('At least one field or note is required')
+      return
+    }
+
     setIsSaving(true)
 
     try {
-      // Encrypt credential data
-      const credentialData: CredentialData = {}
-      if (username) credentialData.username = username
-      if (password) credentialData.password = password
-      if (notes) credentialData.notes = notes
+      // Build credential data
+      const credentialData: CredentialData = {
+        fields: {},
+      }
 
-      // Add custom fields (filter out empty keys)
-      const validCustomFields = customFields.filter(f => f.key.trim())
-      if (validCustomFields.length > 0) {
-        credentialData.customFields = {}
-        for (const field of validCustomFields) {
-          credentialData.customFields[field.key.trim()] = field.value
+      // Add all non-empty fields
+      for (const field of fields) {
+        if (field.key.trim()) {
+          credentialData.fields[field.key.trim()] = field.value
         }
+      }
+
+      // Add notes if present
+      if (notes.trim()) {
+        credentialData.notes = notes.trim()
       }
 
       const encryptedData = await encrypt(credentialData)
@@ -166,7 +224,7 @@ export default function CredentialForm({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="input"
-                placeholder="e.g., GitHub Account"
+                placeholder="e.g., Google AI Studio"
                 required
               />
             </div>
@@ -181,7 +239,7 @@ export default function CredentialForm({
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
                 className="input"
-                placeholder="https://github.com"
+                placeholder="https://aistudio.google.com"
               />
             </div>
 
@@ -196,7 +254,7 @@ export default function CredentialForm({
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="input"
-                  placeholder="e.g., Work"
+                  placeholder="e.g., API Keys"
                 />
               </div>
               <div>
@@ -215,61 +273,83 @@ export default function CredentialForm({
             </div>
           </div>
 
-          {/* Credential Section */}
+          {/* Credential Fields Section */}
           <div className="space-y-4 pt-4 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
-              Credentials (Encrypted)
-            </h3>
-
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                Username / Email
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="input"
-                placeholder="user@example.com"
-                autoComplete="off"
-              />
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+                Credentials (Encrypted)
+              </h3>
+              <button
+                type="button"
+                onClick={addField}
+                className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                Add Field
+              </button>
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input pr-10 font-mono"
-                    placeholder="Enter password"
-                    autoComplete="new-password"
-                  />
+            <div className="space-y-3">
+              {fields.map((field) => (
+                <div key={field.id} className="flex gap-2 items-start">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={field.key}
+                      onChange={(e) => updateField(field.id, 'key', e.target.value)}
+                      className="input mb-1"
+                      placeholder="Field name (e.g., API Key)"
+                    />
+                    <div className="relative">
+                      <input
+                        type={field.isSecret && !visibleFields.has(field.id) ? 'password' : 'text'}
+                        value={field.value}
+                        onChange={(e) => updateField(field.id, 'value', e.target.value)}
+                        className="input pr-20 font-mono text-sm"
+                        placeholder="Value"
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {field.isSecret && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => toggleFieldVisibility(field.id)}
+                              className="p-1 text-gray-400 hover:text-gray-600"
+                              title={visibleFields.has(field.id) ? 'Hide' : 'Show'}
+                            >
+                              {visibleFields.has(field.id) ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGeneratePassword(field.id)}
+                              className="p-1 text-gray-400 hover:text-gray-600"
+                              title="Generate"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    onClick={() => removeField(field.id)}
+                    className="p-2 text-gray-400 hover:text-red-500 mt-1"
+                    title="Remove field"
+                    disabled={fields.length <= 1}
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleGeneratePassword}
-                  className="btn btn-secondary flex items-center gap-1"
-                  title="Generate password"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
+              ))}
             </div>
 
+            {/* Notes */}
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                 Notes
@@ -279,60 +359,8 @@ export default function CredentialForm({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="input min-h-[80px]"
-                placeholder="Additional notes (security questions, etc.)"
+                placeholder="Additional notes (security questions, recovery codes, etc.)"
               />
-            </div>
-
-            {/* Custom Fields */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-700">
-                  Custom Fields
-                </label>
-                <button
-                  type="button"
-                  onClick={addCustomField}
-                  className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Field
-                </button>
-              </div>
-
-              {customFields.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">
-                  No custom fields. Click "Add Field" to add one.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {customFields.map((field, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                      <input
-                        type="text"
-                        value={field.key}
-                        onChange={(e) => updateCustomField(index, 'key', e.target.value)}
-                        className="input flex-1"
-                        placeholder="Field name"
-                      />
-                      <input
-                        type="text"
-                        value={field.value}
-                        onChange={(e) => updateCustomField(index, 'value', e.target.value)}
-                        className="input flex-[2]"
-                        placeholder="Value"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCustomField(index)}
-                        className="p-2 text-gray-400 hover:text-red-500"
-                        title="Remove field"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
@@ -359,7 +387,7 @@ export default function CredentialForm({
         {/* Encryption Notice */}
         <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
           <p className="text-green-800 text-xs">
-            <strong>Encrypted:</strong> Your credentials are encrypted in your browser
+            <strong>Encrypted:</strong> All credential fields are encrypted in your browser
             before being sent to the server. Only you can decrypt them.
           </p>
         </div>

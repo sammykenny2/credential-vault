@@ -6,12 +6,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class CredentialData(BaseModel):
-    """Decrypted credential data (client-side)."""
+    """Decrypted credential data (client-side).
 
-    username: str | None = None
-    password: str | None = None
+    Pure key-value storage - all fields are dynamic.
+    """
+
+    fields: dict[str, str] = {}
     notes: str | None = None
-    custom_fields: dict[str, str] | None = None
 
 
 class CredentialBase(BaseModel):

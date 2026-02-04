@@ -81,58 +81,75 @@ class TestEncryptDecrypt:
 
 
 class TestCredentialCrypto:
-    """Test CredentialCrypto class."""
+    """Test CredentialCrypto class with pure key-value storage."""
 
     def test_encrypt_decrypt_full_credential(self):
         """Test encrypting and decrypting a complete credential."""
         encrypted = CredentialCrypto.encrypt_credential(
-            username="myuser",
-            password="mypass123",
+            fields={
+                "Username": "myuser",
+                "Password": "mypass123",
+                "API Key": "abc123",
+                "Token": "xyz789",
+            },
             notes="Important notes",
-            custom_fields={"api_key": "abc123", "token": "xyz789"},
         )
 
         decrypted = CredentialCrypto.decrypt_credential(encrypted)
 
-        assert decrypted["username"] == "myuser"
-        assert decrypted["password"] == "mypass123"
+        assert decrypted["fields"]["Username"] == "myuser"
+        assert decrypted["fields"]["Password"] == "mypass123"
+        assert decrypted["fields"]["API Key"] == "abc123"
+        assert decrypted["fields"]["Token"] == "xyz789"
         assert decrypted["notes"] == "Important notes"
-        assert decrypted["custom_fields"]["api_key"] == "abc123"
-        assert decrypted["custom_fields"]["token"] == "xyz789"
 
     def test_encrypt_decrypt_partial_credential(self):
         """Test encrypting and decrypting a credential with only some fields."""
         encrypted = CredentialCrypto.encrypt_credential(
-            username="justuser",
-            password="justpass",
+            fields={
+                "Username": "justuser",
+                "Password": "justpass",
+            },
         )
 
         decrypted = CredentialCrypto.decrypt_credential(encrypted)
 
-        assert decrypted["username"] == "justuser"
-        assert decrypted["password"] == "justpass"
+        assert decrypted["fields"]["Username"] == "justuser"
+        assert decrypted["fields"]["Password"] == "justpass"
         assert "notes" not in decrypted
-        assert "custom_fields" not in decrypted
 
     def test_encrypt_decrypt_credential_with_special_chars(self):
         """Test encrypting credentials with special characters."""
         encrypted = CredentialCrypto.encrypt_credential(
-            username="user@domain.com",
-            password="P@$$w0rd!#%&*()[]{}",
+            fields={
+                "Email": "user@domain.com",
+                "Password": "P@$$w0rd!#%&*()[]{}",
+            },
             notes="Notes with\nnewlines\tand\ttabs",
         )
 
         decrypted = CredentialCrypto.decrypt_credential(encrypted)
 
-        assert decrypted["username"] == "user@domain.com"
-        assert decrypted["password"] == "P@$$w0rd!#%&*()[]{}",
+        assert decrypted["fields"]["Email"] == "user@domain.com"
+        assert decrypted["fields"]["Password"] == "P@$$w0rd!#%&*()[]{}"
         assert decrypted["notes"] == "Notes with\nnewlines\tand\ttabs"
+
+    def test_encrypt_decrypt_empty_fields(self):
+        """Test encrypting credential with empty fields."""
+        encrypted = CredentialCrypto.encrypt_credential(
+            fields={},
+            notes="Just a note",
+        )
+
+        decrypted = CredentialCrypto.decrypt_credential(encrypted)
+
+        assert decrypted["fields"] == {}
+        assert decrypted["notes"] == "Just a note"
 
     def test_re_encrypt(self):
         """Test re-encrypting data."""
         original_encrypted = CredentialCrypto.encrypt_credential(
-            username="test",
-            password="pass",
+            fields={"Key": "value"},
         )
 
         # Re-encrypt

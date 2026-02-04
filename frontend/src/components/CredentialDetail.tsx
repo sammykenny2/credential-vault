@@ -1,5 +1,6 @@
 /**
  * Credential detail view with decryption.
+ * Displays pure key-value credential fields.
  */
 
 import { useState, useEffect } from 'react'
@@ -14,6 +15,15 @@ interface CredentialDetailProps {
   onClose: () => void
 }
 
+// Detect if a field should be treated as secret based on its key
+const isSecretField = (key: string): boolean => {
+  const keyLower = key.toLowerCase()
+  return keyLower.includes('password') ||
+         keyLower.includes('secret') ||
+         keyLower.includes('key') ||
+         keyLower.includes('token')
+}
+
 export default function CredentialDetail({
   credential,
   isOpen,
@@ -21,7 +31,7 @@ export default function CredentialDetail({
 }: CredentialDetailProps) {
   const { decrypt, isProcessing, error } = useCredentialCrypto()
   const [decryptedData, setDecryptedData] = useState<CredentialData | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
+  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
   useEffect(() => {
@@ -29,7 +39,7 @@ export default function CredentialDetail({
       decryptCredential()
     } else {
       setDecryptedData(null)
-      setShowPassword(false)
+      setVisibleFields(new Set())
     }
   }, [credential, isOpen])
 
@@ -37,6 +47,18 @@ export default function CredentialDetail({
     if (!credential) return
     const data = await decrypt(credential.encrypted_data)
     setDecryptedData(data)
+  }
+
+  const toggleFieldVisibility = (fieldKey: string) => {
+    setVisibleFields(prev => {
+      const next = new Set(prev)
+      if (next.has(fieldKey)) {
+        next.delete(fieldKey)
+      } else {
+        next.add(fieldKey)
+      }
+      return next
+    })
   }
 
   const copyToClipboard = async (text: string, field: string) => {
@@ -53,13 +75,18 @@ export default function CredentialDetail({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 m-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 m-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">{credential.name}</h2>
             {credential.description && (
               <p className="text-gray-500 text-sm mt-1">{credential.description}</p>
+            )}
+            {credential.category && (
+              <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-gray-100 rounded-full">
+                {credential.category}
+              </span>
             )}
           </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
@@ -97,56 +124,46 @@ export default function CredentialDetail({
               </div>
             )}
 
-            {/* Username */}
-            {decryptedData.username && (
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500 uppercase">Username</p>
-                  <p className="font-mono truncate">{decryptedData.username}</p>
-                </div>
-                <button
-                  onClick={() => copyToClipboard(decryptedData.username!, 'username')}
-                  className="p-2 text-gray-400 hover:text-gray-600"
-                  title="Copy username"
-                >
-                  {copiedField === 'username' ? (
-                    <Check className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <Copy className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            )}
+            {/* Credential Fields */}
+            {decryptedData.fields && Object.keys(decryptedData.fields).length > 0 && (
+              <div className="space-y-2">
+                {Object.entries(decryptedData.fields).map(([key, value]) => {
+                  const isSecret = isSecretField(key)
+                  const isVisible = visibleFields.has(key)
 
-            {/* Password */}
-            {decryptedData.password && (
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500 uppercase">Password</p>
-                  <p className="font-mono truncate">
-                    {showPassword ? decryptedData.password : '••••••••••••'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="p-2 text-gray-400 hover:text-gray-600"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                  <button
-                    onClick={() => copyToClipboard(decryptedData.password!, 'password')}
-                    className="p-2 text-gray-400 hover:text-gray-600"
-                    title="Copy password"
-                  >
-                    {copiedField === 'password' ? (
-                      <Check className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <Copy className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
+                  return (
+                    <div key={key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-500 uppercase">{key}</p>
+                        <p className="font-mono truncate">
+                          {isSecret && !isVisible ? '••••••••••••' : value}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {isSecret && (
+                          <button
+                            onClick={() => toggleFieldVisibility(key)}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                            title={isVisible ? 'Hide' : 'Show'}
+                          >
+                            {isVisible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => copyToClipboard(value, key)}
+                          className="p-2 text-gray-400 hover:text-gray-600"
+                          title="Copy"
+                        >
+                          {copiedField === key ? (
+                            <Check className="w-5 h-5 text-green-500" />
+                          ) : (
+                            <Copy className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
@@ -155,31 +172,6 @@ export default function CredentialDetail({
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 uppercase mb-1">Notes</p>
                 <p className="text-gray-700 whitespace-pre-wrap">{decryptedData.notes}</p>
-              </div>
-            )}
-
-            {/* Custom Fields */}
-            {decryptedData.customFields && Object.keys(decryptedData.customFields).length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 uppercase">Custom Fields</p>
-                {Object.entries(decryptedData.customFields).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-500">{key}</p>
-                      <p className="font-mono truncate">{value}</p>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(value, key)}
-                      className="p-2 text-gray-400 hover:text-gray-600"
-                    >
-                      {copiedField === key ? (
-                        <Check className="w-5 h-5 text-green-500" />
-                      ) : (
-                        <Copy className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-                ))}
               </div>
             )}
           </div>

@@ -105,7 +105,10 @@ def test_credential_data() -> dict[str, Any]:
         "description": "A test credential",
         "website_url": "https://example.com",
         "category": "testing",
-        "username": "testuser",
-        "password": "testpass123",
+        # Pure key-value fields
+        "fields": {
+            "Username": "testuser",
+            "Password": "testpass123",
+        },
         "notes": "Some notes",
     }

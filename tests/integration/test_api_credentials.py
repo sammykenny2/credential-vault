@@ -39,8 +39,7 @@ class TestCredentialsAPI:
         token = await self._create_user_and_login(client, db_session, test_user_data)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username=test_credential_data["username"],
-            password=test_credential_data["password"],
+            fields=test_credential_data["fields"],
         )
 
         response = await client.post(
@@ -74,8 +73,7 @@ class TestCredentialsAPI:
         # Create some credentials
         for i in range(3):
             encrypted_data = CredentialCrypto.encrypt_credential(
-                username=f"user{i}",
-                password=f"pass{i}",
+                fields={"Username": f"user{i}", "Password": f"pass{i}"},
             )
             await client.post(
                 "/api/v1/credentials",
@@ -108,8 +106,7 @@ class TestCredentialsAPI:
         token = await self._create_user_and_login(client, db_session, test_user_data)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username=test_credential_data["username"],
-            password=test_credential_data["password"],
+            fields=test_credential_data["fields"],
         )
 
         create_response = await client.post(
@@ -135,8 +132,8 @@ class TestCredentialsAPI:
 
         # Verify encrypted data can be decrypted
         decrypted = CredentialCrypto.decrypt_credential(data["encrypted_data"])
-        assert decrypted["username"] == test_credential_data["username"]
-        assert decrypted["password"] == test_credential_data["password"]
+        assert decrypted["fields"]["Username"] == test_credential_data["fields"]["Username"]
+        assert decrypted["fields"]["Password"] == test_credential_data["fields"]["Password"]
 
     @pytest.mark.asyncio
     async def test_search_credentials(
@@ -183,8 +180,7 @@ class TestCredentialsAPI:
         token = await self._create_user_and_login(client, db_session, test_user_data)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username="test",
-            password="test",
+            fields={"Username": "test", "Password": "test"},
         )
 
         create_response = await client.post(
@@ -220,8 +216,7 @@ class TestCredentialsAPI:
         token = await self._create_user_and_login(client, db_session, test_user_data)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username="test",
-            password="test",
+            fields={"Username": "test", "Password": "test"},
         )
 
         create_response = await client.post(
@@ -261,8 +256,7 @@ class TestCredentialsAPI:
         token1 = await self._create_user_and_login(client, db_session, test_user_data)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username="secret",
-            password="secret",
+            fields={"Username": "secret", "Password": "secret"},
         )
 
         create_response = await client.post(

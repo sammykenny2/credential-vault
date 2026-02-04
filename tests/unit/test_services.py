@@ -277,8 +277,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username=test_credential_data["username"],
-            password=test_credential_data["password"],
+            fields=test_credential_data["fields"],
             notes=test_credential_data["notes"],
         )
 
@@ -308,8 +307,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username=test_credential_data["username"],
-            password=test_credential_data["password"],
+            fields=test_credential_data["fields"],
         )
 
         credential_create = CredentialCreate(
@@ -334,8 +332,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username="test",
-            password="test",
+            fields={"Username": "test", "Password": "test"},
         )
 
         credential_create = CredentialCreate(
@@ -360,8 +357,7 @@ class TestCredentialService:
         # Create multiple credentials
         for i in range(3):
             encrypted_data = CredentialCrypto.encrypt_credential(
-                username=f"user{i}",
-                password=f"pass{i}",
+                fields={"Username": f"user{i}", "Password": f"pass{i}"},
             )
             credential_create = CredentialCreate(
                 name=f"Credential {i}",
@@ -384,8 +380,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username="test",
-            password="test",
+            fields={"Username": "test", "Password": "test"},
         )
 
         credential_create = CredentialCreate(
@@ -437,8 +432,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         encrypted_data = CredentialCrypto.encrypt_credential(
-            username=test_credential_data["username"],
-            password=test_credential_data["password"],
+            fields=test_credential_data["fields"],
             notes=test_credential_data["notes"],
         )
 
@@ -452,6 +446,6 @@ class TestCredentialService:
         # Decrypt the stored data
         decrypted = CredentialCrypto.decrypt_credential(credential.encrypted_data)
 
-        assert decrypted["username"] == test_credential_data["username"]
-        assert decrypted["password"] == test_credential_data["password"]
+        assert decrypted["fields"]["Username"] == test_credential_data["fields"]["Username"]
+        assert decrypted["fields"]["Password"] == test_credential_data["fields"]["Password"]
         assert decrypted["notes"] == test_credential_data["notes"]

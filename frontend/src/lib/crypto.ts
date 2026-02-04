@@ -139,12 +139,13 @@ export async function decryptData<T = Record<string, unknown>>(
 
 /**
  * Credential data structure for encryption.
+ * Pure key-value storage - all fields are dynamic.
  */
 export interface CredentialData {
-  username?: string
-  password?: string
+  /** Key-value pairs for all credential fields */
+  fields: Record<string, string>
+  /** Optional notes */
   notes?: string
-  customFields?: Record<string, string>
 }
 
 /**

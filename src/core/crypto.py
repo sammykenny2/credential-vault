@@ -135,37 +135,33 @@ class CredentialCrypto:
     High-level API for credential encryption.
 
     This class provides methods specifically for handling credential data,
-    which includes username, password, notes, and custom fields.
+    which uses pure key-value storage for all fields.
+
+    Note: In production, credentials are encrypted on the frontend using
+    the user's master password. This backend crypto is primarily for
+    testing and server-side operations.
     """
 
     @staticmethod
     def encrypt_credential(
-        username: str | None = None,
-        password: str | None = None,
+        fields: dict[str, str] | None = None,
         notes: str | None = None,
-        custom_fields: dict[str, str] | None = None,
     ) -> str:
         """
         Encrypt credential data.
 
         Args:
-            username: Account username
-            password: Account password
+            fields: Key-value pairs for credential fields
             notes: Additional notes
-            custom_fields: Custom key-value pairs
 
         Returns:
             Encrypted credential data as base64 string
         """
-        data = {}
-        if username is not None:
-            data["username"] = username
-        if password is not None:
-            data["password"] = password
+        data: dict[str, Any] = {
+            "fields": fields or {},
+        }
         if notes is not None:
             data["notes"] = notes
-        if custom_fields is not None:
-            data["custom_fields"] = custom_fields
 
         return encrypt_data(data)
 
@@ -178,7 +174,7 @@ class CredentialCrypto:
             encrypted: Encrypted credential data
 
         Returns:
-            Dictionary with username, password, notes, custom_fields
+            Dictionary with fields and notes
 
         Raises:
             ValueError: If decryption fails
