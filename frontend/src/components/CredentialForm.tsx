@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react'
-import { Eye, EyeOff, RefreshCw, X } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw, X, Plus, Trash2 } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { CredentialData } from '@/lib/crypto'
 
@@ -39,6 +39,12 @@ export default function CredentialForm({
   const [password, setPassword] = useState(initialData?.credentialData?.password || '')
   const [notes, setNotes] = useState(initialData?.credentialData?.notes || '')
 
+  // Custom fields state
+  const initialCustomFields = initialData?.credentialData?.customFields
+    ? Object.entries(initialData.credentialData.customFields).map(([key, value]) => ({ key, value }))
+    : []
+  const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(initialCustomFields)
+
   // UI state
   const [showPassword, setShowPassword] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -53,6 +59,20 @@ export default function CredentialForm({
     })
     setPassword(newPassword)
     setShowPassword(true)
+  }
+
+  const addCustomField = () => {
+    setCustomFields([...customFields, { key: '', value: '' }])
+  }
+
+  const updateCustomField = (index: number, field: 'key' | 'value', newValue: string) => {
+    const updated = [...customFields]
+    updated[index][field] = newValue
+    setCustomFields(updated)
+  }
+
+  const removeCustomField = (index: number) => {
+    setCustomFields(customFields.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,6 +93,15 @@ export default function CredentialForm({
       if (username) credentialData.username = username
       if (password) credentialData.password = password
       if (notes) credentialData.notes = notes
+
+      // Add custom fields (filter out empty keys)
+      const validCustomFields = customFields.filter(f => f.key.trim())
+      if (validCustomFields.length > 0) {
+        credentialData.customFields = {}
+        for (const field of validCustomFields) {
+          credentialData.customFields[field.key.trim()] = field.value
+        }
+      }
 
       const encryptedData = await encrypt(credentialData)
 
@@ -252,6 +281,58 @@ export default function CredentialForm({
                 className="input min-h-[80px]"
                 placeholder="Additional notes (security questions, etc.)"
               />
+            </div>
+
+            {/* Custom Fields */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700">
+                  Custom Fields
+                </label>
+                <button
+                  type="button"
+                  onClick={addCustomField}
+                  className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Field
+                </button>
+              </div>
+
+              {customFields.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">
+                  No custom fields. Click "Add Field" to add one.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {customFields.map((field, index) => (
+                    <div key={index} className="flex gap-2 items-start">
+                      <input
+                        type="text"
+                        value={field.key}
+                        onChange={(e) => updateCustomField(index, 'key', e.target.value)}
+                        className="input flex-1"
+                        placeholder="Field name"
+                      />
+                      <input
+                        type="text"
+                        value={field.value}
+                        onChange={(e) => updateCustomField(index, 'value', e.target.value)}
+                        className="input flex-[2]"
+                        placeholder="Value"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCustomField(index)}
+                        className="p-2 text-gray-400 hover:text-red-500"
+                        title="Remove field"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
