@@ -66,18 +66,18 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 - Service layer 完成
 - 所有 business logic 測試通過
 
-### Phase 3.4: API Endpoints
+### Phase 3.4: API Endpoints ✓
 
-- [ ] Task 4.1: 建立 `src/api/v1/templates.py` - Template router
-- [ ] Task 4.2: 實作 GET /templates (list)
-- [ ] Task 4.3: 實作 POST /templates (create)
-- [ ] Task 4.4: 實作 GET /templates/{id} (read)
-- [ ] Task 4.5: 實作 PATCH /templates/{id} (update with version check)
-- [ ] Task 4.6: 實作 DELETE /templates/{id} (soft/hard delete)
-- [ ] Task 4.7: 實作 POST /templates/{id}/use (record usage)
-- [ ] Task 4.8: 實作 GET /templates/usage (usage stats)
-- [ ] Task 4.9: 實作 POST /templates/sync (migration endpoint)
-- [ ] Task 4.10: 註冊 router 到 `src/api/v1/router.py`
+- [x] Task 4.1: 建立 `src/api/v1/templates.py` - Template router
+- [x] Task 4.2: 實作 GET /templates (list)
+- [x] Task 4.3: 實作 POST /templates (create)
+- [x] Task 4.4: 實作 GET /templates/{id} (read)
+- [x] Task 4.5: 實作 PATCH /templates/{id} (update with version check)
+- [x] Task 4.6: 實作 DELETE /templates/{id} (soft/hard delete)
+- [x] Task 4.7: 實作 POST /templates/{id}/use (record usage)
+- [x] Task 4.8: 實作 GET /templates/usage/stats (usage stats)
+- [x] Task 4.9: 實作 POST /templates/sync (migration endpoint)
+- [x] Task 4.10: 註冊 router 到 `src/api/v1/router.py`
 
 **Deliverables**:
 - 所有 API endpoints 可用
@@ -334,6 +334,7 @@ def update(self, template_id, data, client_version):
 | 2025-02-05 | Phase 3.1 completed - Database Models & Migration |
 | 2025-02-05 | Phase 3.2 completed - Pydantic Schemas |
 | 2025-02-05 | Phase 3.3 completed - Template Service |
+| 2025-02-05 | Phase 3.4 completed - API Endpoints |
 
 ---
 
