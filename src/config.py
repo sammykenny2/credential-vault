@@ -42,9 +42,18 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_per_minute: int = 60
 
+    # Tailscale
+    ts_hostname: str = "credential-vault"
+    ts_cert_domain: str = ""
+    require_tailscale: bool = False  # Set to True in production
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
 
 
 @lru_cache

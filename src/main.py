@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.v1.router import api_router
 from src.config import get_settings
+from src.core.tailscale import TailscaleMiddleware
 from src.db.session import init_db
 
 settings = get_settings()
@@ -31,6 +32,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Tailscale middleware (production only)
+if settings.require_tailscale:
+    app.add_middleware(TailscaleMiddleware)
+
 # CORS middleware (restrict in production)
 if settings.is_development:
     app.add_middleware(
@@ -39,6 +44,15 @@ if settings.is_development:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+else:
+    # Production: only allow same-origin requests
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[f"https://{settings.ts_cert_domain}"] if settings.ts_cert_domain else [],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
 # Include API router

@@ -5,6 +5,33 @@ version: '3.8'
 
 services:
   # ============================================
+  # Tailscale Sidecar (VPN Access Point)
+  # ============================================
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: credential-vault
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=true
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - ./config/tailscale:/config:ro
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+    networks:
+      - vault-internal
+    # Healthcheck to ensure Tailscale is connected
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
   # Backend API (FastAPI)
   # ============================================
   backend:
@@ -16,6 +43,8 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${DB_USER:-vault}:${DB_PASSWORD}@db:5432/${DB_NAME:-credential_vault}
       - SECRET_KEY=${SECRET_KEY}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TS_HOSTNAME=${TS_HOSTNAME:-credential-vault}
+      - REQUIRE_TAILSCALE=${REQUIRE_TAILSCALE:-true}
     env_file:
       - .env
     volumes:
@@ -26,10 +55,7 @@ services:
     restart: unless-stopped
     networks:
       - vault-internal
-    # NOTE: No ports exposed - access via Tailscale only
-    # For development, uncomment:
-    # ports:
-    #   - "127.0.0.1:8000:8000"
+    # No ports exposed - access only via Tailscale
 
   # ============================================
   # Frontend (React + Nginx)
@@ -43,10 +69,7 @@ services:
     restart: unless-stopped
     networks:
       - vault-internal
-    # NOTE: No ports exposed - access via Tailscale only
-    # For development, uncomment:
-    # ports:
-    #   - "127.0.0.1:3000:80"
+    # No ports exposed - access only via Tailscale
 
   # ============================================
   # Database (PostgreSQL)
@@ -67,21 +90,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # NOTE: No ports exposed - internal only
-
-  # ============================================
-  # Reverse Proxy (for Tailscale access)
-  # ============================================
-  # Consider adding Caddy or Traefik here for:
-  # - TLS termination
-  # - Routing frontend/backend
-  # - Rate limiting
+    # No ports exposed - internal only
 
 # ============================================
 # Volumes
 # ============================================
 volumes:
   postgres_data:
+    driver: local
+  tailscale_state:
     driver: local
 
 # ============================================
@@ -90,4 +107,3 @@ volumes:
 networks:
   vault-internal:
     driver: bridge
-    internal: false  # Set to true if using external Tailscale container
