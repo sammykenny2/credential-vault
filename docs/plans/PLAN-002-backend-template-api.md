@@ -54,13 +54,13 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 - 所有 API schema 定義完成
 - Validation 規則完整
 
-### Phase 3.3: Template Service
+### Phase 3.3: Template Service ✓
 
-- [ ] Task 3.1: 建立 `src/services/template.py` - TemplateService class
-- [ ] Task 3.2: 實作 CRUD methods (create, get_by_id, list_by_owner, update, delete)
-- [ ] Task 3.3: 實作 version conflict detection
-- [ ] Task 3.4: 實作 usage tracking (record_usage, get_usage_stats)
-- [ ] Task 3.5: 實作 sync/migration method (batch_sync)
+- [x] Task 3.1: 建立 `src/services/template.py` - TemplateService class
+- [x] Task 3.2: 實作 CRUD methods (create, get_by_id, get_by_name, list_by_owner, update, soft_delete, hard_delete)
+- [x] Task 3.3: 實作 version conflict detection (VersionConflictError)
+- [x] Task 3.4: 實作 usage tracking (record_usage, get_use_count, get_usage_stats)
+- [x] Task 3.5: 實作 sync/migration method (batch_sync)
 
 **Deliverables**:
 - Service layer 完成
@@ -333,6 +333,7 @@ def update(self, template_id, data, client_version):
 | 2025-02-05 | Plan created |
 | 2025-02-05 | Phase 3.1 completed - Database Models & Migration |
 | 2025-02-05 | Phase 3.2 completed - Pydantic Schemas |
+| 2025-02-05 | Phase 3.3 completed - Template Service |
 
 ---
 
