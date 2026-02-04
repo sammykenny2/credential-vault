@@ -12,7 +12,7 @@
 | Frontend Crypto | Completed | Web Crypto API + Master Password |
 | Admin System | Completed | Role management, bootstrap, user lifecycle |
 | Credential Storage | Completed | Pure key-value structure |
-| Template System | Planning Complete | Phase 2 目標，Spec + Plan 已建立 |
+| Template System | Completed | Phase 2 完成 |
 | Tests | In Progress | Unit + Integration tests |
 | Deployment | Not Started | Docker + Tailscale |
 
@@ -56,7 +56,7 @@
 
 ### WP-2: Template System (Phase 2)
 
-**Status**: Planning Complete
+**Status**: Completed
 **Assigned**: Claude
 **Priority**: P0
 **Depends on**: Phase 1 (Completed)
@@ -85,7 +85,7 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 | 2.3 | Integration with CredentialForm | [x] Completed |
 | 2.4 | Template Management (Settings) | [x] Completed |
 | 2.5 | Export/Import Feature | [x] Completed |
-| 2.6 | Testing & Documentation | [ ] Not Started |
+| 2.6 | Testing & Documentation | [x] Completed |
 
 #### Acceptance Criteria
 

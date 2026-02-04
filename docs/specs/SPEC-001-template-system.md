@@ -2,7 +2,7 @@
 
 > Feature specification for credential templates.
 
-**Status**: Approved
+**Status**: Implemented
 **Author**: Claude
 **Created**: 2025-02-05
 **Updated**: 2025-02-05
