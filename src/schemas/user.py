@@ -27,6 +27,12 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class UserRoleUpdate(BaseModel):
+    """Schema for updating user role (admin only)."""
+
+    role: UserRole
+
+
 class UserRead(UserBase):
     """User read schema."""
 

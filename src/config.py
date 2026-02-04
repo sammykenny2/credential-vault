@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_per_minute: int = 60
 
+    # Initial Admin (for bootstrap)
+    admin_email: str | None = None
+    admin_password: str | None = None
+    admin_display_name: str = "Administrator"
+
     # Tailscale
     ts_hostname: str = "credential-vault"
     ts_cert_domain: str = ""

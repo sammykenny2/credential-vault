@@ -59,6 +59,7 @@ Repository = "https://github.com/username/credential-vault"
 
 [project.scripts]
 credential-vault = "src.main:main"
+vault-cli = "src.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

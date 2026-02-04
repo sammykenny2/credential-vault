@@ -18,6 +18,14 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
     await init_db()
+
+    # Bootstrap: create initial admin if needed
+    from src.db.session import AsyncSessionLocal
+    from src.services.bootstrap import run_bootstrap
+
+    async with AsyncSessionLocal() as db:
+        await run_bootstrap(db)
+
     yield
     # Shutdown
     pass

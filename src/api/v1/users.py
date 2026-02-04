@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.api.deps import AdminUser, CurrentUser, DbSession
 from src.models.user import UserRole
-from src.schemas.user import UserAdminRead, UserCreate, UserRead, UserUpdate
+from src.schemas.user import UserAdminRead, UserCreate, UserRead, UserRoleUpdate, UserUpdate
 from src.services.user import UserService
 
 router = APIRouter()
@@ -119,6 +119,35 @@ async def update_user(
 
     updated_user = await user_service.update(user, data)
     return updated_user
+
+
+@router.patch("/{user_id}/role", response_model=UserRead)
+async def update_user_role(
+    user_id: str,
+    data: UserRoleUpdate,
+    admin_user: AdminUser,
+    db: DbSession,
+):
+    """Update user role (admin only)."""
+    if user_id == admin_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role",
+        )
+
+    user_service = UserService(db)
+    user = await user_service.get_by_id(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.role = data.role
+    await db.flush()
+    await db.refresh(user)
+    return user
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
