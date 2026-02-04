@@ -7,6 +7,21 @@ from src.schemas.credential import (
     CredentialRead,
     CredentialUpdate,
 )
+from src.schemas.template import (
+    RecordUsageRequest,
+    RecordUsageResponse,
+    SyncRequest,
+    SyncResponse,
+    TemplateCreate,
+    TemplateField,
+    TemplateListItem,
+    TemplateListResponse,
+    TemplateRead,
+    TemplateUpdate,
+    TemplateUsageResponse,
+    TemplateUsageStats,
+    VersionConflictResponse,
+)
 from src.schemas.user import UserCreate, UserRead, UserUpdate
 
 __all__ = [
@@ -24,4 +39,18 @@ __all__ = [
     "CredentialRead",
     "CredentialUpdate",
     "CredentialData",
+    # Template
+    "TemplateField",
+    "TemplateCreate",
+    "TemplateUpdate",
+    "TemplateRead",
+    "TemplateListItem",
+    "TemplateListResponse",
+    "TemplateUsageStats",
+    "TemplateUsageResponse",
+    "RecordUsageRequest",
+    "RecordUsageResponse",
+    "SyncRequest",
+    "SyncResponse",
+    "VersionConflictResponse",
 ]

@@ -42,13 +42,13 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 - Migration 可執行
 - Tables 結構正確
 
-### Phase 3.2: Pydantic Schemas
+### Phase 3.2: Pydantic Schemas ✓
 
-- [ ] Task 2.1: 建立 `src/schemas/template.py` - Request/Response schemas
+- [x] Task 2.1: 建立 `src/schemas/template.py` - Request/Response schemas
   - TemplateCreate, TemplateUpdate, TemplateRead, TemplateListItem
-  - TemplateUsageRead, TemplateUsageStats
-  - SyncRequest, SyncResponse
-- [ ] Task 2.2: 加入 field validation (name length, fields count limit)
+  - TemplateUsageStats, TemplateUsageResponse, RecordUsageRequest/Response
+  - SyncRequest, SyncResponse, VersionConflictResponse
+- [x] Task 2.2: 加入 field validation (name length, fields count limit, unique keys)
 
 **Deliverables**:
 - 所有 API schema 定義完成
@@ -332,6 +332,7 @@ def update(self, template_id, data, client_version):
 |------|--------|
 | 2025-02-05 | Plan created |
 | 2025-02-05 | Phase 3.1 completed - Database Models & Migration |
+| 2025-02-05 | Phase 3.2 completed - Pydantic Schemas |
 
 ---
 
