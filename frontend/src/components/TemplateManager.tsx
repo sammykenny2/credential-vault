@@ -19,7 +19,10 @@ import {
   ChevronRight,
   Eye,
   Lock,
+  Download,
+  Upload,
 } from 'lucide-react'
+import ExportImportDialog from './ExportImportDialog'
 import type { CredentialTemplate, TemplateField, TemplateCategory } from '@/types/template'
 import { BUILTIN_TEMPLATES_BY_CATEGORY, CATEGORY_LABELS, CATEGORY_ORDER } from '@/data/templates'
 import {
@@ -314,6 +317,7 @@ export default function TemplateManager() {
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | 'view'>('create')
   const [editingTemplate, setEditingTemplate] = useState<CredentialTemplate | undefined>()
   const [showBuiltIn, setShowBuiltIn] = useState(false)
+  const [showExportImport, setShowExportImport] = useState(false)
 
   // Refresh custom templates from storage
   const refreshTemplates = () => {
@@ -370,14 +374,24 @@ export default function TemplateManager() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-gray-500 flex-1">
           Create custom templates for faster credential creation
         </p>
-        <button onClick={handleCreate} className="btn btn-primary btn-sm flex items-center gap-1">
-          <Plus className="w-4 h-4" />
-          New Template
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowExportImport(true)}
+            className="btn btn-secondary btn-sm flex items-center gap-1"
+            title="Export / Import"
+          >
+            <Download className="w-4 h-4" />
+            <Upload className="w-4 h-4 -ml-1" />
+          </button>
+          <button onClick={handleCreate} className="btn btn-primary btn-sm flex items-center gap-1">
+            <Plus className="w-4 h-4" />
+            New Template
+          </button>
+        </div>
       </div>
 
       {/* Custom Templates */}
@@ -448,6 +462,13 @@ export default function TemplateManager() {
         onSave={handleSave}
         initialData={editingTemplate}
         mode={editorMode}
+      />
+
+      {/* Export/Import Dialog */}
+      <ExportImportDialog
+        isOpen={showExportImport}
+        onClose={() => setShowExportImport(false)}
+        onImportComplete={refreshTemplates}
       />
     </div>
   )
