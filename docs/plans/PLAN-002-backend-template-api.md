@@ -84,13 +84,13 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 - Authorization 正確
 - Error responses 符合規格
 
-### Phase 3.5: Backend Tests
+### Phase 3.5: Backend Tests ✓
 
-- [ ] Task 5.1: 建立 `tests/test_template_service.py` - Service unit tests
-- [ ] Task 5.2: 建立 `tests/test_template_api.py` - API integration tests
-- [ ] Task 5.3: 測試 ownership verification
-- [ ] Task 5.4: 測試 version conflict scenarios
-- [ ] Task 5.5: 測試 sync/migration flow
+- [x] Task 5.1: 建立 `tests/unit/test_template_service.py` - Service unit tests (18 tests)
+- [x] Task 5.2: 建立 `tests/integration/test_api_templates.py` - API integration tests (17 tests)
+- [x] Task 5.3: 測試 ownership verification (template isolation)
+- [x] Task 5.4: 測試 version conflict scenarios
+- [x] Task 5.5: 測試 sync/migration flow
 
 **Deliverables**:
 - 測試覆蓋率達標
@@ -335,6 +335,7 @@ def update(self, template_id, data, client_version):
 | 2025-02-05 | Phase 3.2 completed - Pydantic Schemas |
 | 2025-02-05 | Phase 3.3 completed - Template Service |
 | 2025-02-05 | Phase 3.4 completed - API Endpoints |
+| 2025-02-05 | Phase 3.5 completed - Backend Tests |
 
 ---
 

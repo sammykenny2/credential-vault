@@ -112,3 +112,19 @@ def test_credential_data() -> dict[str, Any]:
         },
         "notes": "Some notes",
     }
+
+
+@pytest.fixture
+def test_template_data() -> dict[str, Any]:
+    """Sample template data for testing."""
+    return {
+        "name": "Test Template",
+        "description": "A test template",
+        "icon": "🔑",
+        "category": "testing",
+        "fields": [
+            {"key": "username", "isSecret": False, "required": True},
+            {"key": "password", "isSecret": True, "required": True},
+            {"key": "notes", "isSecret": False},
+        ],
+    }
