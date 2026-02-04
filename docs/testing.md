@@ -30,6 +30,33 @@ This project uses a multi-layer testing approach:
 - **Framework**: pytest + httpx (async client)
 - **Scope**: API endpoint testing with database
 
+## Backend Test Structure
+
+### Template System Tests (Phase 3)
+
+| Test File | Description | Tests |
+|-----------|-------------|-------|
+| `tests/unit/test_template_service.py` | Service layer unit tests | 18 |
+| `tests/integration/test_api_templates.py` | API integration tests | 17 |
+
+#### test_template_service.py
+
+- Template CRUD (create, get_by_id, get_by_name, list_by_owner)
+- Update with version conflict detection
+- Soft delete / hard delete
+- Usage tracking (record_usage, get_use_count, get_usage_stats)
+- Batch sync for migration
+- Ownership verification (template isolation)
+
+#### test_api_templates.py
+
+- API endpoints (GET, POST, PATCH, DELETE)
+- Authentication required (401 Unauthorized)
+- Authorization (404 for other user's templates)
+- Version conflict response (409 Conflict)
+- Usage recording and statistics
+- Sync/migration endpoint
+
 ### End-to-End Tests
 
 - **Location**: `tests/e2e/` (future)
@@ -94,6 +121,11 @@ npm run test:coverage
 - Custom template CRUD (create, read, update, delete)
 - Usage tracking (record, stats, sorting)
 - Storage capacity checking
+- Migration utilities (Phase 3):
+  - hasLocalTemplates / needsMigration
+  - isMigrationCompleted / markMigrationCompleted
+  - prepareSyncRequest
+  - clearLocalTemplatesAfterMigration
 
 #### templateExport.test.ts
 

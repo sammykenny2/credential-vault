@@ -13,7 +13,7 @@
 | Admin System | Completed | Role management, bootstrap, user lifecycle |
 | Credential Storage | Completed | Pure key-value structure |
 | Template System | Completed | Phase 2 完成 (localStorage) |
-| Template Backend Sync | In Progress | Phase 3 跨裝置同步 |
+| Template Backend Sync | Completed | Phase 3 跨裝置同步 |
 | Tests | In Progress | Unit + Integration tests |
 | Deployment | Not Started | Docker + Tailscale |
 
@@ -119,7 +119,7 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 
 ### WP-4: Backend Template API (Phase 3)
 
-**Status**: In Progress
+**Status**: Completed
 **Assigned**: Claude
 **Priority**: P1
 **Depends on**: WP-2 (Completed)
@@ -154,15 +154,15 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 | 3.5 | Backend Tests | [x] Completed |
 | 3.6 | Frontend API Client | [x] Completed |
 | 3.7 | Frontend Integration | [x] Completed |
-| 3.8 | Tests & Documentation | [ ] Not Started |
+| 3.8 | Tests & Documentation | [x] Completed |
 
 #### Acceptance Criteria
 
-- [ ] 自訂模板儲存於後端資料庫
-- [ ] 跨裝置登入可看到相同模板
-- [ ] 版本衝突時顯示衝突對話框
-- [ ] localStorage 模板自動遷移到後端
-- [ ] 使用紀錄正確同步
+- [x] 自訂模板儲存於後端資料庫
+- [x] 跨裝置登入可看到相同模板
+- [x] 版本衝突時顯示衝突對話框
+- [x] localStorage 模板自動遷移到後端
+- [x] 使用紀錄正確同步
 
 ---
 
@@ -175,4 +175,4 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 
 ---
 
-*Last updated: 2025-02-05*
+*Last updated: 2026-02-05*

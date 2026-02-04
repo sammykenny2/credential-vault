@@ -21,6 +21,13 @@ import {
   clearAllTemplateData,
   getTemplate,
   getAllTemplates,
+  // Migration utilities (Phase 3)
+  hasLocalTemplates,
+  isMigrationCompleted,
+  markMigrationCompleted,
+  prepareSyncRequest,
+  clearLocalTemplatesAfterMigration,
+  needsMigration,
 } from '@/lib/templateStorage'
 import { TEMPLATE_STORAGE_KEYS } from '@/types/template'
 import { BUILTIN_TEMPLATES } from '@/data/templates'
@@ -237,6 +244,103 @@ describe('Template Storage', () => {
 
       const templates = getCustomTemplates()
       expect(templates).toHaveLength(0)
+    })
+  })
+
+  describe('Migration Utilities', () => {
+    describe('hasLocalTemplates', () => {
+      it('should return false when no custom templates exist', () => {
+        expect(hasLocalTemplates()).toBe(false)
+      })
+
+      it('should return true when custom templates exist', () => {
+        createCustomTemplate({ name: 'Local Template', fields: [] })
+        expect(hasLocalTemplates()).toBe(true)
+      })
+    })
+
+    describe('isMigrationCompleted', () => {
+      it('should return false initially', () => {
+        expect(isMigrationCompleted()).toBe(false)
+      })
+
+      it('should return true after marking migration completed', () => {
+        markMigrationCompleted()
+        expect(isMigrationCompleted()).toBe(true)
+      })
+    })
+
+    describe('markMigrationCompleted', () => {
+      it('should set migration flag in localStorage', () => {
+        markMigrationCompleted()
+        const flag = localStorageMock.getItem(TEMPLATE_STORAGE_KEYS.MIGRATION_COMPLETED)
+        expect(flag).toBe('true')
+      })
+    })
+
+    describe('prepareSyncRequest', () => {
+      it('should return empty arrays when no local data', () => {
+        const request = prepareSyncRequest()
+        expect(request.templates).toEqual([])
+        expect(request.usage).toEqual([])
+      })
+
+      it('should include custom templates in sync request', () => {
+        createCustomTemplate({
+          name: 'Sync Template',
+          fields: [{ key: 'username', isSecret: false }],
+        })
+
+        const request = prepareSyncRequest()
+        expect(request.templates).toHaveLength(1)
+        expect(request.templates[0].name).toBe('Sync Template')
+        expect(request.templates[0].fields).toHaveLength(1)
+      })
+
+      it('should include usage data in sync request', () => {
+        const template = createCustomTemplate({ name: 'Used Template', fields: [] })
+        recordTemplateUsage(template!.id, 'cred-1')
+        recordTemplateUsage(template!.id, 'cred-2')
+
+        const request = prepareSyncRequest()
+        expect(request.usage.length).toBeGreaterThan(0)
+      })
+    })
+
+    describe('clearLocalTemplatesAfterMigration', () => {
+      it('should clear custom templates and usage data', () => {
+        createCustomTemplate({ name: 'To Clear', fields: [] })
+        recordTemplateUsage('some-template')
+
+        clearLocalTemplatesAfterMigration()
+
+        const templates = getCustomTemplates()
+        expect(templates).toHaveLength(0)
+      })
+
+      it('should mark migration as completed', () => {
+        createCustomTemplate({ name: 'Template', fields: [] })
+        clearLocalTemplatesAfterMigration()
+
+        expect(isMigrationCompleted()).toBe(true)
+      })
+    })
+
+    describe('needsMigration', () => {
+      it('should return false when no local templates', () => {
+        expect(needsMigration()).toBe(false)
+      })
+
+      it('should return true when local templates exist and migration not completed', () => {
+        createCustomTemplate({ name: 'Local', fields: [] })
+        expect(needsMigration()).toBe(true)
+      })
+
+      it('should return false when migration already completed', () => {
+        createCustomTemplate({ name: 'Local', fields: [] })
+        markMigrationCompleted()
+        expect(needsMigration()).toBe(false)
+      })
     })
   })
 })
