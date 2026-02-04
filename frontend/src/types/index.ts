@@ -80,3 +80,25 @@ export interface CredentialData {
 export interface ApiError {
   detail: string
 }
+
+// Template types (re-export from template.ts)
+export type {
+  FieldValidation,
+  TemplateField,
+  TemplateCategory,
+  CredentialTemplate,
+  TemplateUsage,
+  TemplateUsageStats,
+  ExportFile,
+  ExportedData,
+  ImportConflictStrategy,
+  ImportResult,
+  TemplateStorageData,
+} from './template'
+
+export {
+  TEMPLATE_STORAGE_VERSION,
+  TEMPLATE_STORAGE_KEYS,
+  EXPORT_FILE_EXTENSION,
+  EXPORT_FILE_VERSION,
+} from './template'
