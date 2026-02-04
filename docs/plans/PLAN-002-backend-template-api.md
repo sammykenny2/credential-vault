@@ -1,0 +1,338 @@
+# PLAN-002: Backend Template API
+
+> Implementation Plan for Phase 3 - Backend Template Storage & Cross-Device Sync
+
+## Metadata
+
+| Field | Value |
+|-------|-------|
+| **Status** | Draft |
+| **Owner** | Unassigned |
+| **Assigned To** | Claude |
+| **Reviewer** | TBD |
+
+## Related Spec
+
+[SPEC-002: Backend Template API](../specs/SPEC-002-backend-template-api.md)
+
+## Overview
+
+Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現跨裝置同步。
+
+核心功能：
+- 後端 Template CRUD API
+- 使用紀錄追蹤
+- 樂觀鎖定（版本衝突處理）
+- localStorage → 後端自動遷移
+
+---
+
+## Implementation Phases
+
+### Phase 3.1: Database Models & Migration
+
+- [ ] Task 1.1: 建立 `src/models/template.py` - Template SQLAlchemy model
+- [ ] Task 1.2: 建立 `src/models/template_usage.py` - TemplateUsage model
+- [ ] Task 1.3: 更新 `src/models/__init__.py` - 匯出新 models
+- [ ] Task 1.4: 建立 Alembic migration - templates & template_usage tables
+- [ ] Task 1.5: 測試 migration up/down
+
+**Deliverables**:
+- Database models 完成
+- Migration 可執行
+- Tables 結構正確
+
+### Phase 3.2: Pydantic Schemas
+
+- [ ] Task 2.1: 建立 `src/schemas/template.py` - Request/Response schemas
+  - TemplateCreate, TemplateUpdate, TemplateRead, TemplateListItem
+  - TemplateUsageRead, TemplateUsageStats
+  - SyncRequest, SyncResponse
+- [ ] Task 2.2: 加入 field validation (name length, fields count limit)
+
+**Deliverables**:
+- 所有 API schema 定義完成
+- Validation 規則完整
+
+### Phase 3.3: Template Service
+
+- [ ] Task 3.1: 建立 `src/services/template.py` - TemplateService class
+- [ ] Task 3.2: 實作 CRUD methods (create, get_by_id, list_by_owner, update, delete)
+- [ ] Task 3.3: 實作 version conflict detection
+- [ ] Task 3.4: 實作 usage tracking (record_usage, get_usage_stats)
+- [ ] Task 3.5: 實作 sync/migration method (batch_sync)
+
+**Deliverables**:
+- Service layer 完成
+- 所有 business logic 測試通過
+
+### Phase 3.4: API Endpoints
+
+- [ ] Task 4.1: 建立 `src/api/v1/templates.py` - Template router
+- [ ] Task 4.2: 實作 GET /templates (list)
+- [ ] Task 4.3: 實作 POST /templates (create)
+- [ ] Task 4.4: 實作 GET /templates/{id} (read)
+- [ ] Task 4.5: 實作 PATCH /templates/{id} (update with version check)
+- [ ] Task 4.6: 實作 DELETE /templates/{id} (soft/hard delete)
+- [ ] Task 4.7: 實作 POST /templates/{id}/use (record usage)
+- [ ] Task 4.8: 實作 GET /templates/usage (usage stats)
+- [ ] Task 4.9: 實作 POST /templates/sync (migration endpoint)
+- [ ] Task 4.10: 註冊 router 到 `src/api/v1/router.py`
+
+**Deliverables**:
+- 所有 API endpoints 可用
+- Authorization 正確
+- Error responses 符合規格
+
+### Phase 3.5: Backend Tests
+
+- [ ] Task 5.1: 建立 `tests/test_template_service.py` - Service unit tests
+- [ ] Task 5.2: 建立 `tests/test_template_api.py` - API integration tests
+- [ ] Task 5.3: 測試 ownership verification
+- [ ] Task 5.4: 測試 version conflict scenarios
+- [ ] Task 5.5: 測試 sync/migration flow
+
+**Deliverables**:
+- 測試覆蓋率達標
+- 所有 edge cases 覆蓋
+
+### Phase 3.6: Frontend API Client
+
+- [ ] Task 6.1: 建立 `frontend/src/lib/api/templates.ts` - API client
+- [ ] Task 6.2: 建立 `frontend/src/hooks/useTemplates.ts` - React Query hooks
+- [ ] Task 6.3: 加入 error handling (401, 404, 409)
+- [ ] Task 6.4: 加入 conflict resolution types
+
+**Deliverables**:
+- Frontend 可呼叫所有後端 API
+- 錯誤處理完整
+
+### Phase 3.7: Frontend Integration
+
+- [ ] Task 7.1: 修改 `templateStorage.ts` - 加入 migration detection
+- [ ] Task 7.2: 建立 `frontend/src/components/MigrationDialog.tsx` - 遷移確認對話框
+- [ ] Task 7.3: 建立 `frontend/src/components/ConflictDialog.tsx` - 版本衝突對話框
+- [ ] Task 7.4: 修改 `TemplateSelector.tsx` - 使用 useTemplates hook
+- [ ] Task 7.5: 修改 `TemplateManager.tsx` - 使用後端 API
+- [ ] Task 7.6: 修改 `CredentialsPage.tsx` - 更新 usage tracking
+- [ ] Task 7.7: 登入流程加入 migration check
+
+**Deliverables**:
+- 前端完全使用後端 API
+- localStorage 遷移流程順暢
+- 衝突處理 UI 完成
+
+### Phase 3.8: Frontend Tests & Documentation
+
+- [ ] Task 8.1: 更新 frontend tests - API client mocking
+- [ ] Task 8.2: 測試 migration flow
+- [ ] Task 8.3: 測試 conflict resolution
+- [ ] Task 8.4: 更新 docs/testing.md
+- [ ] Task 8.5: 更新 PROGRESS.md
+
+**Deliverables**:
+- 測試通過
+- 文件更新
+
+---
+
+## Files to Create/Modify
+
+### Backend (New)
+
+| File | Description |
+|------|-------------|
+| `src/models/template.py` | Template SQLAlchemy model |
+| `src/models/template_usage.py` | TemplateUsage model |
+| `src/schemas/template.py` | Pydantic schemas |
+| `src/services/template.py` | Template service |
+| `src/api/v1/templates.py` | API router |
+| `alembic/versions/xxx_add_templates.py` | Database migration |
+| `tests/test_template_service.py` | Service tests |
+| `tests/test_template_api.py` | API tests |
+
+### Backend (Modify)
+
+| File | Change |
+|------|--------|
+| `src/models/__init__.py` | Export new models |
+| `src/api/v1/router.py` | Register template router |
+
+### Frontend (New)
+
+| File | Description |
+|------|-------------|
+| `frontend/src/lib/api/templates.ts` | Template API client |
+| `frontend/src/hooks/useTemplates.ts` | React Query hooks |
+| `frontend/src/components/MigrationDialog.tsx` | Migration UI |
+| `frontend/src/components/ConflictDialog.tsx` | Conflict resolution UI |
+
+### Frontend (Modify)
+
+| File | Change |
+|------|--------|
+| `frontend/src/lib/templateStorage.ts` | Add migration detection |
+| `frontend/src/components/TemplateSelector.tsx` | Use backend API |
+| `frontend/src/components/TemplateManager.tsx` | Use backend API |
+| `frontend/src/pages/CredentialsPage.tsx` | Update usage tracking |
+
+---
+
+## Technical Decisions
+
+### TD-1: Fields 儲存格式
+
+**選擇**: JSONB (PostgreSQL)
+
+**理由**:
+- 原生 JSON 支援，可查詢
+- 不需要加密（模板不含敏感資料）
+- 未來可加 GIN index 做全文搜尋
+
+### TD-2: 版本衝突處理
+
+**選擇**: Optimistic Locking with `sync_version`
+
+**實作**:
+```python
+def update(self, template_id, data, client_version):
+    template = self.get_by_id(template_id)
+    if template.sync_version != client_version:
+        raise VersionConflictError(
+            server_version=template.sync_version,
+            server_data=template
+        )
+    template.sync_version += 1
+    # ... update fields
+```
+
+**理由**:
+- 簡單、可靠
+- 不需要複雜的 merge 邏輯
+- 使用者明確知道發生衝突
+
+### TD-3: Migration 策略
+
+**選擇**: 後端優先 + 一次性遷移
+
+**流程**:
+1. 登入後檢查後端是否有模板
+2. 如果後端空 && localStorage 有資料 → 自動遷移
+3. 如果後端有資料 → 使用後端，忽略 localStorage
+4. 遷移成功後清除 localStorage
+
+**理由**:
+- 簡單、避免複雜的 merge
+- 大多數使用者只有單一裝置
+- 有衝突時以後端為準
+
+### TD-4: 內建模板處理
+
+**選擇**: 保持前端硬編碼
+
+**理由**:
+- 內建模板不需要同步（每個前端都有）
+- 減少後端複雜度
+- 更新模板只需要部署前端
+
+### TD-5: Soft Delete vs Hard Delete
+
+**選擇**: 預設 Soft Delete，可選 Hard Delete
+
+**實作**:
+- `is_active = false` 為軟刪除
+- `?hard_delete=true` query param 為永久刪除
+
+**理由**:
+- 軟刪除允許恢復
+- Hard delete 給想清理的使用者
+
+---
+
+## Dependencies
+
+### Backend Dependencies (Already Installed)
+
+- FastAPI
+- SQLAlchemy (async)
+- Pydantic v2
+- Alembic
+- pytest + pytest-asyncio
+
+### Frontend Dependencies (Already Installed)
+
+- React Query (@tanstack/react-query)
+- Axios (or fetch wrapper)
+- TypeScript
+
+---
+
+## Risks & Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Migration 資料遺失 | High | 遷移前 UI 確認，遷移後保留 localStorage 一段時間 |
+| 版本衝突頻繁 | Medium | UI 清楚顯示衝突內容，提供合併選項 |
+| API 效能 | Low | 加入分頁、適當 index |
+| Alembic migration 失敗 | Medium | 測試 up/down，備份資料庫 |
+
+---
+
+## Testing Strategy
+
+### Backend Unit Tests
+
+- TemplateService: CRUD, version conflict, batch sync
+- Ownership verification
+- Edge cases: empty fields, max length
+
+### Backend Integration Tests
+
+- API endpoints with real database
+- Auth flow (JWT required)
+- Cascade delete behavior
+
+### Frontend Tests
+
+- API client mock tests
+- React Query hooks
+- Migration flow
+- Conflict dialog behavior
+
+### Manual Testing Checklist
+
+- [ ] 建立新模板（後端）
+- [ ] 編輯模板並儲存
+- [ ] 刪除模板（soft & hard）
+- [ ] 模擬版本衝突（兩個瀏覽器同時編輯）
+- [ ] localStorage 遷移流程
+- [ ] 使用紀錄正確追蹤
+- [ ] 登出後再登入，模板仍在
+
+---
+
+## Estimated Effort
+
+| Phase | Complexity | Notes |
+|-------|------------|-------|
+| 3.1 Database Models | Low | 參考現有 Credential model |
+| 3.2 Schemas | Low | 標準 Pydantic |
+| 3.3 Service | Medium | Version conflict 邏輯 |
+| 3.4 API Endpoints | Medium | 多個端點 |
+| 3.5 Backend Tests | Medium | 需要測試衝突場景 |
+| 3.6 Frontend Client | Low | 標準 API client |
+| 3.7 Frontend Integration | Medium | UI 變更較多 |
+| 3.8 Tests & Docs | Low | 更新現有測試 |
+
+---
+
+## Progress Log
+
+| Date | Update |
+|------|--------|
+| 2025-02-05 | Plan created |
+
+---
+
+*Created: 2025-02-05*
+*Author: Claude*

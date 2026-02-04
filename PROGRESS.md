@@ -12,7 +12,8 @@
 | Frontend Crypto | Completed | Web Crypto API + Master Password |
 | Admin System | Completed | Role management, bootstrap, user lifecycle |
 | Credential Storage | Completed | Pure key-value structure |
-| Template System | Completed | Phase 2 完成 |
+| Template System | Completed | Phase 2 完成 (localStorage) |
+| Template Backend Sync | Not Started | Phase 3 跨裝置同步 |
 | Tests | In Progress | Unit + Integration tests |
 | Deployment | Not Started | Docker + Tailscale |
 
@@ -99,11 +100,11 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 
 ---
 
-### WP-3: Database Migration
+### WP-3: Database Migration (Alembic Setup)
 
 **Status**: Not Started
 **Assigned**: Unassigned
-**Priority**: P1
+**Priority**: P2
 **Depends on**: WP-2
 
 #### Tasks
@@ -113,6 +114,55 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 | 建立初始 Alembic migration | [ ] | users + credentials tables |
 | 測試 migration up/down | [ ] | |
 | 文件化 migration 流程 | [ ] | |
+
+---
+
+### WP-4: Backend Template API (Phase 3)
+
+**Status**: Not Started
+**Assigned**: Claude
+**Priority**: P1
+**Depends on**: WP-2 (Completed)
+**Spec**: [SPEC-002](docs/specs/SPEC-002-backend-template-api.md)
+**Plan**: [PLAN-002](docs/plans/PLAN-002-backend-template-api.md)
+
+#### Overview
+
+將自訂模板從 localStorage 遷移到後端資料庫，實現跨裝置同步。
+
+核心功能：
+- 後端 Template CRUD API
+- 使用紀錄追蹤
+- 樂觀鎖定（版本衝突處理）
+- localStorage → 後端自動遷移
+
+#### Design Decisions
+
+1. **Fields 儲存**: JSONB 明文（模板不含敏感資料）
+2. **衝突處理**: Optimistic Locking with `sync_version`
+3. **遷移策略**: 後端優先，一次性遷移
+4. **內建模板**: 保持前端硬編碼
+
+#### Implementation Phases
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 3.1 | Database Models & Migration | [ ] Not Started |
+| 3.2 | Pydantic Schemas | [ ] Not Started |
+| 3.3 | Template Service | [ ] Not Started |
+| 3.4 | API Endpoints | [ ] Not Started |
+| 3.5 | Backend Tests | [ ] Not Started |
+| 3.6 | Frontend API Client | [ ] Not Started |
+| 3.7 | Frontend Integration | [ ] Not Started |
+| 3.8 | Tests & Documentation | [ ] Not Started |
+
+#### Acceptance Criteria
+
+- [ ] 自訂模板儲存於後端資料庫
+- [ ] 跨裝置登入可看到相同模板
+- [ ] 版本衝突時顯示衝突對話框
+- [ ] localStorage 模板自動遷移到後端
+- [ ] 使用紀錄正確同步
 
 ---
 
