@@ -32,20 +32,21 @@ services:
     #   - "127.0.0.1:8000:8000"
 
   # ============================================
-  # Frontend (React - to be configured)
+  # Frontend (React + Nginx)
   # ============================================
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     - VITE_API_URL=http://backend:8000
-  #   depends_on:
-  #     - backend
-  #   restart: unless-stopped
-  #   networks:
-  #     - vault-internal
-  #   # NOTE: No ports exposed - access via Tailscale only
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - vault-internal
+    # NOTE: No ports exposed - access via Tailscale only
+    # For development, uncomment:
+    # ports:
+    #   - "127.0.0.1:3000:80"
 
   # ============================================
   # Database (PostgreSQL)
