@@ -81,7 +81,7 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 2.1 | Types & Data Foundation | [x] Completed |
-| 2.2 | TemplateSelector Component | [ ] Not Started |
+| 2.2 | TemplateSelector Component | [x] Completed |
 | 2.3 | Integration with CredentialForm | [ ] Not Started |
 | 2.4 | Template Management (Settings) | [ ] Not Started |
 | 2.5 | Export/Import Feature | [ ] Not Started |
