@@ -1,12 +1,15 @@
 /**
  * Form for creating/editing credentials with client-side encryption.
  * Pure key-value storage - all fields are dynamic.
+ * Supports template-based field pre-population.
  */
 
-import { useState } from 'react'
-import { Eye, EyeOff, RefreshCw, X, Plus, Trash2, GripVertical } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Eye, EyeOff, RefreshCw, X, Plus, Trash2 } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { CredentialData } from '@/lib/crypto'
+import type { CredentialTemplate } from '@/types/template'
+import { CATEGORY_LABELS } from '@/data/templates'
 
 interface FieldEntry {
   id: string
@@ -18,7 +21,7 @@ interface FieldEntry {
 interface CredentialFormProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: { name: string; description?: string; website_url?: string; category?: string; encrypted_data: string }) => Promise<void>
+  onSave: (data: { name: string; description?: string; website_url?: string; category?: string; encrypted_data: string }, templateId?: string) => Promise<void>
   initialData?: {
     name: string
     description?: string
@@ -26,6 +29,8 @@ interface CredentialFormProps {
     category?: string
     credentialData?: CredentialData
   }
+  /** Template to pre-populate fields from */
+  template?: CredentialTemplate | null
 }
 
 // Generate unique ID for field tracking
@@ -53,23 +58,65 @@ const dataToFields = (data?: CredentialData): FieldEntry[] => {
   }))
 }
 
+// Convert template to field entries (empty values, just field names)
+const templateToFields = (template: CredentialTemplate): FieldEntry[] => {
+  return template.fields.map((field) => ({
+    id: generateId(),
+    key: field.key,
+    value: field.defaultValue || '',
+    isSecret: field.isSecret,
+  }))
+}
+
 export default function CredentialForm({
   isOpen,
   onClose,
   onSave,
   initialData,
+  template,
 }: CredentialFormProps) {
   const { encrypt, generatePassword, isProcessing, error, clearError } = useCredentialCrypto()
 
   // Metadata (not encrypted)
-  const [name, setName] = useState(initialData?.name || '')
-  const [description, setDescription] = useState(initialData?.description || '')
-  const [websiteUrl, setWebsiteUrl] = useState(initialData?.website_url || '')
-  const [category, setCategory] = useState(initialData?.category || '')
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [category, setCategory] = useState('')
 
   // Credential fields (will be encrypted)
-  const [fields, setFields] = useState<FieldEntry[]>(() => dataToFields(initialData?.credentialData))
-  const [notes, setNotes] = useState(initialData?.credentialData?.notes || '')
+  const [fields, setFields] = useState<FieldEntry[]>(getDefaultFields)
+  const [notes, setNotes] = useState('')
+
+  // Initialize form when opened with template or initialData
+  useEffect(() => {
+    if (!isOpen) return
+
+    if (initialData) {
+      // Editing existing credential
+      setName(initialData.name)
+      setDescription(initialData.description || '')
+      setWebsiteUrl(initialData.website_url || '')
+      setCategory(initialData.category || '')
+      setFields(dataToFields(initialData.credentialData))
+      setNotes(initialData.credentialData?.notes || '')
+    } else if (template) {
+      // Creating from template
+      setName(template.name !== 'Login (Basic)' && template.name !== 'Login (Email)' ? '' : '')
+      setDescription(template.description || '')
+      setWebsiteUrl('')
+      setCategory(template.category ? CATEGORY_LABELS[template.category] : '')
+      setFields(templateToFields(template))
+      setNotes('')
+    } else {
+      // Creating from scratch
+      setName('')
+      setDescription('')
+      setWebsiteUrl('')
+      setCategory('')
+      setFields(getDefaultFields())
+      setNotes('')
+    }
+  }, [isOpen, template, initialData])
 
   // UI state
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
@@ -168,14 +215,14 @@ export default function CredentialForm({
         return
       }
 
-      // Save to server
+      // Save to server (pass templateId for usage tracking)
       await onSave({
         name: name.trim(),
         description: description.trim() || undefined,
         website_url: websiteUrl.trim() || undefined,
         category: category.trim() || undefined,
         encrypted_data: encryptedData,
-      })
+      }, template?.id)
 
       // Reset form and close
       onClose()
@@ -194,9 +241,16 @@ export default function CredentialForm({
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 m-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900">
-            {initialData ? 'Edit Credential' : 'Add Credential'}
-          </h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {initialData ? 'Edit Credential' : 'Add Credential'}
+            </h2>
+            {template && !initialData && (
+              <p className="text-sm text-gray-500 mt-1">
+                Using template: {template.icon} {template.name}
+              </p>
+            )}
+          </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>

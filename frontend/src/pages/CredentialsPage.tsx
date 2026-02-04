@@ -5,9 +5,11 @@ import { useMasterPassword } from '@/hooks/useMasterPassword'
 import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialForm from '@/components/CredentialForm'
 import CredentialDetail from '@/components/CredentialDetail'
+import TemplateSelector from '@/components/TemplateSelector'
 import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban } from 'lucide-react'
 import clsx from 'clsx'
-import type { Credential, CredentialListItem } from '@/types'
+import type { Credential, CredentialListItem, CredentialTemplate } from '@/types'
+import { recordTemplateUsage } from '@/lib/templateStorage'
 
 export default function CredentialsPage() {
   const queryClient = useQueryClient()
@@ -15,7 +17,9 @@ export default function CredentialsPage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showMasterPasswordModal, setShowMasterPasswordModal] = useState(false)
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false)
   const [showCredentialForm, setShowCredentialForm] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<CredentialTemplate | null>(null)
   const [selectedCredential, setSelectedCredential] = useState<Credential | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
@@ -78,6 +82,24 @@ export default function CredentialsPage() {
     setActiveMenu(null)
   }
 
+  // Handle "Add Credential" button - show template selector first
+  const handleAddCredential = () => {
+    setShowTemplateSelector(true)
+  }
+
+  // Handle template selection
+  const handleTemplateSelect = (template: CredentialTemplate | null) => {
+    setSelectedTemplate(template)
+    setShowTemplateSelector(false)
+    setShowCredentialForm(true)
+  }
+
+  // Handle credential form close
+  const handleCredentialFormClose = () => {
+    setShowCredentialForm(false)
+    setSelectedTemplate(null)
+  }
+
   // Show lock screen if not unlocked
   if (!isUnlocked) {
     return (
@@ -108,7 +130,7 @@ export default function CredentialsPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Credentials</h1>
         <button
-          onClick={() => setShowCredentialForm(true)}
+          onClick={handleAddCredential}
           className="btn btn-primary flex items-center gap-2"
         >
           <Plus className="w-5 h-5" />
@@ -141,7 +163,7 @@ export default function CredentialsPage() {
           </p>
           {!searchQuery && (
             <button
-              onClick={() => setShowCredentialForm(true)}
+              onClick={handleAddCredential}
               className="btn btn-primary mt-4"
             >
               Add Your First Credential
@@ -251,12 +273,23 @@ export default function CredentialsPage() {
         isFirstTime={!hasPassword}
       />
 
+      <TemplateSelector
+        isOpen={showTemplateSelector}
+        onClose={() => setShowTemplateSelector(false)}
+        onSelect={handleTemplateSelect}
+      />
+
       <CredentialForm
         isOpen={showCredentialForm}
-        onClose={() => setShowCredentialForm(false)}
-        onSave={async (data) => {
-          await createMutation.mutateAsync(data)
+        onClose={handleCredentialFormClose}
+        onSave={async (data, templateId) => {
+          const result = await createMutation.mutateAsync(data)
+          // Record template usage if a template was used
+          if (templateId) {
+            recordTemplateUsage(templateId, result?.id)
+          }
         }}
+        template={selectedTemplate}
       />
 
       <CredentialDetail
