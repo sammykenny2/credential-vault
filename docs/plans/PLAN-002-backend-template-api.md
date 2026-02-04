@@ -96,12 +96,12 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 - 測試覆蓋率達標
 - 所有 edge cases 覆蓋
 
-### Phase 3.6: Frontend API Client
+### Phase 3.6: Frontend API Client ✓
 
-- [ ] Task 6.1: 建立 `frontend/src/lib/api/templates.ts` - API client
-- [ ] Task 6.2: 建立 `frontend/src/hooks/useTemplates.ts` - React Query hooks
-- [ ] Task 6.3: 加入 error handling (401, 404, 409)
-- [ ] Task 6.4: 加入 conflict resolution types
+- [x] Task 6.1: 建立 `frontend/src/services/templateService.ts` - API client
+- [x] Task 6.2: 建立 `frontend/src/hooks/useTemplates.ts` - React Query hooks
+- [x] Task 6.3: 加入 error handling (401, 404, 409 version conflict)
+- [x] Task 6.4: 加入 conflict resolution types (BackendTemplate, VersionConflictError)
 
 **Deliverables**:
 - Frontend 可呼叫所有後端 API
@@ -336,6 +336,7 @@ def update(self, template_id, data, client_version):
 | 2025-02-05 | Phase 3.3 completed - Template Service |
 | 2025-02-05 | Phase 3.4 completed - API Endpoints |
 | 2025-02-05 | Phase 3.5 completed - Backend Tests |
+| 2025-02-05 | Phase 3.6 completed - Frontend API Client |
 
 ---
 

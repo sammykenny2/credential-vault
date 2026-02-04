@@ -152,7 +152,7 @@ Template 系統讓使用者快速建立常用類型的憑證，預填欄位名�
 | 3.3 | Template Service | [x] Completed |
 | 3.4 | API Endpoints | [x] Completed |
 | 3.5 | Backend Tests | [x] Completed |
-| 3.6 | Frontend API Client | [ ] Not Started |
+| 3.6 | Frontend API Client | [x] Completed |
 | 3.7 | Frontend Integration | [ ] Not Started |
 | 3.8 | Tests & Documentation | [ ] Not Started |
 

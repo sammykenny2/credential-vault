@@ -190,3 +190,145 @@ export const EXPORT_FILE_EXTENSION = '.cvault'
  * Current export file format version.
  */
 export const EXPORT_FILE_VERSION = 1
+
+// =============================================================================
+// Backend API Types (Phase 3)
+// =============================================================================
+
+/**
+ * Template data from backend API.
+ * Extended version of CredentialTemplate with backend-specific fields.
+ */
+export interface BackendTemplate {
+  id: string
+  owner_id: string
+  name: string
+  description: string | null
+  icon: string | null
+  category: string | null
+  fields: TemplateField[]
+  sync_version: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Template list item from backend (lightweight).
+ */
+export interface BackendTemplateListItem {
+  id: string
+  name: string
+  description: string | null
+  icon: string | null
+  category: string | null
+  sync_version: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Response from GET /templates.
+ */
+export interface TemplateListResponse {
+  templates: BackendTemplateListItem[]
+  total: number
+}
+
+/**
+ * Request to create a template.
+ */
+export interface TemplateCreateRequest {
+  name: string
+  description?: string
+  icon?: string
+  category?: string
+  fields: TemplateField[]
+}
+
+/**
+ * Request to update a template.
+ * sync_version is required for optimistic locking.
+ */
+export interface TemplateUpdateRequest {
+  name?: string
+  description?: string
+  icon?: string
+  category?: string
+  fields?: TemplateField[]
+  sync_version: number
+}
+
+/**
+ * Usage statistics from backend.
+ */
+export interface BackendUsageStats {
+  template_id: string
+  template_name: string
+  use_count: number
+  last_used_at: string | null
+}
+
+/**
+ * Response from GET /templates/usage/stats.
+ */
+export interface UsageStatsResponse {
+  usage: BackendUsageStats[]
+}
+
+/**
+ * Response from POST /templates/{id}/use.
+ */
+export interface RecordUsageResponse {
+  template_id: string
+  use_count: number
+}
+
+/**
+ * Template item for sync request (from localStorage).
+ */
+export interface SyncTemplateItem {
+  local_id: string
+  name: string
+  description?: string
+  icon?: string
+  category?: string
+  fields: TemplateField[]
+  created_at?: string
+}
+
+/**
+ * Usage item for sync request.
+ */
+export interface SyncUsageItem {
+  local_template_id: string
+  used_at: string
+}
+
+/**
+ * Request to sync templates from localStorage to backend.
+ */
+export interface SyncRequest {
+  templates: SyncTemplateItem[]
+  usage: SyncUsageItem[]
+}
+
+/**
+ * Response from POST /templates/sync.
+ */
+export interface SyncResponse {
+  synced: number
+  skipped: number
+  mapping: Record<string, string>
+}
+
+/**
+ * Version conflict error response (409).
+ */
+export interface VersionConflictError {
+  detail: string
+  server_version: number
+  client_version: number
+  server_data: BackendTemplate
+}
