@@ -17,3 +17,4 @@ export {
   templateKeys,
   extractVersionConflict,
 } from './useTemplates'
+export { useMigration } from './useMigration'

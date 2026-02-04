@@ -10,6 +10,9 @@ import type {
   TemplateUsage,
   TemplateUsageStats,
   TemplateStorageData,
+  SyncRequest,
+  SyncTemplateItem,
+  SyncUsageItem,
 } from '@/types/template'
 import {
   TEMPLATE_STORAGE_VERSION,
@@ -421,4 +424,93 @@ export function importTemplateData(
 
   saveTemplateData(data)
   return result
+}
+
+// =============================================================================
+// Migration Utilities (Phase 3 - Backend Sync)
+// =============================================================================
+
+/** Key to track if migration has been completed */
+const MIGRATION_COMPLETED_KEY = 'credential-vault-templates-migrated'
+
+/**
+ * Check if localStorage has custom templates that need migration.
+ */
+export function hasLocalTemplates(): boolean {
+  const data = loadTemplateData()
+  return data.customTemplates.length > 0
+}
+
+/**
+ * Check if migration to backend has already been completed.
+ */
+export function isMigrationCompleted(): boolean {
+  try {
+    return localStorage.getItem(MIGRATION_COMPLETED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Mark migration as completed.
+ */
+export function markMigrationCompleted(): void {
+  try {
+    localStorage.setItem(MIGRATION_COMPLETED_KEY, 'true')
+  } catch (error) {
+    console.error('Failed to mark migration as completed:', error)
+  }
+}
+
+/**
+ * Prepare localStorage data for sync to backend.
+ * Converts localStorage format to API sync request format.
+ */
+export function prepareSyncRequest(): SyncRequest {
+  const data = loadTemplateData()
+
+  const templates: SyncTemplateItem[] = data.customTemplates.map(t => ({
+    local_id: t.id,
+    name: t.name,
+    description: t.description,
+    icon: t.icon,
+    category: t.category,
+    fields: t.fields,
+    created_at: t.createdAt,
+  }))
+
+  const usage: SyncUsageItem[] = data.usage
+    .filter(u => u.templateId.startsWith('custom-')) // Only custom template usage
+    .map(u => ({
+      local_template_id: u.templateId,
+      used_at: u.usedAt,
+    }))
+
+  return { templates, usage }
+}
+
+/**
+ * Clear localStorage templates after successful migration.
+ * Keeps usage stats for built-in templates.
+ */
+export function clearLocalTemplatesAfterMigration(): void {
+  const data = loadTemplateData()
+
+  // Keep only built-in template usage
+  data.customTemplates = []
+  data.usage = data.usage.filter(u => u.templateId.startsWith('builtin-'))
+
+  saveTemplateData(data)
+  markMigrationCompleted()
+}
+
+/**
+ * Check if migration is needed.
+ * Returns true if:
+ * - localStorage has custom templates
+ * - Migration hasn't been completed yet
+ */
+export function needsMigration(): boolean {
+  return hasLocalTemplates() && !isMigrationCompleted()
 }

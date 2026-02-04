@@ -32,6 +32,13 @@ export {
   getTemplatesSortedByUsage,
   checkStorageCapacity,
   clearAllTemplateData,
+  // Migration utilities (Phase 3)
+  hasLocalTemplates,
+  isMigrationCompleted,
+  markMigrationCompleted,
+  prepareSyncRequest,
+  clearLocalTemplatesAfterMigration,
+  needsMigration,
 } from './templateStorage'
 
 // Template Export/Import
