@@ -1,0 +1,92 @@
+# Credential Vault - Docker Compose Configuration
+# Deploy to NAS via Tailscale (no exposed ports to LAN)
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Backend API (FastAPI)
+  # ============================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-vault}:${DB_PASSWORD}@db:5432/${DB_NAME:-credential_vault}
+      - SECRET_KEY=${SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vault-internal
+    # NOTE: No ports exposed - access via Tailscale only
+    # For development, uncomment:
+    # ports:
+    #   - "127.0.0.1:8000:8000"
+
+  # ============================================
+  # Frontend (React - to be configured)
+  # ============================================
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - VITE_API_URL=http://backend:8000
+  #   depends_on:
+  #     - backend
+  #   restart: unless-stopped
+  #   networks:
+  #     - vault-internal
+  #   # NOTE: No ports exposed - access via Tailscale only
+
+  # ============================================
+  # Database (PostgreSQL)
+  # ============================================
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-vault}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-credential_vault}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - vault-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-vault} -d ${DB_NAME:-credential_vault}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NOTE: No ports exposed - internal only
+
+  # ============================================
+  # Reverse Proxy (for Tailscale access)
+  # ============================================
+  # Consider adding Caddy or Traefik here for:
+  # - TLS termination
+  # - Routing frontend/backend
+  # - Rate limiting
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  vault-internal:
+    driver: bridge
+    internal: false  # Set to true if using external Tailscale container
