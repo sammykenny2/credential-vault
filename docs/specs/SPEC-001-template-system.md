@@ -2,10 +2,11 @@
 
 > Feature specification for credential templates.
 
-**Status**: Draft
+**Status**: Approved
 **Author**: Claude
 **Created**: 2025-02-05
-**Related**: [PROGRESS.md](../../PROGRESS.md) WP-2
+**Updated**: 2025-02-05
+**Related**: [PROGRESS.md](../../PROGRESS.md) WP-2, [PLAN-001](../plans/PLAN-001-template-system.md)
 
 ---
 
@@ -25,6 +26,7 @@ Template 系統讓使用者從預設模板快速建立憑證，自動填入欄�
 - 模板不包含實際憑證值（只有欄位定義）
 - 模板不在使用者間共享（每人獨立）
 - 不支援模板版本控制
+- 不支援 Admin 層級的資料庫匯出（僅個人匯出）
 
 ---
 
@@ -210,6 +212,76 @@ interface TemplateUsage {
 
 ---
 
+## Export/Import Feature
+
+### Overview
+
+使用者可將自訂模板匯出為加密檔案，儲存至 Google Drive 或其他雲端空間，並可在其他裝置/瀏覽器匯入還原。
+
+### Export Flow
+
+```
+1. 使用者進入 Settings > Templates > Export
+2. 系統顯示匯出對話框
+3. 預設勾選「Use Master Password」
+   - 勾選時：直接使用記憶體中的 Master Password
+   - 取消勾選：使用者輸入自訂匯出密碼
+4. 系統以此密碼加密模板資料
+5. 下載加密檔案（*.cvault）
+6. 提示使用者上傳至 Google Drive 等雲端（手動）
+```
+
+### Import Flow
+
+```
+1. 使用者進入 Settings > Templates > Import
+2. 選擇匯入檔案（*.cvault）
+3. 輸入密碼：
+   - 提供「Try Master Password」按鈕（自動嘗試目前的 Master Password）
+   - 或手動輸入匯出時設定的密碼
+4. 系統解密並驗證
+5. 如有衝突（同名模板），提示處理方式：
+   - Skip: 跳過已存在的
+   - Replace: 覆蓋現有的
+   - Keep Both: 保留兩者（匯入的加 suffix）
+6. 匯入完成，顯示結果摘要
+```
+
+### File Format
+
+```typescript
+// 匯出檔案結構（.cvault）
+interface ExportFile {
+  version: 1                    // 格式版本（明文，用於相容性檢查）
+  exportedAt: string            // ISO timestamp（明文）
+  encryptedData: string         // Base64 encoded AES-256-GCM encrypted data
+  salt: string                  // PBKDF2 salt（明文）
+  iv: string                    // AES IV（明文）
+}
+
+// encryptedData 解密後
+interface ExportedData {
+  customTemplates: CredentialTemplate[]
+  templateUsage: TemplateUsage[]
+}
+```
+
+### Encryption Details
+
+- **Key Derivation**: PBKDF2-SHA256, 100,000 iterations
+- **Encryption**: AES-256-GCM（提供加密 + 完整性驗證）
+- **密碼**: 使用者自訂，獨立於 Master Password
+
+### Security Notes
+
+- 預設使用 Master Password 加密，方便大多數使用者
+- 進階使用者可選擇獨立密碼（換 Master Password 後舊備份仍可用）
+- 系統不儲存匯出密碼，僅在加密時使用
+- 忘記自訂密碼無法恢復，需重新匯出
+- 若使用 Master Password 匯出，換 Master Password 後需重新匯出
+
+---
+
 ## Implementation Plan
 
 ### Step 1: Template Data & Types
@@ -268,11 +340,13 @@ POST   /api/v1/templates/{id}/use  # 記錄使用
 
 ---
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. **使用過的模板處理方式**: 隱藏 vs 排最後 vs 顯示「已使用」標籤?
-2. **模板圖示**: 使用 emoji 還是 icon library?
-3. **匯出/匯入模板**: 是否支援?
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| 1 | 使用過的模板處理方式 | **排最後 + 顯示使用次數** | 完全隱藏會讓用戶困惑；顯示次數讓用戶了解使用模式 |
+| 2 | 模板圖示 | **使用 Emoji** | 簡單、跨平台、無額外依賴 |
+| 3 | 匯出/匯入模板 | **支援（個人層級）** | 使用者可備份至 Google Drive，使用獨立密碼加密 |
 
 ---
 

@@ -12,7 +12,7 @@
 | Frontend Crypto | Completed | Web Crypto API + Master Password |
 | Admin System | Completed | Role management, bootstrap, user lifecycle |
 | Credential Storage | Completed | Pure key-value structure |
-| Template System | Not Started | Phase 2 目標 |
+| Template System | Planning Complete | Phase 2 目標，Spec + Plan 已建立 |
 | Tests | In Progress | Unit + Integration tests |
 | Deployment | Not Started | Docker + Tailscale |
 
@@ -56,41 +56,45 @@
 
 ### WP-2: Template System (Phase 2)
 
-**Status**: Not Started
-**Assigned**: Unassigned
+**Status**: Planning Complete
+**Assigned**: Claude
 **Priority**: P0
 **Depends on**: Phase 1 (Completed)
+**Spec**: [SPEC-001](docs/specs/SPEC-001-template-system.md) (Approved)
+**Plan**: [PLAN-001](docs/plans/PLAN-001-template-system.md)
 
 #### Overview
 
 Template 系統讓使用者快速建立常用類型的憑證，預填欄位名稱，提升使用體驗。
+包含匯出/匯入功能，讓使用者可備份模板至 Google Drive 等雲端。
 
 #### Design Decisions
 
-1. **Template 儲存位置**: 前端內建 + 使用者自訂
-2. **使用追蹤**: 記錄使用者用過哪些 template，用過的排在列表最後或隱藏
+1. **Template 儲存位置**: 前端 localStorage（Phase 2），後端 API（Phase 3+）
+2. **使用追蹤**: 用過的模板排最後 + 顯示使用次數
 3. **欄位定義**: 每個 template 定義一組欄位 (key + isSecret flag)
+4. **模板圖示**: 使用 Emoji
+5. **匯出加密**: 獨立密碼 + AES-256-GCM
 
-#### Tasks
+#### Implementation Phases
 
-| Task | Status | Notes |
-|------|--------|-------|
-| 設計 Template 資料結構 | [ ] | 見下方 Spec |
-| 建立預設模板清單 | [ ] | Google, OAuth, SSH, API Keys 等 |
-| 實作模板儲存 (localStorage or DB) | [ ] | 決定前端 vs 後端 |
-| 建立 TemplateSelector 元件 | [ ] | 新增憑證時的模板選擇 UI |
-| 實作模板使用追蹤 | [ ] | 記錄 + 排序邏輯 |
-| 整合到 CredentialForm | [ ] | 選擇模板後預填欄位 |
-| 自訂模板 CRUD | [ ] | 使用者可建立/編輯/刪除模板 |
-| 測試 | [ ] | Unit + Integration tests |
-| 文件 | [ ] | 更新 API 文件 |
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 2.1 | Types & Data Foundation | [ ] Not Started |
+| 2.2 | TemplateSelector Component | [ ] Not Started |
+| 2.3 | Integration with CredentialForm | [ ] Not Started |
+| 2.4 | Template Management (Settings) | [ ] Not Started |
+| 2.5 | Export/Import Feature | [ ] Not Started |
+| 2.6 | Testing & Documentation | [ ] Not Started |
 
 #### Acceptance Criteria
 
 - [ ] 使用者可從模板列表選擇建立憑證
 - [ ] 選擇模板後，欄位名稱自動填入
-- [ ] 用過的模板在列表中排最後或隱藏
+- [ ] 用過的模板在列表中排最後並顯示使用次數
 - [ ] 使用者可建立自訂模板
+- [ ] 使用者可匯出模板至加密檔案
+- [ ] 使用者可匯入加密檔案還原模板
 - [ ] 模板資料不影響現有憑證功能
 
 ---
