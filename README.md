@@ -35,7 +35,7 @@ cp .env.example .env
 python -m venv .venv
 .venv\Scripts\activate  # Windows
 pip install -e ".[dev]"
-uvicorn src.main:app --reload
+uvicorn app.main:app --reload
 
 # Production (Docker)
 docker-compose up -d
@@ -45,6 +45,7 @@ docker-compose up -d
 
 See [docs/](./docs/) for detailed documentation:
 
+- [快速開始指南 (繁體中文)](./QUICKSTART.zh-TW.md)
 - [Setup Guide](./docs/setup-guide.md)
 - [Architecture](./docs/architecture.md)
 - [Contributing](./CONTRIBUTING.md)
@@ -53,7 +54,7 @@ See [docs/](./docs/) for detailed documentation:
 
 ```
 credential-vault/
-├── src/
+├── app/
 │   ├── api/           # FastAPI routes
 │   ├── core/          # Core business logic
 │   ├── models/        # Database models

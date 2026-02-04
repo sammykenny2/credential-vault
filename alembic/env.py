@@ -8,11 +8,11 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from src.config import get_settings
-from src.models.base import Base
+from app.config import get_settings
+from app.models.base import Base
 
 # Import all models to ensure they are registered with Base.metadata
-from src.models import Credential, Template, TemplateUsage, User  # noqa: F401
+from app.models import Credential, Template, TemplateUsage, User  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

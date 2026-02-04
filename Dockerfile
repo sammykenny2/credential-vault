@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY pyproject.toml .
-COPY requirements.txt .
 RUN pip install --no-cache-dir --user -e .
 
 # ============================================
@@ -36,7 +35,7 @@ COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy source code
-COPY src/ ./src/
+COPY app/ ./app/
 COPY alembic.ini ./alembic.ini 2>/dev/null || true
 COPY alembic/ ./alembic/ 2>/dev/null || true
 
@@ -53,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
 
 # Run application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

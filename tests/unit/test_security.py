@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.core.security import SecurityService
+from app.core.security import SecurityService
 
 
 class TestPasswordHashing:

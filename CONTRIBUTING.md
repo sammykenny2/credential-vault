@@ -6,7 +6,9 @@ Thank you for your interest in contributing to this project!
 
 1. Fork the repository
 2. Clone your fork locally
-3. Set up the development environment (see [Setup Guide](./docs/setup-guide.md))
+3. Set up the development environment:
+   - English: [Setup Guide](./docs/setup-guide.md)
+   - 繁體中文: [快速開始指南](./QUICKSTART.zh-TW.md)
 4. Create a new branch for your changes
 
 ## Development Workflow

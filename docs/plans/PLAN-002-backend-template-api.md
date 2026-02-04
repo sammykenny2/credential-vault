@@ -31,9 +31,9 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 ### Phase 3.1: Database Models & Migration ✓
 
-- [x] Task 1.1: 建立 `src/models/template.py` - Template SQLAlchemy model
-- [x] Task 1.2: 建立 `src/models/template_usage.py` - TemplateUsage model
-- [x] Task 1.3: 更新 `src/models/__init__.py` - 匯出新 models
+- [x] Task 1.1: 建立 `app/models/template.py` - Template SQLAlchemy model
+- [x] Task 1.2: 建立 `app/models/template_usage.py` - TemplateUsage model
+- [x] Task 1.3: 更新 `app/models/__init__.py` - 匯出新 models
 - [x] Task 1.4: 建立 Alembic migration - templates & template_usage tables
 - [x] Task 1.5: 測試 migration up/down (需要資料庫時驗證)
 
@@ -44,7 +44,7 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 ### Phase 3.2: Pydantic Schemas ✓
 
-- [x] Task 2.1: 建立 `src/schemas/template.py` - Request/Response schemas
+- [x] Task 2.1: 建立 `app/schemas/template.py` - Request/Response schemas
   - TemplateCreate, TemplateUpdate, TemplateRead, TemplateListItem
   - TemplateUsageStats, TemplateUsageResponse, RecordUsageRequest/Response
   - SyncRequest, SyncResponse, VersionConflictResponse
@@ -56,7 +56,7 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 ### Phase 3.3: Template Service ✓
 
-- [x] Task 3.1: 建立 `src/services/template.py` - TemplateService class
+- [x] Task 3.1: 建立 `app/services/template.py` - TemplateService class
 - [x] Task 3.2: 實作 CRUD methods (create, get_by_id, get_by_name, list_by_owner, update, soft_delete, hard_delete)
 - [x] Task 3.3: 實作 version conflict detection (VersionConflictError)
 - [x] Task 3.4: 實作 usage tracking (record_usage, get_use_count, get_usage_stats)
@@ -68,7 +68,7 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 ### Phase 3.4: API Endpoints ✓
 
-- [x] Task 4.1: 建立 `src/api/v1/templates.py` - Template router
+- [x] Task 4.1: 建立 `app/api/v1/templates.py` - Template router
 - [x] Task 4.2: 實作 GET /templates (list)
 - [x] Task 4.3: 實作 POST /templates (create)
 - [x] Task 4.4: 實作 GET /templates/{id} (read)
@@ -77,7 +77,7 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 - [x] Task 4.7: 實作 POST /templates/{id}/use (record usage)
 - [x] Task 4.8: 實作 GET /templates/usage/stats (usage stats)
 - [x] Task 4.9: 實作 POST /templates/sync (migration endpoint)
-- [x] Task 4.10: 註冊 router 到 `src/api/v1/router.py`
+- [x] Task 4.10: 註冊 router 到 `app/api/v1/router.py`
 
 **Deliverables**:
 - 所有 API endpoints 可用
@@ -143,11 +143,11 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 | File | Description |
 |------|-------------|
-| `src/models/template.py` | Template SQLAlchemy model |
-| `src/models/template_usage.py` | TemplateUsage model |
-| `src/schemas/template.py` | Pydantic schemas |
-| `src/services/template.py` | Template service |
-| `src/api/v1/templates.py` | API router |
+| `app/models/template.py` | Template SQLAlchemy model |
+| `app/models/template_usage.py` | TemplateUsage model |
+| `app/schemas/template.py` | Pydantic schemas |
+| `app/services/template.py` | Template service |
+| `app/api/v1/templates.py` | API router |
 | `alembic/versions/xxx_add_templates.py` | Database migration |
 | `tests/test_template_service.py` | Service tests |
 | `tests/test_template_api.py` | API tests |
@@ -156,8 +156,8 @@ Phase 3 將自訂模板從前端 localStorage 遷移到後端資料庫，實現�
 
 | File | Change |
 |------|--------|
-| `src/models/__init__.py` | Export new models |
-| `src/api/v1/router.py` | Register template router |
+| `app/models/__init__.py` | Export new models |
+| `app/api/v1/router.py` | Register template router |
 
 ### Frontend (New)
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.core.crypto import (
+from app.core.crypto import (
     CredentialCrypto,
     decrypt_data,
     decrypt_string,

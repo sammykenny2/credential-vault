@@ -4,12 +4,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.crypto import CredentialCrypto
-from src.models.user import User, UserRole
-from src.schemas.credential import CredentialCreate
-from src.schemas.user import UserCreate
-from src.services.credential import CredentialService
-from src.services.user import UserService
+from app.core.crypto import CredentialCrypto
+from app.models.user import User, UserRole
+from app.schemas.credential import CredentialCreate
+from app.schemas.user import UserCreate
+from app.services.credential import CredentialService
+from app.services.user import UserService
 
 
 class TestUserService:
@@ -181,7 +181,7 @@ class TestUserService:
     @pytest.mark.asyncio
     async def test_delete_user_credentials(self, db_session: AsyncSession, test_user_data):
         """Test deleting all credentials for a user."""
-        from src.models.credential import Credential
+        from app.models.credential import Credential
 
         service = UserService(db_session)
         user_create = UserCreate(**test_user_data)
@@ -227,7 +227,7 @@ class TestUserService:
     @pytest.mark.asyncio
     async def test_hard_delete_user(self, db_session: AsyncSession, test_user_data):
         """Test hard deleting a user removes them completely."""
-        from src.models.credential import Credential
+        from app.models.credential import Credential
 
         service = UserService(db_session)
         user_create = UserCreate(**test_user_data)

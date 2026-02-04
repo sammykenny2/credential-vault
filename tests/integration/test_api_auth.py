@@ -3,9 +3,9 @@
 import pytest
 from httpx import AsyncClient
 
-from src.models.user import UserRole
-from src.schemas.user import UserCreate
-from src.services.user import UserService
+from app.models.user import UserRole
+from app.schemas.user import UserCreate
+from app.services.user import UserService
 
 
 class TestAuthAPI:

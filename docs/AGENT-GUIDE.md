@@ -32,7 +32,7 @@ If this project uses Agent-to-Agent (A2A) integration:
 
 1. Check `requirements.md` for related requirements
 2. Review `architecture.md` for design patterns
-3. Implement in `src/`
+3. Implement in `app/`
 4. Add tests in `tests/`
 5. Update documentation as needed
 6. Follow git conventions from `AGENTS.md`

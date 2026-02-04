@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from src.core.tailscale import (
+from app.core.tailscale import (
     get_client_ip,
     get_tailscale_user_info,
     is_tailscale_ip,

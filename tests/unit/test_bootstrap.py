@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import patch, AsyncMock
 
-from src.models.user import UserRole
-from src.services.bootstrap import BootstrapService
+from app.models.user import UserRole
+from app.services.bootstrap import BootstrapService
 
 
 @pytest.mark.asyncio

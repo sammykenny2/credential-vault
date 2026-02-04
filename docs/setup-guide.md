@@ -2,11 +2,14 @@
 
 > Environment setup and installation instructions.
 
+**繁體中文版**: 請參閱 [QUICKSTART.zh-TW.md](../QUICKSTART.zh-TW.md) 取得完整的繁體中文快速開始指南。
+
 ## Prerequisites
 
-- [ ] Prerequisite 1 (e.g., Python 3.10+)
-- [ ] Prerequisite 2 (e.g., Node.js 18+)
-- [ ] Prerequisite 3 (e.g., Docker)
+- [x] Python 3.11+
+- [x] Node.js 18+
+- [x] PostgreSQL 16
+- [x] Docker & Docker Compose (for production deployment)
 
 ## Installation
 
@@ -42,8 +45,6 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
-# or
 pip install -e ".[dev]"
 ```
 
@@ -99,4 +100,4 @@ npm run dev
 
 ---
 
-*Last updated: YYYY-MM-DD*
+*Last updated: 2026-02-05*

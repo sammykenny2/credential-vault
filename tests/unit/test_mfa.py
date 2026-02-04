@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.core.mfa import MFAService
+from app.core.mfa import MFAService
 
 
 class TestMFAService:

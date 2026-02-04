@@ -46,7 +46,7 @@
 
 ### Files Created
 
-- `src/` - Backend Python code
+- `app/` - Backend Python code
 - `frontend/src/` - Frontend TypeScript/React code
 - `tests/` - pytest test suite
 - `config/tailscale/` - VPN configuration

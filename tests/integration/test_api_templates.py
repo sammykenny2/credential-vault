@@ -3,8 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
-from src.schemas.user import UserCreate
-from src.services.user import UserService
+from app.schemas.user import UserCreate
+from app.services.user import UserService
 
 
 class TestTemplatesAPI:

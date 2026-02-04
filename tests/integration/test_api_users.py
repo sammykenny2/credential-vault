@@ -3,9 +3,9 @@
 import pytest
 from httpx import AsyncClient
 
-from src.models.user import UserRole
-from src.schemas.user import UserCreate
-from src.services.user import UserService
+from app.models.user import UserRole
+from app.schemas.user import UserCreate
+from app.services.user import UserService
 
 
 class TestUserRoleAPI:
@@ -289,7 +289,7 @@ class TestUserDeactivateAPI:
     @pytest.fixture
     async def user_with_credentials(self, db_session):
         """Create a user with some credentials."""
-        from src.models.credential import Credential
+        from app.models.credential import Credential
 
         service = UserService(db_session)
         user_data = UserCreate(

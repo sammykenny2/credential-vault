@@ -8,8 +8,9 @@ These important documents live in the project root:
 
 | Document | Status | Description |
 |----------|--------|-------------|
-| [PROGRESS.md](../PROGRESS.md) | ?? Template | Implementation status and work packages |
-| [ROADMAP.md](../ROADMAP.md) | ?? Template | Project roadmap and milestones |
+| [QUICKSTART.zh-TW.md](../QUICKSTART.zh-TW.md) | ✅ Complete | 快速開始指南（繁體中文） |
+| [PROGRESS.md](../PROGRESS.md) | ✅ Complete | Implementation status and work packages |
+| [ROADMAP.md](../ROADMAP.md) | ✅ Complete | Project roadmap and milestones |
 
 ## Core Documents
 

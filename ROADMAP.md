@@ -25,18 +25,21 @@ Credential Vault 是一個自託管的憑證管理系統，讓使用者安全地
 - [x] 使用者管理 API (reactivate, hard delete)
 - [x] **純 Key-Value 憑證儲存結構** (重構完成)
 
-### Phase 2: Template System (Current)
+### Phase 2: Template System (Completed)
 
-- [ ] Template 資料模型設計
-- [ ] 預設模板 (Google Account, OAuth, SSH, API Keys 等)
-- [ ] 自訂模板功能
-- [ ] 模板使用追蹤 (已用模板排序邏輯)
-- [ ] 前端模板選擇 UI
-- [ ] 模板欄位預填
+- [x] Template 資料模型設計
+- [x] 預設模板 (Google Account, OAuth, SSH, API Keys 等)
+- [x] 自訂模板功能
+- [x] 模板使用追蹤 (已用模板排序邏輯)
+- [x] 前端模板選擇 UI
+- [x] 模板欄位預填
+- [x] 模板匯出/匯入功能
+- [x] 後端 Template API (跨裝置同步)
+- [x] localStorage → 後端自動遷移
 
-### Phase 3: Enhancement
+### Phase 3: Enhancement (Current)
 
-- [ ] Alembic 資料庫遷移
+- [x] Alembic 資料庫遷移
 - [ ] 密碼強度分析
 - [ ] 憑證到期提醒
 - [ ] 憑證分享 (團隊功能)
@@ -64,4 +67,4 @@ Credential Vault 是一個自託管的憑證管理系統，讓使用者安全地
 
 ---
 
-*Last updated: 2025-02-05*
+*Last updated: 2026-02-05*

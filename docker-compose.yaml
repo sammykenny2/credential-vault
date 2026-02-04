@@ -48,7 +48,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./src:/app/src:ro
+      - ./app:/app/app:ro
     depends_on:
       db:
         condition: service_healthy

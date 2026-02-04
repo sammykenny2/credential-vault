@@ -4,8 +4,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.user import User
-from src.schemas.template import (
+from app.models.user import User
+from app.schemas.template import (
     SyncRequest,
     SyncTemplateItem,
     SyncUsageItem,
@@ -13,9 +13,9 @@ from src.schemas.template import (
     TemplateField,
     TemplateUpdate,
 )
-from src.schemas.user import UserCreate
-from src.services.template import TemplateService, VersionConflictError
-from src.services.user import UserService
+from app.schemas.user import UserCreate
+from app.services.template import TemplateService, VersionConflictError
+from app.services.user import UserService
 
 
 class TestTemplateService:
