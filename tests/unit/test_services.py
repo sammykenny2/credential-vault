@@ -134,14 +134,14 @@ class TestUserService:
         service = UserService(db_session)
 
         # Create regular user
-        user1 = UserCreate(email="user1@test.com", password="password123", display_name="User 1")
+        user1 = UserCreate(email="user1@test.com", password="P@ssw0rd!23", display_name="User 1")
         await service.create(user1, role=UserRole.USER)
 
         # Create two admins
-        admin1 = UserCreate(email="admin1@test.com", password="password123", display_name="Admin 1")
+        admin1 = UserCreate(email="admin1@test.com", password="P@ssw0rd!23", display_name="Admin 1")
         await service.create(admin1, role=UserRole.ADMIN)
 
-        admin2 = UserCreate(email="admin2@test.com", password="password123", display_name="Admin 2")
+        admin2 = UserCreate(email="admin2@test.com", password="P@ssw0rd!23", display_name="Admin 2")
         admin2_user = await service.create(admin2, role=UserRole.ADMIN)
 
         count = await service.count_active_admins()
@@ -158,13 +158,13 @@ class TestUserService:
         service = UserService(db_session)
 
         # Create single admin
-        admin1 = UserCreate(email="admin1@test.com", password="password123", display_name="Admin 1")
+        admin1 = UserCreate(email="admin1@test.com", password="P@ssw0rd!23", display_name="Admin 1")
         admin1_user = await service.create(admin1, role=UserRole.ADMIN)
 
         assert await service.is_last_admin(admin1_user) is True
 
         # Create another admin
-        admin2 = UserCreate(email="admin2@test.com", password="password123", display_name="Admin 2")
+        admin2 = UserCreate(email="admin2@test.com", password="P@ssw0rd!23", display_name="Admin 2")
         await service.create(admin2, role=UserRole.ADMIN)
 
         assert await service.is_last_admin(admin1_user) is False
@@ -406,8 +406,7 @@ class TestCredentialService:
         # Create credentials with different names
         for name in ["GitHub Account", "GitLab Account", "Email Account"]:
             encrypted_data = CredentialCrypto.encrypt_credential(
-                username="test",
-                password="test",
+                fields={"Username": "test", "Password": "test"},
             )
             credential_create = CredentialCreate(
                 name=name,

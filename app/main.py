@@ -4,13 +4,22 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.v1.router import api_router
 from app.config import get_settings
+from app.core.logging_config import setup_logging
+from app.core.rate_limit import limiter
+from app.core.request_logging import RequestLoggingMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.tailscale import TailscaleMiddleware
 from app.db.session import init_db
 
 settings = get_settings()
+
+# Initialize structured logging
+setup_logging()
 
 
 @asynccontextmanager
@@ -39,6 +48,16 @@ app = FastAPI(
     redoc_url="/redoc" if settings.is_development else None,
     lifespan=lifespan,
 )
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Request logging
+app.add_middleware(RequestLoggingMiddleware)
+
+# Security headers
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Tailscale middleware (production only)
 if settings.require_tailscale:
@@ -70,7 +89,32 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Docker."""
-    return {"status": "healthy", "version": settings.app_version}
+    import time
+
+    from sqlalchemy import text
+
+    from app.db.session import AsyncSessionLocal
+
+    result = {
+        "status": "healthy",
+        "version": settings.app_version,
+        "environment": settings.app_env,
+        "database": "unknown",
+    }
+
+    # Check database connectivity
+    try:
+        async with AsyncSessionLocal() as session:
+            start = time.monotonic()
+            await session.execute(text("SELECT 1"))
+            db_latency_ms = (time.monotonic() - start) * 1000
+            result["database"] = "connected"
+            result["database_latency_ms"] = round(db_latency_ms, 1)
+    except Exception:
+        result["status"] = "degraded"
+        result["database"] = "disconnected"
+
+    return result
 
 
 def main():

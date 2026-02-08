@@ -2,8 +2,8 @@
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -41,7 +41,7 @@ class Template(Base, TimestampMixin):
 
     # Fields definition (JSONB array of TemplateField)
     # Structure: [{"key": "username", "isSecret": false, "required": true}, ...]
-    fields: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    fields: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     # Sync & Status
     sync_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

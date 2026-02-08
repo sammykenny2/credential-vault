@@ -1,5 +1,6 @@
 """User service for business logic."""
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -9,6 +10,8 @@ from app.core.security import SecurityService
 from app.models.credential import Credential
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -38,6 +41,7 @@ class UserService:
         self.db.add(user)
         await self.db.flush()
         await self.db.refresh(user)
+        logger.info("User created: %s (role=%s)", user.email, role.value)
         return user
 
     async def update(self, user: User, data: UserUpdate) -> User:
@@ -139,9 +143,13 @@ class UserService:
         """Authenticate user by email and password."""
         user = await self.get_by_email(email)
         if not user:
+            logger.warning("Authentication failed: user not found (email=%s)", email)
             return None
         if not user.is_active:
+            logger.warning("Authentication failed: user inactive (email=%s)", email)
             return None
         if not SecurityService.verify_password(password, user.hashed_password):
+            logger.warning("Authentication failed: wrong password (email=%s)", email)
             return None
+        logger.info("User authenticated: %s", email)
         return user

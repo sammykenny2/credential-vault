@@ -1,14 +1,16 @@
 """Credential management endpoints."""
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.api.deps import CurrentUser, DbSession
+from app.models.audit_log import AuditAction
 from app.schemas.credential import (
     CredentialCreate,
     CredentialListItem,
     CredentialRead,
     CredentialUpdate,
 )
+from app.services.audit_log import AuditLogService
 from app.services.credential import CredentialService
 
 router = APIRouter()
@@ -54,6 +56,7 @@ async def search_credentials(
 
 @router.post("/", response_model=CredentialRead, status_code=status.HTTP_201_CREATED)
 async def create_credential(
+    request: Request,
     data: CredentialCreate,
     current_user: CurrentUser,
     db: DbSession,
@@ -61,11 +64,23 @@ async def create_credential(
     """Create a new credential."""
     service = CredentialService(db)
     credential = await service.create(owner_id=current_user.id, data=data)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_CREATED,
+        user_id=current_user.id,
+        resource_type="credential",
+        resource_id=credential.id,
+        details={"name": credential.name},
+    )
+
     return credential
 
 
 @router.get("/{credential_id}", response_model=CredentialRead)
 async def get_credential(
+    request: Request,
     credential_id: str,
     current_user: CurrentUser,
     db: DbSession,
@@ -80,11 +95,21 @@ async def get_credential(
             detail="Credential not found",
         )
 
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_READ,
+        user_id=current_user.id,
+        resource_type="credential",
+        resource_id=credential.id,
+    )
+
     return credential
 
 
 @router.patch("/{credential_id}", response_model=CredentialRead)
 async def update_credential(
+    request: Request,
     credential_id: str,
     data: CredentialUpdate,
     current_user: CurrentUser,
@@ -101,11 +126,22 @@ async def update_credential(
         )
 
     updated = await service.update(credential, data)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_UPDATED,
+        user_id=current_user.id,
+        resource_type="credential",
+        resource_id=credential.id,
+    )
+
     return updated
 
 
 @router.post("/{credential_id}/revoke", response_model=CredentialRead)
 async def revoke_credential(
+    request: Request,
     credential_id: str,
     current_user: CurrentUser,
     db: DbSession,
@@ -127,11 +163,22 @@ async def revoke_credential(
         )
 
     revoked = await service.revoke(credential)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_REVOKED,
+        user_id=current_user.id,
+        resource_type="credential",
+        resource_id=credential.id,
+    )
+
     return revoked
 
 
 @router.delete("/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_credential(
+    request: Request,
     credential_id: str,
     current_user: CurrentUser,
     db: DbSession,
@@ -146,4 +193,15 @@ async def delete_credential(
             detail="Credential not found",
         )
 
+    credential_name = credential.name
     await service.delete(credential)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_DELETED,
+        user_id=current_user.id,
+        resource_type="credential",
+        resource_id=credential_id,
+        details={"name": credential_name},
+    )

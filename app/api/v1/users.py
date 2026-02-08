@@ -1,10 +1,12 @@
 """User management endpoints."""
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.api.deps import AdminUser, CurrentUser, DbSession
+from app.models.audit_log import AuditAction
 from app.models.user import UserRole
 from app.schemas.user import UserAdminRead, UserCreate, UserRead, UserRoleUpdate, UserUpdate
+from app.services.audit_log import AuditLogService
 from app.services.user import UserService
 
 router = APIRouter()
@@ -58,6 +60,7 @@ async def list_users(
 
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def create_user(
+    request: Request,
     data: UserCreate,
     admin_user: AdminUser,
     db: DbSession,
@@ -74,6 +77,17 @@ async def create_user(
         )
 
     user = await user_service.create(data, role=UserRole.USER)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.USER_CREATED,
+        user_id=admin_user.id,
+        resource_type="user",
+        resource_id=user.id,
+        details={"email": user.email},
+    )
+
     return user
 
 
@@ -123,6 +137,7 @@ async def update_user(
 
 @router.patch("/{user_id}/role", response_model=UserRead)
 async def update_user_role(
+    request: Request,
     user_id: str,
     data: UserRoleUpdate,
     admin_user: AdminUser,
@@ -155,14 +170,27 @@ async def update_user_role(
             detail="User not found",
         )
 
+    old_role = user.role
     user.role = data.role
     await db.flush()
     await db.refresh(user)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.USER_ROLE_CHANGED,
+        user_id=admin_user.id,
+        resource_type="user",
+        resource_id=user_id,
+        details={"old_role": old_role.value, "new_role": data.role.value},
+    )
+
     return user
 
 
 @router.post("/{user_id}/reactivate", response_model=UserRead)
 async def reactivate_user(
+    request: Request,
     user_id: str,
     admin_user: AdminUser,
     db: DbSession,
@@ -184,11 +212,22 @@ async def reactivate_user(
         )
 
     reactivated = await user_service.reactivate(user)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.USER_REACTIVATED,
+        user_id=admin_user.id,
+        resource_type="user",
+        resource_id=user_id,
+    )
+
     return reactivated
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
+    request: Request,
     user_id: str,
     admin_user: AdminUser,
     db: DbSession,
@@ -222,11 +261,29 @@ async def delete_user(
             detail="User not found",
         )
 
+    audit_service = AuditLogService(db)
+
     if hard_delete:
         # Permanently delete user and all data
+        await audit_service.log_from_request(
+            request,
+            action=AuditAction.USER_DELETED,
+            user_id=admin_user.id,
+            resource_type="user",
+            resource_id=user_id,
+            details={"email": user.email, "hard_delete": True},
+        )
         await user_service.hard_delete(user)
     else:
         # Soft delete (deactivate)
         if delete_credentials:
             await user_service.delete_user_credentials(user.id)
         await user_service.deactivate(user)
+        await audit_service.log_from_request(
+            request,
+            action=AuditAction.USER_DEACTIVATED,
+            user_id=admin_user.id,
+            resource_type="user",
+            resource_id=user_id,
+            details={"email": user.email},
+        )

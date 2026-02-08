@@ -93,7 +93,7 @@ def test_user_data() -> dict[str, Any]:
     return {
         "email": "test@example.com",
         "display_name": "Test User",
-        "password": "TestPassword123!",
+        "password": "TestP@ssw0rd!",
     }
 
 

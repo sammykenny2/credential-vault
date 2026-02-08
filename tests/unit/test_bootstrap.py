@@ -55,7 +55,7 @@ async def test_create_initial_admin_creates_admin(db_session):
     bootstrap = BootstrapService(db_session)
 
     with patch.object(bootstrap.settings, 'admin_email', 'newadmin@example.com'):
-        with patch.object(bootstrap.settings, 'admin_password', 'securepassword123'):
+        with patch.object(bootstrap.settings, 'admin_password', 'S3cure@Pass!23'):
             with patch.object(bootstrap.settings, 'admin_display_name', 'Test Admin'):
                 result = await bootstrap.create_initial_admin()
 

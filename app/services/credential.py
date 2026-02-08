@@ -1,5 +1,6 @@
 """Credential service for business logic."""
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credential import Credential
 from app.schemas.credential import CredentialCreate, CredentialUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class CredentialService:
@@ -55,6 +58,7 @@ class CredentialService:
         self.db.add(credential)
         await self.db.flush()
         await self.db.refresh(credential)
+        logger.info("Credential created: %s (owner=%s)", credential.name, owner_id)
         return credential
 
     async def update(
@@ -75,12 +79,15 @@ class CredentialService:
         credential.is_active = False
         credential.revoked_at = datetime.now(UTC)
         await self.db.flush()
+        logger.info("Credential revoked: %s", credential.id)
         return credential
 
     async def delete(self, credential: Credential) -> None:
         """Permanently delete a credential."""
+        cred_id = credential.id
         await self.db.delete(credential)
         await self.db.flush()
+        logger.info("Credential deleted: %s", cred_id)
 
     async def search(
         self,
