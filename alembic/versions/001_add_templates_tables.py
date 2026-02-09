@@ -6,7 +6,7 @@ Create Date: 2025-02-05
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -15,9 +15,9 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "001_add_templates"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -90,9 +90,7 @@ def upgrade() -> None:
             name="fk_template_usage_credential_id",
             ondelete="SET NULL",
         ),
-        sa.UniqueConstraint(
-            "template_id", "credential_id", name="uq_template_credential_usage"
-        ),
+        sa.UniqueConstraint("template_id", "credential_id", name="uq_template_credential_usage"),
     )
     op.create_index("ix_template_usage_template_id", "template_usage", ["template_id"])
     op.create_index("ix_template_usage_user_id", "template_usage", ["user_id"])

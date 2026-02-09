@@ -56,9 +56,7 @@ class Template(Base, TimestampMixin):
     )
 
     # Constraints
-    __table_args__ = (
-        UniqueConstraint("owner_id", "name", name="uq_template_owner_name"),
-    )
+    __table_args__ = (UniqueConstraint("owner_id", "name", name="uq_template_owner_name"),)
 
     def __repr__(self) -> str:
         return f"<Template {self.name}>"

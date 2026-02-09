@@ -1,7 +1,5 @@
 """Tests for password strength analyzer."""
 
-import pytest
-
 from app.core.password_strength import analyze_password
 
 

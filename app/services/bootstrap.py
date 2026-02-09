@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.user import User, UserRole
-from app.services.user import UserService
 from app.schemas.user import UserCreate
+from app.services.user import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,7 @@ class BootstrapService:
 
     async def has_any_admin(self) -> bool:
         """Check if any admin user exists."""
-        result = await self.db.execute(
-            select(User).where(User.role == UserRole.ADMIN).limit(1)
-        )
+        result = await self.db.execute(select(User).where(User.role == UserRole.ADMIN).limit(1))
         return result.scalar_one_or_none() is not None
 
     async def create_initial_admin(self) -> User | None:

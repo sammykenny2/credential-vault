@@ -68,10 +68,11 @@ class TestMFAService:
         assert len(qr_base64) > 0
         # Should be valid base64 (no padding issues)
         import base64
+
         try:
             decoded = base64.b64decode(qr_base64)
             # PNG files start with specific bytes
-            assert decoded[:4] == b'\x89PNG'
+            assert decoded[:4] == b"\x89PNG"
         except Exception:
             pytest.fail("QR code is not valid base64-encoded PNG")
 

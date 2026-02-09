@@ -52,15 +52,18 @@ class CredentialService:
     ) -> list[Credential]:
         """Get credentials expiring within the given number of days."""
         from datetime import timedelta
+
         now = datetime.now(UTC)
         deadline = now + timedelta(days=days)
         result = await self.db.execute(
-            select(Credential).where(
+            select(Credential)
+            .where(
                 Credential.owner_id == owner_id,
                 Credential.is_active == True,  # noqa: E712
                 Credential.expires_at != None,  # noqa: E711
                 Credential.expires_at <= deadline,
-            ).order_by(Credential.expires_at)
+            )
+            .order_by(Credential.expires_at)
         )
         return list(result.scalars().all())
 
@@ -79,9 +82,7 @@ class CredentialService:
             for c in credentials
         ]
 
-    async def import_credentials(
-        self, owner_id: str, credentials_data: list[dict]
-    ) -> dict:
+    async def import_credentials(self, owner_id: str, credentials_data: list[dict]) -> dict:
         """Import credentials from exported data."""
         imported = 0
         skipped = 0
@@ -110,7 +111,12 @@ class CredentialService:
         if imported > 0:
             await self.db.flush()
 
-        logger.info("Import complete for %s: %d imported, %d errors", owner_id, imported, len(errors))
+        logger.info(
+            "Import complete for %s: %d imported, %d errors",
+            owner_id,
+            imported,
+            len(errors),
+        )
         return {"imported": imported, "skipped": skipped, "errors": errors}
 
     async def create(self, owner_id: str, data: CredentialCreate) -> Credential:

@@ -8,14 +8,14 @@ import enum
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 
-class EmergencyStatus(str, enum.Enum):
+class EmergencyStatus(enum.StrEnum):
     """Status of an emergency access grant."""
 
     INVITED = "invited"

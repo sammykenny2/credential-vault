@@ -6,8 +6,8 @@ import sys
 
 from app.db.session import AsyncSessionLocal
 from app.models.user import UserRole
-from app.services.user import UserService
 from app.schemas.user import UserCreate
+from app.services.user import UserService
 
 
 async def promote_admin(email: str) -> None:
@@ -80,12 +80,11 @@ async def create_admin(email: str, password: str, display_name: str) -> None:
 async def list_admins() -> None:
     """List all admin users."""
     from sqlalchemy import select
+
     from app.models.user import User
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(User.role == UserRole.ADMIN)
-        )
+        result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
         admins = result.scalars().all()
 
         if not admins:
@@ -103,41 +102,26 @@ async def list_admins() -> None:
 
 def main():
     """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        description="Credential Vault user management CLI"
-    )
+    parser = argparse.ArgumentParser(description="Credential Vault user management CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # promote-admin command
-    promote_parser = subparsers.add_parser(
-        "promote-admin",
-        help="Promote a user to admin role"
-    )
+    promote_parser = subparsers.add_parser("promote-admin", help="Promote a user to admin role")
     promote_parser.add_argument("email", help="Email of the user to promote")
 
     # demote-admin command
-    demote_parser = subparsers.add_parser(
-        "demote-admin",
-        help="Demote an admin to regular user"
-    )
+    demote_parser = subparsers.add_parser("demote-admin", help="Demote an admin to regular user")
     demote_parser.add_argument("email", help="Email of the admin to demote")
     demote_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Force demote even if this is the last admin"
+        "--force", action="store_true", help="Force demote even if this is the last admin"
     )
 
     # create-admin command
-    create_parser = subparsers.add_parser(
-        "create-admin",
-        help="Create a new admin user"
-    )
+    create_parser = subparsers.add_parser("create-admin", help="Create a new admin user")
     create_parser.add_argument("email", help="Email for the new admin")
     create_parser.add_argument("password", help="Password for the new admin")
     create_parser.add_argument(
-        "--name",
-        default="Administrator",
-        help="Display name (default: Administrator)"
+        "--name", default="Administrator", help="Display name (default: Administrator)"
     )
 
     # list-admins command

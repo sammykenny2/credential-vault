@@ -30,7 +30,7 @@ def _get_key() -> bytes:
     # Ensure key is 32 bytes (256 bits)
     if len(key) < 32:
         # Pad with zeros (not ideal, but ensures consistency)
-        key = key.ljust(32, b'\0')
+        key = key.ljust(32, b"\0")
     elif len(key) > 32:
         key = key[:32]
     return key
@@ -55,13 +55,13 @@ def encrypt_data(data: dict[str, Any]) -> str:
     nonce = secrets.token_bytes(NONCE_SIZE)
 
     # Serialize data to JSON bytes
-    plaintext = json.dumps(data, ensure_ascii=False).encode('utf-8')
+    plaintext = json.dumps(data, ensure_ascii=False).encode("utf-8")
 
     # Encrypt (ciphertext includes auth tag)
     ciphertext = aesgcm.encrypt(nonce, plaintext, None)
 
     # Combine nonce + ciphertext and encode to base64
-    encrypted = base64.b64encode(nonce + ciphertext).decode('ascii')
+    encrypted = base64.b64encode(nonce + ciphertext).decode("ascii")
 
     return encrypted
 
@@ -84,7 +84,7 @@ def decrypt_data(encrypted: str) -> dict[str, Any]:
 
     try:
         # Decode from base64
-        raw = base64.b64decode(encrypted.encode('ascii'))
+        raw = base64.b64decode(encrypted.encode("ascii"))
 
         # Extract nonce and ciphertext
         nonce = raw[:NONCE_SIZE]
@@ -94,7 +94,7 @@ def decrypt_data(encrypted: str) -> dict[str, Any]:
         plaintext = aesgcm.decrypt(nonce, ciphertext, None)
 
         # Parse JSON
-        return json.loads(plaintext.decode('utf-8'))
+        return json.loads(plaintext.decode("utf-8"))
 
     except Exception as e:
         raise ValueError(f"Decryption failed: {e}") from e

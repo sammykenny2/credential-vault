@@ -10,7 +10,7 @@ Provides a dashboard view of credential security posture:
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_data
@@ -46,7 +46,11 @@ class CredentialHealthService:
                 "total_credentials": 0,
                 "overall_score": 100,
                 "strength_distribution": {
-                    "very_strong": 0, "strong": 0, "fair": 0, "weak": 0, "very_weak": 0,
+                    "very_strong": 0,
+                    "strong": 0,
+                    "fair": 0,
+                    "weak": 0,
+                    "very_weak": 0,
                 },
                 "duplicate_groups": [],
                 "duplicate_count": 0,
@@ -76,7 +80,8 @@ class CredentialHealthService:
                 password_value = None
                 for key, value in fields.items():
                     key_lower = key.lower()
-                    if any(term in key_lower for term in ["password", "secret", "key", "token", "pass"]):
+                    pw_terms = ["password", "secret", "key", "token", "pass"]
+                    if any(term in key_lower for term in pw_terms):
                         password_value = value
                         break
 
@@ -88,15 +93,18 @@ class CredentialHealthService:
                     strength_scores.append(analysis["score"])
 
                     if level in ("weak", "very_weak"):
-                        weak_creds.append({
-                            "id": cred.id,
-                            "name": cred.name,
-                            "score": analysis["score"],
-                            "level": level,
-                        })
+                        weak_creds.append(
+                            {
+                                "id": cred.id,
+                                "name": cred.name,
+                                "score": analysis["score"],
+                                "level": level,
+                            }
+                        )
 
                     # Duplicate detection (using hash for privacy)
                     import hashlib
+
                     pw_hash = hashlib.sha256(password_value.encode()).hexdigest()
                     if pw_hash not in password_hashes:
                         password_hashes[pw_hash] = []
@@ -106,18 +114,22 @@ class CredentialHealthService:
                 expires_at = cred.expires_at if hasattr(cred, "expires_at") else None
                 if expires_at:
                     if expires_at < now:
-                        expired_list.append({
-                            "id": cred.id,
-                            "name": cred.name,
-                            "expired_at": expires_at.isoformat(),
-                        })
+                        expired_list.append(
+                            {
+                                "id": cred.id,
+                                "name": cred.name,
+                                "expired_at": expires_at.isoformat(),
+                            }
+                        )
                     elif expires_at < now + timedelta(days=30):
-                        expiring_soon.append({
-                            "id": cred.id,
-                            "name": cred.name,
-                            "expires_at": expires_at.isoformat(),
-                            "days_left": (expires_at - now).days,
-                        })
+                        expiring_soon.append(
+                            {
+                                "id": cred.id,
+                                "name": cred.name,
+                                "expires_at": expires_at.isoformat(),
+                                "days_left": (expires_at - now).days,
+                            }
+                        )
 
             except Exception as e:
                 logger.warning("Failed to analyze credential %s: %s", cred.id, str(e))

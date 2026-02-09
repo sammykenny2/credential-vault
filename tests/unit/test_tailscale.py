@@ -1,6 +1,5 @@
 """Tests for Tailscale integration utilities."""
 
-import pytest
 from unittest.mock import MagicMock
 
 from app.core.tailscale import (

@@ -6,7 +6,7 @@ Create Date: 2026-02-09
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -15,9 +15,9 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "002_add_new_features"
-down_revision: Union[str, None] = "001_add_templates"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "001_add_templates"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -104,9 +104,7 @@ def upgrade() -> None:
             server_default="invited",
         ),
         sa.Column("wait_time_days", sa.Integer(), nullable=False, server_default="7"),
-        sa.Column(
-            "recovery_initiated_at", sa.DateTime(timezone=True), nullable=True
-        ),
+        sa.Column("recovery_initiated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("recovery_deadline", sa.DateTime(timezone=True), nullable=True),
         sa.Column("encrypted_key", sa.Text(), nullable=True),
         sa.Column(
@@ -135,12 +133,8 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
     )
-    op.create_index(
-        "ix_emergency_access_grantor_id", "emergency_access", ["grantor_id"]
-    )
-    op.create_index(
-        "ix_emergency_access_grantee_id", "emergency_access", ["grantee_id"]
-    )
+    op.create_index("ix_emergency_access_grantor_id", "emergency_access", ["grantor_id"])
+    op.create_index("ix_emergency_access_grantee_id", "emergency_access", ["grantee_id"])
 
     # Create webauthn_credentials table
     op.create_table(
@@ -180,9 +174,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
     )
-    op.create_index(
-        "ix_webauthn_credentials_user_id", "webauthn_credentials", ["user_id"]
-    )
+    op.create_index("ix_webauthn_credentials_user_id", "webauthn_credentials", ["user_id"])
 
     # Create totp_accounts table
     op.create_table(
@@ -192,9 +184,7 @@ def upgrade() -> None:
         sa.Column("encrypted_secret", sa.Text(), nullable=False),
         sa.Column("issuer", sa.String(255), nullable=False),
         sa.Column("account_name", sa.String(255), nullable=False),
-        sa.Column(
-            "algorithm", sa.String(10), nullable=False, server_default="SHA1"
-        ),
+        sa.Column("algorithm", sa.String(10), nullable=False, server_default="SHA1"),
         sa.Column("digits", sa.Integer(), nullable=False, server_default="6"),
         sa.Column("period", sa.Integer(), nullable=False, server_default="30"),
         sa.Column(
@@ -245,12 +235,8 @@ def downgrade() -> None:
     op.drop_index("ix_emergency_access_grantor_id", table_name="emergency_access")
     op.drop_table("emergency_access")
 
-    op.drop_index(
-        "ix_credential_shares_shared_with_id", table_name="credential_shares"
-    )
-    op.drop_index(
-        "ix_credential_shares_credential_id", table_name="credential_shares"
-    )
+    op.drop_index("ix_credential_shares_shared_with_id", table_name="credential_shares")
+    op.drop_index("ix_credential_shares_credential_id", table_name="credential_shares")
     op.drop_table("credential_shares")
 
     # Drop enum types

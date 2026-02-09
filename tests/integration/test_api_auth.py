@@ -3,7 +3,6 @@
 import pytest
 from httpx import AsyncClient
 
-from app.models.user import UserRole
 from app.schemas.user import UserCreate
 from app.services.user import UserService
 

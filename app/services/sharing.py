@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credential import Credential
-from app.models.credential_share import CredentialShare, SharePermission
+from app.models.credential_share import CredentialShare
 from app.models.user import User
 from app.schemas.sharing import ShareCreate, ShareUpdate
 
@@ -23,9 +23,7 @@ class SharingService:
     async def share_credential(self, shared_by_id: str, data: ShareCreate) -> CredentialShare:
         """Share a credential with another user."""
         # Find the target user by email
-        result = await self.db.execute(
-            select(User).where(User.email == data.shared_with_email)
-        )
+        result = await self.db.execute(select(User).where(User.email == data.shared_with_email))
         target_user = result.scalar_one_or_none()
         if not target_user:
             raise ValueError("User not found")
@@ -71,7 +69,9 @@ class SharingService:
 
         logger.info(
             "Credential %s shared with %s by %s",
-            data.credential_id, target_user.email, shared_by_id,
+            data.credential_id,
+            target_user.email,
+            shared_by_id,
         )
         return share
 
@@ -88,15 +88,17 @@ class SharingService:
         )
         shares = []
         for share, credential, user in result.all():
-            shares.append({
-                "id": share.id,
-                "credential_id": share.credential_id,
-                "credential_name": credential.name,
-                "shared_with_email": user.email,
-                "shared_with_name": user.display_name,
-                "permission": share.permission.value,
-                "created_at": share.created_at.isoformat(),
-            })
+            shares.append(
+                {
+                    "id": share.id,
+                    "credential_id": share.credential_id,
+                    "credential_name": credential.name,
+                    "shared_with_email": user.email,
+                    "shared_with_name": user.display_name,
+                    "permission": share.permission.value,
+                    "created_at": share.created_at.isoformat(),
+                }
+            )
         return shares
 
     async def list_shared_with_me(self, user_id: str) -> list[dict]:
@@ -112,18 +114,20 @@ class SharingService:
         )
         shares = []
         for share, credential, user in result.all():
-            shares.append({
-                "id": share.id,
-                "credential_id": share.credential_id,
-                "credential_name": credential.name,
-                "description": credential.description,
-                "category": credential.category,
-                "encrypted_data": share.encrypted_data,
-                "permission": share.permission.value,
-                "shared_by_email": user.email,
-                "shared_by_name": user.display_name,
-                "shared_at": share.created_at.isoformat(),
-            })
+            shares.append(
+                {
+                    "id": share.id,
+                    "credential_id": share.credential_id,
+                    "credential_name": credential.name,
+                    "description": credential.description,
+                    "category": credential.category,
+                    "encrypted_data": share.encrypted_data,
+                    "permission": share.permission.value,
+                    "shared_by_email": user.email,
+                    "shared_by_name": user.display_name,
+                    "shared_at": share.created_at.isoformat(),
+                }
+            )
         return shares
 
     async def revoke_share(self, share_id: str, user_id: str) -> bool:

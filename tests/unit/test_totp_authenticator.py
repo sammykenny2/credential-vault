@@ -1,6 +1,5 @@
 """Tests for built-in TOTP authenticator service."""
 
-import pytest
 import pyotp
 
 from app.services.totp_service import TOTPService

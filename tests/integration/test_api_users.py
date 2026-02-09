@@ -46,9 +46,7 @@ class TestUserRoleAPI:
         return user
 
     @pytest.mark.asyncio
-    async def test_admin_can_promote_user(
-        self, client: AsyncClient, admin_token, regular_user
-    ):
+    async def test_admin_can_promote_user(self, client: AsyncClient, admin_token, regular_user):
         """Test admin can promote user to admin."""
         token, _ = admin_token
 
@@ -63,9 +61,7 @@ class TestUserRoleAPI:
         assert data["role"] == "admin"
 
     @pytest.mark.asyncio
-    async def test_admin_can_demote_admin(
-        self, client: AsyncClient, db_session, admin_token
-    ):
+    async def test_admin_can_demote_admin(self, client: AsyncClient, db_session, admin_token):
         """Test admin can demote another admin to user."""
         token, _ = admin_token
 
@@ -90,9 +86,7 @@ class TestUserRoleAPI:
         assert data["role"] == "user"
 
     @pytest.mark.asyncio
-    async def test_last_admin_cannot_demote_self(
-        self, client: AsyncClient, admin_token
-    ):
+    async def test_last_admin_cannot_demote_self(self, client: AsyncClient, admin_token):
         """Test last admin cannot demote themselves."""
         token, admin = admin_token
 
@@ -167,9 +161,7 @@ class TestUserRoleAPI:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_change_role_nonexistent_user(
-        self, client: AsyncClient, admin_token
-    ):
+    async def test_change_role_nonexistent_user(self, client: AsyncClient, admin_token):
         """Test changing role of nonexistent user returns 404."""
         token, _ = admin_token
 
@@ -207,9 +199,7 @@ class TestUserListAPI:
         return login_response.json()["access_token"]
 
     @pytest.mark.asyncio
-    async def test_admin_can_list_users(
-        self, client: AsyncClient, admin_token, db_session
-    ):
+    async def test_admin_can_list_users(self, client: AsyncClient, admin_token, db_session):
         """Test admin can list all users."""
         # Create some users
         service = UserService(db_session)
@@ -232,9 +222,7 @@ class TestUserListAPI:
         assert len(data) >= 4  # 3 users + 1 admin
 
     @pytest.mark.asyncio
-    async def test_regular_user_cannot_list_users(
-        self, client: AsyncClient, db_session
-    ):
+    async def test_regular_user_cannot_list_users(self, client: AsyncClient, db_session):
         """Test regular user cannot list all users."""
         service = UserService(db_session)
         user_data = UserCreate(
@@ -350,9 +338,7 @@ class TestUserDeactivateAPI:
         assert count == 0
 
     @pytest.mark.asyncio
-    async def test_admin_cannot_deactivate_self(
-        self, client: AsyncClient, admin_token
-    ):
+    async def test_admin_cannot_deactivate_self(self, client: AsyncClient, admin_token):
         """Test admin cannot deactivate themselves."""
         token, admin = admin_token
 
@@ -384,9 +370,7 @@ class TestUserDeactivateAPI:
         assert user is None
 
     @pytest.mark.asyncio
-    async def test_reactivate_user(
-        self, client: AsyncClient, db_session, admin_token
-    ):
+    async def test_reactivate_user(self, client: AsyncClient, db_session, admin_token):
         """Test reactivating a deactivated user."""
         token, _ = admin_token
 

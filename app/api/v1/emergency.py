@@ -1,6 +1,6 @@
 """Emergency access endpoints."""
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.emergency import EmergencyAccessCreate

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 
-class UserRole(str, enum.Enum):
+class UserRole(enum.StrEnum):
     """User roles for access control."""
 
     USER = "user"

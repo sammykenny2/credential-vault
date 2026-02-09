@@ -39,9 +39,7 @@ class WebAuthnCredential(Base):
     aaguid: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     # Credential type info
-    credential_type: Mapped[str] = mapped_column(
-        String(50), default="public-key", nullable=False
-    )
+    credential_type: Mapped[str] = mapped_column(String(50), default="public-key", nullable=False)
     transports: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Status
@@ -53,9 +51,7 @@ class WebAuthnCredential(Base):
         server_default=func.now(),
         nullable=False,
     )
-    last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", backref="webauthn_credentials")

@@ -1,5 +1,7 @@
 """Tests for TemplateService."""
 
+from datetime import UTC
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -432,11 +434,11 @@ class TestTemplateService:
         test_user: User,
     ):
         """Test that sync also imports usage records."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         service = TemplateService(db_session)
 
-        used_at = datetime.now(timezone.utc)
+        used_at = datetime.now(UTC)
         sync_request = SyncRequest(
             templates=[
                 SyncTemplateItem(

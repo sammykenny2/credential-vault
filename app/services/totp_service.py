@@ -11,7 +11,6 @@ import pyotp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import decrypt_string, encrypt_string
 from app.models.totp_account import TOTPAccount
 from app.schemas.totp import TOTPAccountCreate, TOTPAccountUpdate
 
@@ -24,9 +23,7 @@ class TOTPService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_account(
-        self, user_id: str, data: TOTPAccountCreate
-    ) -> TOTPAccount:
+    async def create_account(self, user_id: str, data: TOTPAccountCreate) -> TOTPAccount:
         """Add a new TOTP account."""
         account = TOTPAccount(
             user_id=user_id,
@@ -45,7 +42,9 @@ class TOTPService:
 
         logger.info(
             "TOTP account created: %s:%s for user %s",
-            data.issuer, data.account_name, user_id,
+            data.issuer,
+            data.account_name,
+            user_id,
         )
         return account
 
@@ -96,7 +95,12 @@ class TOTPService:
         return True
 
     @staticmethod
-    def generate_code(secret: str, algorithm: str = "SHA1", digits: int = 6, period: int = 30) -> dict:
+    def generate_code(
+        secret: str,
+        algorithm: str = "SHA1",
+        digits: int = 6,
+        period: int = 30,
+    ) -> dict:
         """Generate a TOTP code from a plaintext secret.
 
         Args:

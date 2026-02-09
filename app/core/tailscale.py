@@ -5,7 +5,7 @@ originate from the Tailscale network, adding an extra layer of security.
 """
 
 import ipaddress
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware

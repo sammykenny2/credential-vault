@@ -28,6 +28,7 @@ NONCE_SIZE = 12
 def _derive_key(password: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
     """Derive encryption key from password using PBKDF2."""
     import secrets
+
     if salt is None:
         salt = secrets.token_bytes(16)
     key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000)
@@ -37,6 +38,7 @@ def _derive_key(password: str, salt: bytes | None = None) -> tuple[bytes, bytes]
 def _encrypt_backup(data: str, password: str) -> str:
     """Encrypt backup data with password."""
     import secrets
+
     key, salt = _derive_key(password)
     nonce = secrets.token_bytes(NONCE_SIZE)
     aesgcm = AESGCM(key)
@@ -50,8 +52,8 @@ def _decrypt_backup(encrypted: str, password: str) -> str:
     """Decrypt backup data with password."""
     raw = base64.b64decode(encrypted.encode("ascii"))
     salt = raw[:16]
-    nonce = raw[16:16 + NONCE_SIZE]
-    ciphertext = raw[16 + NONCE_SIZE:]
+    nonce = raw[16 : 16 + NONCE_SIZE]
+    ciphertext = raw[16 + NONCE_SIZE :]
     key, _ = _derive_key(password, salt)
     aesgcm = AESGCM(key)
     plaintext = aesgcm.decrypt(nonce, ciphertext, None)
@@ -158,7 +160,10 @@ class BackupService:
 
         logger.info(
             "Backup created for user %s: %d creds, %d templates, %d TOTP",
-            user_id, cred_count, template_count, totp_count,
+            user_id,
+            cred_count,
+            template_count,
+            totp_count,
         )
 
         return {
@@ -190,13 +195,13 @@ class BackupService:
             if overwrite_existing:
                 # Delete existing credentials
                 from sqlalchemy import delete
-                await self.db.execute(
-                    delete(Credential).where(Credential.owner_id == user_id)
-                )
+
+                await self.db.execute(delete(Credential).where(Credential.owner_id == user_id))
 
             for cred_data in backup_data["credentials"]:
                 try:
                     from datetime import datetime as dt
+
                     expires_at = None
                     if cred_data.get("expires_at"):
                         expires_at = dt.fromisoformat(cred_data["expires_at"])
@@ -213,15 +218,15 @@ class BackupService:
                     self.db.add(credential)
                     creds_restored += 1
                 except Exception as e:
-                    errors.append(f"Failed to restore credential '{cred_data.get('name', 'unknown')}': {e}")
+                    cred_name = cred_data.get("name", "unknown")
+                    errors.append(f"Failed to restore credential '{cred_name}': {e}")
 
         # Restore templates
         if "templates" in backup_data:
             if overwrite_existing:
                 from sqlalchemy import delete
-                await self.db.execute(
-                    delete(Template).where(Template.owner_id == user_id)
-                )
+
+                await self.db.execute(delete(Template).where(Template.owner_id == user_id))
 
             for tmpl_data in backup_data["templates"]:
                 try:
@@ -236,15 +241,15 @@ class BackupService:
                     self.db.add(template)
                     templates_restored += 1
                 except Exception as e:
-                    errors.append(f"Failed to restore template '{tmpl_data.get('name', 'unknown')}': {e}")
+                    tmpl_name = tmpl_data.get("name", "unknown")
+                    errors.append(f"Failed to restore template '{tmpl_name}': {e}")
 
         # Restore TOTP accounts
         if "totp_accounts" in backup_data:
             if overwrite_existing:
                 from sqlalchemy import delete
-                await self.db.execute(
-                    delete(TOTPAccount).where(TOTPAccount.user_id == user_id)
-                )
+
+                await self.db.execute(delete(TOTPAccount).where(TOTPAccount.user_id == user_id))
 
             for totp_data in backup_data["totp_accounts"]:
                 try:
@@ -261,13 +266,18 @@ class BackupService:
                     self.db.add(account)
                     totp_restored += 1
                 except Exception as e:
-                    errors.append(f"Failed to restore TOTP '{totp_data.get('issuer', 'unknown')}': {e}")
+                    totp_issuer = totp_data.get("issuer", "unknown")
+                    errors.append(f"Failed to restore TOTP '{totp_issuer}': {e}")
 
         await self.db.flush()
 
         logger.info(
             "Backup restored for user %s: %d creds, %d templates, %d TOTP, %d errors",
-            user_id, creds_restored, templates_restored, totp_restored, len(errors),
+            user_id,
+            creds_restored,
+            templates_restored,
+            totp_restored,
+            len(errors),
         )
 
         return {

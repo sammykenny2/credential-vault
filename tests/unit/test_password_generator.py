@@ -2,8 +2,6 @@
 
 import string
 
-import pytest
-
 from app.core.password_generator import generate_passphrase, generate_password
 
 
@@ -64,9 +62,7 @@ class TestGeneratePassword:
         assert len(passwords) == 100  # All should be unique
 
     def test_no_charset_fallback(self):
-        pw = generate_password(
-            uppercase=False, lowercase=False, digits=False, symbols=False
-        )
+        pw = generate_password(uppercase=False, lowercase=False, digits=False, symbols=False)
         assert len(pw) >= 8
 
 

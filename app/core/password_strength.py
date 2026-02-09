@@ -5,20 +5,62 @@ Provides scoring and feedback for password quality assessment.
 
 import math
 import re
-import string
-
 
 # Common passwords (top 100 subset for quick check)
-COMMON_PASSWORDS = frozenset([
-    "password", "123456", "12345678", "qwerty", "abc123", "monkey", "1234567",
-    "letmein", "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine",
-    "ashley", "michael", "shadow", "123123", "654321", "superman", "qazwsx",
-    "password1", "password123", "admin", "welcome", "hello", "charlie", "donald",
-    "login", "princess", "starwars", "passw0rd", "p@ssw0rd", "p@ssword",
-    "football", "access", "flower", "hottie", "loveme", "zaq1zaq1",
-    "00000000", "11111111", "12345", "123456789", "1234567890",
-    "qwerty123", "1q2w3e4r", "1qaz2wsx", "abcdef", "abcdefgh",
-])
+COMMON_PASSWORDS = frozenset(
+    [
+        "password",
+        "123456",
+        "12345678",
+        "qwerty",
+        "abc123",
+        "monkey",
+        "1234567",
+        "letmein",
+        "trustno1",
+        "dragon",
+        "baseball",
+        "iloveyou",
+        "master",
+        "sunshine",
+        "ashley",
+        "michael",
+        "shadow",
+        "123123",
+        "654321",
+        "superman",
+        "qazwsx",
+        "password1",
+        "password123",
+        "admin",
+        "welcome",
+        "hello",
+        "charlie",
+        "donald",
+        "login",
+        "princess",
+        "starwars",
+        "passw0rd",
+        "p@ssw0rd",
+        "p@ssword",
+        "football",
+        "access",
+        "flower",
+        "hottie",
+        "loveme",
+        "zaq1zaq1",
+        "00000000",
+        "11111111",
+        "12345",
+        "123456789",
+        "1234567890",
+        "qwerty123",
+        "1q2w3e4r",
+        "1qaz2wsx",
+        "abcdef",
+        "abcdefgh",
+    ]
+)
 
 # Keyboard patterns
 KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890"]
@@ -122,7 +164,8 @@ def analyze_password(password: str) -> dict:
     # Repeated patterns
     for pattern_len in range(1, len(password) // 2 + 1):
         pattern = password[:pattern_len]
-        if pattern * (len(password) // pattern_len) == password[:pattern_len * (len(password) // pattern_len)]:
+        repeat_count = len(password) // pattern_len
+        if pattern * repeat_count == password[: pattern_len * repeat_count]:
             if len(password) // pattern_len >= 3:
                 score -= 15
                 feedback.append("Avoid repeating patterns")
@@ -132,7 +175,7 @@ def analyze_password(password: str) -> dict:
     lower_pw = password.lower()
     for pattern in KEYBOARD_PATTERNS:
         for i in range(len(pattern) - 3):
-            if pattern[i:i + 4] in lower_pw:
+            if pattern[i : i + 4] in lower_pw:
                 score -= 10
                 feedback.append("Avoid keyboard patterns (qwerty, asdf)")
                 break
@@ -199,7 +242,7 @@ def _estimate_crack_time(entropy_bits: float) -> str:
     if entropy_bits <= 0:
         return "instant"
 
-    guesses = 2 ** entropy_bits
+    guesses = 2**entropy_bits
     seconds = guesses / 10_000_000_000  # 10 billion guesses/sec
 
     if seconds < 1:

@@ -102,9 +102,7 @@ class UserService:
         """Delete all credentials for a user. Returns count of deleted credentials."""
         from sqlalchemy import delete
 
-        result = await self.db.execute(
-            delete(Credential).where(Credential.owner_id == user_id)
-        )
+        result = await self.db.execute(delete(Credential).where(Credential.owner_id == user_id))
         await self.db.flush()
         return result.rowcount
 
@@ -113,7 +111,7 @@ class UserService:
         result = await self.db.execute(
             select(func.count(User.id)).where(
                 User.role == UserRole.ADMIN,
-                User.is_active == True,
+                User.is_active.is_(True),
             )
         )
         return result.scalar() or 0

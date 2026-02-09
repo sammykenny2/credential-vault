@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
-class AuditAction(str, enum.Enum):
+class AuditAction(enum.StrEnum):
     """Audit log action types."""
 
     # Auth

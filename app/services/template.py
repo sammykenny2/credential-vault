@@ -24,9 +24,7 @@ class VersionConflictError(Exception):
         self.server_version = server_version
         self.client_version = client_version
         self.template = template
-        super().__init__(
-            f"Version conflict: server={server_version}, client={client_version}"
-        )
+        super().__init__(f"Version conflict: server={server_version}, client={client_version}")
 
 
 class TemplateService:
@@ -187,9 +185,7 @@ class TemplateService:
     async def get_use_count(self, template_id: str) -> int:
         """Get usage count for a template."""
         result = await self.db.execute(
-            select(func.count(TemplateUsage.id)).where(
-                TemplateUsage.template_id == template_id
-            )
+            select(func.count(TemplateUsage.id)).where(TemplateUsage.template_id == template_id)
         )
         return result.scalar() or 0
 

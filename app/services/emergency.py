@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.emergency_access import EmergencyAccess, EmergencyStatus
@@ -23,9 +23,7 @@ class EmergencyAccessService:
     ) -> EmergencyAccess:
         """Create an emergency access grant."""
         # Find grantee by email
-        result = await self.db.execute(
-            select(User).where(User.email == grantee_email)
-        )
+        result = await self.db.execute(select(User).where(User.email == grantee_email))
         grantee = result.scalar_one_or_none()
         if not grantee:
             raise ValueError("User not found")
@@ -38,10 +36,12 @@ class EmergencyAccessService:
             select(EmergencyAccess).where(
                 EmergencyAccess.grantor_id == grantor_id,
                 EmergencyAccess.grantee_id == grantee.id,
-                EmergencyAccess.status.in_([
-                    EmergencyStatus.INVITED,
-                    EmergencyStatus.ACCEPTED,
-                ]),
+                EmergencyAccess.status.in_(
+                    [
+                        EmergencyStatus.INVITED,
+                        EmergencyStatus.ACCEPTED,
+                    ]
+                ),
             )
         )
         existing = result.scalar_one_or_none()
@@ -60,7 +60,9 @@ class EmergencyAccessService:
 
         logger.info(
             "Emergency access created: %s -> %s (wait=%d days)",
-            grantor_id, grantee.email, wait_time_days,
+            grantor_id,
+            grantee.email,
+            wait_time_days,
         )
         return grant
 
@@ -76,22 +78,24 @@ class EmergencyAccessService:
         )
         grants = []
         for grant, user in result.all():
-            grants.append({
-                "id": grant.id,
-                "grantee_email": user.email,
-                "grantee_name": user.display_name,
-                "status": grant.status.value,
-                "wait_time_days": grant.wait_time_days,
-                "recovery_initiated_at": (
-                    grant.recovery_initiated_at.isoformat()
-                    if grant.recovery_initiated_at else None
-                ),
-                "recovery_deadline": (
-                    grant.recovery_deadline.isoformat()
-                    if grant.recovery_deadline else None
-                ),
-                "created_at": grant.created_at.isoformat(),
-            })
+            grants.append(
+                {
+                    "id": grant.id,
+                    "grantee_email": user.email,
+                    "grantee_name": user.display_name,
+                    "status": grant.status.value,
+                    "wait_time_days": grant.wait_time_days,
+                    "recovery_initiated_at": (
+                        grant.recovery_initiated_at.isoformat()
+                        if grant.recovery_initiated_at
+                        else None
+                    ),
+                    "recovery_deadline": (
+                        grant.recovery_deadline.isoformat() if grant.recovery_deadline else None
+                    ),
+                    "created_at": grant.created_at.isoformat(),
+                }
+            )
         return grants
 
     async def list_granted_to_me(self, user_id: str) -> list[dict]:
@@ -106,27 +110,27 @@ class EmergencyAccessService:
         )
         grants = []
         for grant, user in result.all():
-            grants.append({
-                "id": grant.id,
-                "grantor_email": user.email,
-                "grantor_name": user.display_name,
-                "status": grant.status.value,
-                "wait_time_days": grant.wait_time_days,
-                "recovery_initiated_at": (
-                    grant.recovery_initiated_at.isoformat()
-                    if grant.recovery_initiated_at else None
-                ),
-                "recovery_deadline": (
-                    grant.recovery_deadline.isoformat()
-                    if grant.recovery_deadline else None
-                ),
-                "created_at": grant.created_at.isoformat(),
-            })
+            grants.append(
+                {
+                    "id": grant.id,
+                    "grantor_email": user.email,
+                    "grantor_name": user.display_name,
+                    "status": grant.status.value,
+                    "wait_time_days": grant.wait_time_days,
+                    "recovery_initiated_at": (
+                        grant.recovery_initiated_at.isoformat()
+                        if grant.recovery_initiated_at
+                        else None
+                    ),
+                    "recovery_deadline": (
+                        grant.recovery_deadline.isoformat() if grant.recovery_deadline else None
+                    ),
+                    "created_at": grant.created_at.isoformat(),
+                }
+            )
         return grants
 
-    async def initiate_recovery(
-        self, grant_id: str, grantee_id: str
-    ) -> EmergencyAccess:
+    async def initiate_recovery(self, grant_id: str, grantee_id: str) -> EmergencyAccess:
         """Initiate recovery - starts the waiting period."""
         result = await self.db.execute(
             select(EmergencyAccess).where(
@@ -172,9 +176,7 @@ class EmergencyAccessService:
         logger.info("Recovery approved for grant %s", grant_id)
         return grant
 
-    async def reject_recovery(
-        self, grant_id: str, grantor_id: str
-    ) -> EmergencyAccess:
+    async def reject_recovery(self, grant_id: str, grantor_id: str) -> EmergencyAccess:
         """Reject a recovery request."""
         result = await self.db.execute(
             select(EmergencyAccess).where(

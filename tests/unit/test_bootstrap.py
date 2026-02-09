@@ -1,7 +1,8 @@
 """Tests for bootstrap service."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 
 from app.models.user import UserRole
 from app.services.bootstrap import BootstrapService
@@ -43,8 +44,8 @@ async def test_create_initial_admin_skips_when_env_not_set(db_session):
     """Test create_initial_admin skips when env vars not set."""
     bootstrap = BootstrapService(db_session)
 
-    with patch.object(bootstrap.settings, 'admin_email', None):
-        with patch.object(bootstrap.settings, 'admin_password', None):
+    with patch.object(bootstrap.settings, "admin_email", None):
+        with patch.object(bootstrap.settings, "admin_password", None):
             result = await bootstrap.create_initial_admin()
             assert result is None
 
@@ -54,15 +55,15 @@ async def test_create_initial_admin_creates_admin(db_session):
     """Test create_initial_admin creates admin from env vars."""
     bootstrap = BootstrapService(db_session)
 
-    with patch.object(bootstrap.settings, 'admin_email', 'newadmin@example.com'):
-        with patch.object(bootstrap.settings, 'admin_password', 'S3cure@Pass!23'):
-            with patch.object(bootstrap.settings, 'admin_display_name', 'Test Admin'):
+    with patch.object(bootstrap.settings, "admin_email", "newadmin@example.com"):
+        with patch.object(bootstrap.settings, "admin_password", "S3cure@Pass!23"):
+            with patch.object(bootstrap.settings, "admin_display_name", "Test Admin"):
                 result = await bootstrap.create_initial_admin()
 
                 assert result is not None
-                assert result.email == 'newadmin@example.com'
+                assert result.email == "newadmin@example.com"
                 assert result.role == UserRole.ADMIN
-                assert result.display_name == 'Test Admin'
+                assert result.display_name == "Test Admin"
 
 
 @pytest.mark.asyncio
@@ -70,8 +71,8 @@ async def test_create_initial_admin_promotes_existing_user(db_session, test_user
     """Test create_initial_admin promotes existing user to admin."""
     bootstrap = BootstrapService(db_session)
 
-    with patch.object(bootstrap.settings, 'admin_email', test_user.email):
-        with patch.object(bootstrap.settings, 'admin_password', 'anypassword'):
+    with patch.object(bootstrap.settings, "admin_email", test_user.email):
+        with patch.object(bootstrap.settings, "admin_password", "anypassword"):
             result = await bootstrap.create_initial_admin()
 
             assert result is not None

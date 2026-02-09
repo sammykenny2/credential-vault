@@ -1,7 +1,5 @@
 """Tests for security utilities."""
 
-import pytest
-
 from app.core.security import SecurityService
 
 

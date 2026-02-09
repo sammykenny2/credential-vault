@@ -39,12 +39,13 @@ class TestHIBPBreachCheck:
     async def test_safe_password(self):
         """Test a password not found in breaches."""
         password = "unique_super_secret_2024_xyz"
-        sha1 = hashlib.sha1(password.encode()).hexdigest().upper()
-        suffix = sha1[5:]
+        hashlib.sha1(password.encode()).hexdigest().upper()
 
         # Return results that don't match
         mock_response = MagicMock()
-        mock_response.text = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:100\nBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:50\n"
+        mock_response.text = (
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:100\nBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:50\n"
+        )
         mock_response.raise_for_status = MagicMock()
 
         with patch("app.core.hibp.httpx.AsyncClient") as mock_client:
