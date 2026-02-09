@@ -1,10 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { credentialService } from '@/services/credentialService'
-import { Key, ShieldCheck, Clock } from 'lucide-react'
+import { Key, ShieldCheck, Clock, Wand2 } from 'lucide-react'
+import HealthDashboard from '@/components/HealthDashboard'
+import PasswordGenerator from '@/components/PasswordGenerator'
+import TOTPAuthenticator from '@/components/TOTPAuthenticator'
+import SharingPanel from '@/components/SharingPanel'
+import { useState } from 'react'
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
+  const [showGenerator, setShowGenerator] = useState(false)
 
   const { data: credentials } = useQuery({
     queryKey: ['credentials'],
@@ -36,9 +42,25 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">
-        Welcome, {user?.display_name}
-      </h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">
+          Welcome, {user?.display_name}
+        </h1>
+        <button
+          onClick={() => setShowGenerator(!showGenerator)}
+          className="flex items-center gap-2 text-sm bg-blue-50 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-100"
+        >
+          <Wand2 className="w-4 h-4" />
+          Password Generator
+        </button>
+      </div>
+
+      {/* Password Generator (toggle) */}
+      {showGenerator && (
+        <div className="mb-6">
+          <PasswordGenerator />
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -53,6 +75,24 @@ export default function DashboardPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Health Dashboard */}
+      <div className="mb-8">
+        <HealthDashboard />
+      </div>
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* TOTP Authenticator */}
+        <div className="card">
+          <TOTPAuthenticator />
+        </div>
+
+        {/* Shared Credentials */}
+        <div className="card">
+          <SharingPanel />
+        </div>
       </div>
 
       {/* Recent Credentials */}
@@ -70,9 +110,20 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-500">{cred.website_url}</p>
                   )}
                 </div>
-                <span className="text-sm text-gray-400">
-                  {new Date(cred.updated_at).toLocaleDateString()}
-                </span>
+                <div className="flex items-center gap-3">
+                  {cred.expires_at && (
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      new Date(cred.expires_at) < new Date()
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {new Date(cred.expires_at) < new Date() ? 'Expired' : `Expires ${new Date(cred.expires_at).toLocaleDateString()}`}
+                    </span>
+                  )}
+                  <span className="text-sm text-gray-400">
+                    {new Date(cred.updated_at).toLocaleDateString()}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

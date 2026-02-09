@@ -29,6 +29,7 @@ class CredentialCreate(CredentialBase):
 
     # Encrypted data from client
     encrypted_data: str
+    expires_at: datetime | None = None
 
 
 class CredentialUpdate(BaseModel):
@@ -39,6 +40,7 @@ class CredentialUpdate(BaseModel):
     website_url: str | None = Field(None, max_length=2048)
     category: str | None = Field(None, max_length=100)
     encrypted_data: str | None = None
+    expires_at: datetime | None = None
 
 
 class CredentialRead(CredentialBase):
@@ -50,6 +52,7 @@ class CredentialRead(CredentialBase):
     owner_id: str
     encrypted_data: str
     is_active: bool
+    expires_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -66,5 +69,32 @@ class CredentialListItem(BaseModel):
     website_url: str | None
     category: str | None
     is_active: bool
+    expires_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class CredentialExport(BaseModel):
+    """Schema for credential export."""
+
+    name: str
+    description: str | None = None
+    website_url: str | None = None
+    category: str | None = None
+    encrypted_data: str
+    expires_at: datetime | None = None
+
+
+class CredentialImportRequest(BaseModel):
+    """Schema for importing credentials."""
+
+    credentials: list[CredentialExport]
+    format: str = "json"
+
+
+class CredentialImportResult(BaseModel):
+    """Result of credential import."""
+
+    imported: int
+    skipped: int
+    errors: list[str]

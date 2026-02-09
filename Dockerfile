@@ -4,7 +4,7 @@
 # ============================================
 # Build Stage
 # ============================================
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY pyproject.toml .
-RUN pip install --no-cache-dir --user -e .
+RUN pip install --no-cache-dir --user .
 
 # ============================================
 # Production Stage
@@ -28,6 +28,7 @@ WORKDIR /app
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
@@ -36,8 +37,8 @@ ENV PATH=/root/.local/bin:$PATH
 
 # Copy source code
 COPY app/ ./app/
-COPY alembic.ini ./alembic.ini 2>/dev/null || true
-COPY alembic/ ./alembic/ 2>/dev/null || true
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser \
@@ -47,9 +48,9 @@ USER appuser
 # Expose port (internal only - not mapped to host in production)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
+# Health check using curl (lighter than httpx)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run with optimized settings
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--loop", "uvloop", "--http", "httptools", "--no-access-log"]

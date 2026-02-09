@@ -6,6 +6,8 @@ from app.api.deps import CurrentUser, DbSession
 from app.models.audit_log import AuditAction
 from app.schemas.credential import (
     CredentialCreate,
+    CredentialImportRequest,
+    CredentialImportResult,
     CredentialListItem,
     CredentialRead,
     CredentialUpdate,
@@ -205,3 +207,49 @@ async def delete_credential(
         resource_id=credential_id,
         details={"name": credential_name},
     )
+
+
+@router.get("/expiring", response_model=list[CredentialListItem])
+async def get_expiring_credentials(
+    current_user: CurrentUser,
+    db: DbSession,
+    days: int = Query(30, ge=1, le=365),
+):
+    """Get credentials expiring within the given number of days."""
+    service = CredentialService(db)
+    return await service.get_expiring(owner_id=current_user.id, days=days)
+
+
+@router.get("/export")
+async def export_credentials(
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Export all credentials as JSON."""
+    service = CredentialService(db)
+    data = await service.export_all(current_user.id)
+    return {"credentials": data, "count": len(data)}
+
+
+@router.post("/import", response_model=CredentialImportResult)
+async def import_credentials(
+    request: Request,
+    data: CredentialImportRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Import credentials from JSON."""
+    service = CredentialService(db)
+    creds_data = [c.model_dump() for c in data.credentials]
+    result = await service.import_credentials(current_user.id, creds_data)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_CREATED,
+        user_id=current_user.id,
+        resource_type="credential",
+        details={"action": "import", "count": result["imported"]},
+    )
+
+    return CredentialImportResult(**result)

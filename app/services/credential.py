@@ -45,6 +45,74 @@ class CredentialService:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def get_expiring(
+        self,
+        owner_id: str,
+        days: int = 30,
+    ) -> list[Credential]:
+        """Get credentials expiring within the given number of days."""
+        from datetime import timedelta
+        now = datetime.now(UTC)
+        deadline = now + timedelta(days=days)
+        result = await self.db.execute(
+            select(Credential).where(
+                Credential.owner_id == owner_id,
+                Credential.is_active == True,  # noqa: E712
+                Credential.expires_at != None,  # noqa: E711
+                Credential.expires_at <= deadline,
+            ).order_by(Credential.expires_at)
+        )
+        return list(result.scalars().all())
+
+    async def export_all(self, owner_id: str) -> list[dict]:
+        """Export all active credentials for a user."""
+        credentials = await self.list_by_owner(owner_id, limit=10000)
+        return [
+            {
+                "name": c.name,
+                "description": c.description,
+                "website_url": c.website_url,
+                "category": c.category,
+                "encrypted_data": c.encrypted_data,
+                "expires_at": c.expires_at.isoformat() if c.expires_at else None,
+            }
+            for c in credentials
+        ]
+
+    async def import_credentials(
+        self, owner_id: str, credentials_data: list[dict]
+    ) -> dict:
+        """Import credentials from exported data."""
+        imported = 0
+        skipped = 0
+        errors = []
+
+        for cred_data in credentials_data:
+            try:
+                expires_at = None
+                if cred_data.get("expires_at"):
+                    expires_at = datetime.fromisoformat(cred_data["expires_at"])
+
+                credential = Credential(
+                    owner_id=owner_id,
+                    name=cred_data["name"],
+                    description=cred_data.get("description"),
+                    website_url=cred_data.get("website_url"),
+                    category=cred_data.get("category"),
+                    encrypted_data=cred_data["encrypted_data"],
+                    expires_at=expires_at,
+                )
+                self.db.add(credential)
+                imported += 1
+            except Exception as e:
+                errors.append(f"Failed to import '{cred_data.get('name', 'unknown')}': {str(e)}")
+
+        if imported > 0:
+            await self.db.flush()
+
+        logger.info("Import complete for %s: %d imported, %d errors", owner_id, imported, len(errors))
+        return {"imported": imported, "skipped": skipped, "errors": errors}
+
     async def create(self, owner_id: str, data: CredentialCreate) -> Credential:
         """Create a new credential."""
         credential = Credential(
@@ -54,6 +122,7 @@ class CredentialService:
             website_url=data.website_url,
             category=data.category,
             encrypted_data=data.encrypted_data,
+            expires_at=data.expires_at,
         )
         self.db.add(credential)
         await self.db.flush()

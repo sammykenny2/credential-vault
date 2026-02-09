@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
-import { Shield, Key, User, FileText } from 'lucide-react'
+import { Shield, Key, User, FileText, Fingerprint, HeartPulse, Download } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
+import WebAuthnPanel from '@/components/WebAuthnPanel'
+import EmergencyAccessPanel from '@/components/EmergencyAccessPanel'
+import BackupRestorePanel from '@/components/BackupRestorePanel'
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore()
-  const queryClient = useQueryClient()
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -179,6 +181,21 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
+      </section>
+
+      {/* WebAuthn / Passkeys Section */}
+      <section className="card mb-6">
+        <WebAuthnPanel />
+      </section>
+
+      {/* Emergency Access Section */}
+      <section className="card mb-6">
+        <EmergencyAccessPanel />
+      </section>
+
+      {/* Backup & Restore Section */}
+      <section className="card mb-6">
+        <BackupRestorePanel />
       </section>
 
       {/* Templates Section */}
