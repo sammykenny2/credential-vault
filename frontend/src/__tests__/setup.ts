@@ -48,6 +48,18 @@ if (typeof URL.createObjectURL !== 'function') {
   URL.revokeObjectURL = vi.fn()
 }
 
+// Polyfill Blob.prototype.text() for jsdom (File inherits from Blob)
+if (typeof Blob.prototype.text !== 'function') {
+  Blob.prototype.text = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsText(this)
+    })
+  }
+}
+
 // Reset localStorage before each test
 beforeEach(() => {
   localStorageMock.clear()

@@ -170,12 +170,14 @@ describe('Template Storage', () => {
     })
 
     it('should get all usage stats', () => {
-      recordTemplateUsage('template-1')
-      recordTemplateUsage('template-2')
+      const t1 = createCustomTemplate({ name: 'Stats Template 1', fields: [] })
+      const t2 = createCustomTemplate({ name: 'Stats Template 2', fields: [] })
+      recordTemplateUsage(t1!.id)
+      recordTemplateUsage(t2!.id)
 
       const stats = getAllUsageStats()
-      expect(stats.get('template-1')?.useCount).toBe(1)
-      expect(stats.get('template-2')?.useCount).toBe(1)
+      expect(stats.get(t1!.id)?.useCount).toBe(1)
+      expect(stats.get(t2!.id)?.useCount).toBe(1)
     })
   })
 
@@ -212,7 +214,7 @@ describe('Template Storage', () => {
   })
 
   describe('getTemplatesSortedByUsage', () => {
-    it('should sort unused templates first', () => {
+    it('should sort used templates before unused', () => {
       createCustomTemplate({ name: 'Unused', fields: [] })
       const used = createCustomTemplate({ name: 'Used', fields: [] })
       recordTemplateUsage(used!.id)
@@ -220,10 +222,10 @@ describe('Template Storage', () => {
       const sorted = getTemplatesSortedByUsage()
       const customTemplates = sorted.filter((t) => !t.isBuiltIn)
 
-      // Unused should come before used
-      const unusedIndex = customTemplates.findIndex((t) => t.name === 'Unused')
+      // Used should come before unused (most used first, unused last)
       const usedIndex = customTemplates.findIndex((t) => t.name === 'Used')
-      expect(unusedIndex).toBeLessThan(usedIndex)
+      const unusedIndex = customTemplates.findIndex((t) => t.name === 'Unused')
+      expect(usedIndex).toBeLessThan(unusedIndex)
     })
   })
 
@@ -273,7 +275,7 @@ describe('Template Storage', () => {
     describe('markMigrationCompleted', () => {
       it('should set migration flag in localStorage', () => {
         markMigrationCompleted()
-        const flag = localStorageMock.getItem(TEMPLATE_STORAGE_KEYS.MIGRATION_COMPLETED)
+        const flag = localStorageMock.getItem('credential-vault-templates-migrated')
         expect(flag).toBe('true')
       })
     })
