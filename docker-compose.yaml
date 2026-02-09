@@ -24,12 +24,21 @@ services:
     restart: unless-stopped
     networks:
       - vault-internal
-    # Healthcheck to ensure Tailscale is connected
     healthcheck:
       test: ["CMD", "tailscale", "status", "--json"]
       interval: 30s
       timeout: 10s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
 
   # ============================================
   # Backend API (FastAPI)
@@ -47,14 +56,24 @@ services:
       - REQUIRE_TAILSCALE=${REQUIRE_TAILSCALE:-true}
     env_file:
       - .env
-    volumes:
-      - ./app:/app/app:ro
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
     networks:
       - vault-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
     # No ports exposed - access only via Tailscale
 
   # ============================================
@@ -69,6 +88,16 @@ services:
     restart: unless-stopped
     networks:
       - vault-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
     # No ports exposed - access only via Tailscale
 
   # ============================================
@@ -90,6 +119,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+    shm_size: '128mb'
     # No ports exposed - internal only
 
 # ============================================

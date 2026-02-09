@@ -12,7 +12,17 @@ from app.config import get_settings
 from app.models.base import Base
 
 # Import all models to ensure they are registered with Base.metadata
-from app.models import Credential, Template, TemplateUsage, User  # noqa: F401
+from app.models import (  # noqa: F401
+    AuditLog,
+    Credential,
+    CredentialShare,
+    EmergencyAccess,
+    Template,
+    TemplateUsage,
+    TOTPAccount,
+    User,
+    WebAuthnCredential,
+)
 
 # this is the Alembic Config object
 config = context.config

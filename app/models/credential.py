@@ -39,6 +39,13 @@ class Credential(Base, TimestampMixin):
     # Contains: username, password, notes, custom_fields
     encrypted_data: Mapped[str] = mapped_column(Text, nullable=False)
 
+    # Expiration (optional - for API keys, certificates, etc.)
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(

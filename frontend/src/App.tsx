@@ -7,6 +7,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import CredentialsPage from '@/pages/CredentialsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import AdminUsersPage from '@/pages/AdminUsersPage'
+import OfflineIndicator from '@/components/OfflineIndicator'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, requiresMFA } = useAuthStore()
@@ -24,6 +25,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
+    <>
+    <OfflineIndicator />
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
@@ -48,6 +51,7 @@ function App() {
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }
 
