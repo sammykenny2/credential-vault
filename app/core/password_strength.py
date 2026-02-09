@@ -87,8 +87,8 @@ def analyze_password(password: str) -> dict:
         }
 
     length = len(password)
-    feedback = []
-    details = {}
+    feedback: list[str] = []
+    details: dict[str, int | float | bool] = {}
 
     # === Character set analysis ===
     has_lower = bool(re.search(r"[a-z]", password))
@@ -124,7 +124,7 @@ def analyze_password(password: str) -> dict:
     details["entropy_bits"] = round(entropy, 1)
 
     # === Scoring ===
-    score = 0.0
+    score: float = 0.0
 
     # Length score (0-30)
     length_score = min(30, length * 2)
@@ -205,22 +205,22 @@ def analyze_password(password: str) -> dict:
         feedback.append("Use more unique characters")
 
     # === Final score normalization ===
-    score = max(0, min(100, int(score)))
+    final_score: int = max(0, min(100, int(score)))
 
     # Bonus for very long passwords
     if length >= 20 and diversity >= 3:
-        score = max(score, 80)
+        final_score = max(final_score, 80)
     if length >= 16 and diversity >= 4:
-        score = max(score, 75)
+        final_score = max(final_score, 75)
 
     # === Level determination ===
-    if score >= 80:
+    if final_score >= 80:
         level = "very_strong"
-    elif score >= 60:
+    elif final_score >= 60:
         level = "strong"
-    elif score >= 40:
+    elif final_score >= 40:
         level = "fair"
-    elif score >= 20:
+    elif final_score >= 20:
         level = "weak"
     else:
         level = "very_weak"
@@ -229,7 +229,7 @@ def analyze_password(password: str) -> dict:
     crack_time = _estimate_crack_time(entropy)
 
     return {
-        "score": score,
+        "score": final_score,
         "level": level,
         "feedback": feedback[:5],  # Limit to top 5 suggestions
         "details": details,

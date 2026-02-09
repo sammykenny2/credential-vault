@@ -1,6 +1,9 @@
 """Credential model."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
@@ -8,6 +11,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Credential(Base, TimestampMixin):
@@ -54,7 +60,7 @@ class Credential(Base, TimestampMixin):
     )
 
     # Relationships
-    owner: Mapped["User"] = relationship("User", back_populates="credentials")
+    owner: Mapped[User] = relationship("User", back_populates="credentials")
 
     def __repr__(self) -> str:
         return f"<Credential {self.name}>"

@@ -80,18 +80,18 @@ class TailscaleMiddleware(BaseHTTPMiddleware):
     # Paths that bypass Tailscale check (health checks, etc.)
     EXEMPT_PATHS = {"/health", "/api/v1/health"}
 
-    async def dispatch(
+    async def dispatch(  # type: ignore[override]
         self, request: Request, call_next: Callable[[Request], Response]
     ) -> Response:
         settings = get_settings()
 
         # Skip check if not required
         if not settings.require_tailscale:
-            return await call_next(request)
+            return await call_next(request)  # type: ignore[misc,no-any-return]
 
         # Skip check for exempt paths
         if request.url.path in self.EXEMPT_PATHS:
-            return await call_next(request)
+            return await call_next(request)  # type: ignore[misc,no-any-return]
 
         # Get client IP
         client_ip = get_client_ip(request)
@@ -110,7 +110,7 @@ class TailscaleMiddleware(BaseHTTPMiddleware):
         request.state.tailscale_ip = client_ip
         request.state.is_tailscale = True
 
-        return await call_next(request)
+        return await call_next(request)  # type: ignore[misc,no-any-return]
 
 
 def get_tailscale_user_info(request: Request) -> dict | None:

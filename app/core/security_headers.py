@@ -40,4 +40,4 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Permissions policy
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
-        return response
+        return response  # type: ignore[no-any-return]

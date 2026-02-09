@@ -1,7 +1,10 @@
 """Credential sharing model for team collaboration."""
 
+from __future__ import annotations
+
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Text, func
@@ -9,6 +12,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.credential import Credential
+    from app.models.user import User
 
 
 class SharePermission(enum.StrEnum):
@@ -75,9 +82,9 @@ class CredentialShare(Base):
     )
 
     # Relationships
-    credential: Mapped["Credential"] = relationship("Credential", backref="shares")
-    shared_by: Mapped["User"] = relationship("User", foreign_keys=[shared_by_id])
-    shared_with: Mapped["User"] = relationship("User", foreign_keys=[shared_with_id])
+    credential: Mapped[Credential] = relationship("Credential", backref="shares")
+    shared_by: Mapped[User] = relationship("User", foreign_keys=[shared_by_id])
+    shared_with: Mapped[User] = relationship("User", foreign_keys=[shared_with_id])
 
     def __repr__(self) -> str:
         return f"<CredentialShare {self.credential_id} -> {self.shared_with_id}>"

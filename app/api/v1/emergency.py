@@ -74,11 +74,13 @@ async def initiate_recovery(
             detail=str(e),
         )
 
+    initiated = grant.recovery_initiated_at
+    deadline = grant.recovery_deadline
     return {
         "id": grant.id,
         "status": grant.status.value,
-        "recovery_initiated_at": grant.recovery_initiated_at.isoformat(),
-        "recovery_deadline": grant.recovery_deadline.isoformat(),
+        "recovery_initiated_at": (initiated.isoformat() if initiated else None),
+        "recovery_deadline": (deadline.isoformat() if deadline else None),
     }
 
 

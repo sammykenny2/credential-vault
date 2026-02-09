@@ -104,7 +104,7 @@ class UserService:
 
         result = await self.db.execute(delete(Credential).where(Credential.owner_id == user_id))
         await self.db.flush()
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined,no-any-return]
 
     async def count_active_admins(self) -> int:
         """Count active admin users."""

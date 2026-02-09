@@ -21,7 +21,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.url.path in EXCLUDED_PATHS:
-            return await call_next(request)
+            return await call_next(request)  # type: ignore[no-any-return]
 
         start_time = time.monotonic()
 
@@ -56,4 +56,4 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             },
         )
 
-        return response
+        return response  # type: ignore[no-any-return]

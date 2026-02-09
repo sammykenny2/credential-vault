@@ -94,7 +94,7 @@ def decrypt_data(encrypted: str) -> dict[str, Any]:
         plaintext = aesgcm.decrypt(nonce, ciphertext, None)
 
         # Parse JSON
-        return json.loads(plaintext.decode("utf-8"))
+        return json.loads(plaintext.decode("utf-8"))  # type: ignore[no-any-return]
 
     except Exception as e:
         raise ValueError(f"Decryption failed: {e}") from e
@@ -127,7 +127,7 @@ def decrypt_string(encrypted: str) -> str:
         ValueError: If decryption fails
     """
     data = decrypt_data(encrypted)
-    return data["v"]
+    return data["v"]  # type: ignore[no-any-return]
 
 
 class CredentialCrypto:

@@ -3,11 +3,14 @@
 Provides encrypted backup/restore for credentials, templates, and TOTP accounts.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
@@ -75,7 +78,7 @@ class BackupService:
         include_totp: bool = True,
     ) -> dict:
         """Create an encrypted backup of user data."""
-        backup_data = {
+        backup_data: dict[str, Any] = {
             "version": BACKUP_VERSION,
             "created_at": datetime.now(UTC).isoformat(),
             "app_version": settings.app_version,
@@ -86,13 +89,13 @@ class BackupService:
         totp_count = 0
 
         if include_credentials:
-            result = await self.db.execute(
+            cred_result = await self.db.execute(
                 select(Credential).where(
                     Credential.owner_id == user_id,
                     Credential.is_active == True,  # noqa: E712
                 )
             )
-            credentials = result.scalars().all()
+            credentials = cred_result.scalars().all()
             backup_data["credentials"] = [
                 {
                     "name": c.name,
@@ -108,13 +111,13 @@ class BackupService:
             cred_count = len(backup_data["credentials"])
 
         if include_templates:
-            result = await self.db.execute(
+            tmpl_result = await self.db.execute(
                 select(Template).where(
                     Template.owner_id == user_id,
                     Template.is_active == True,  # noqa: E712
                 )
             )
-            templates = result.scalars().all()
+            templates = tmpl_result.scalars().all()
             backup_data["templates"] = [
                 {
                     "name": t.name,
@@ -128,10 +131,10 @@ class BackupService:
             template_count = len(backup_data["templates"])
 
         if include_totp:
-            result = await self.db.execute(
+            totp_result = await self.db.execute(
                 select(TOTPAccount).where(TOTPAccount.user_id == user_id)
             )
-            totp_accounts = result.scalars().all()
+            totp_accounts = totp_result.scalars().all()
             backup_data["totp_accounts"] = [
                 {
                     "issuer": a.issuer,

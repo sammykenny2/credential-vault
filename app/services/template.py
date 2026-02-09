@@ -128,7 +128,8 @@ class TemplateService:
 
         # Handle fields separately (convert to dict for JSONB)
         if "fields" in update_data and update_data["fields"] is not None:
-            update_data["fields"] = [f.model_dump() for f in data.fields]
+            if data.fields is not None:
+                update_data["fields"] = [f.model_dump() for f in data.fields]
 
         for field, value in update_data.items():
             setattr(template, field, value)

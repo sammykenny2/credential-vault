@@ -1,7 +1,10 @@
 """User model."""
 
+from __future__ import annotations
+
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, Enum, String, Text
@@ -9,6 +12,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.credential import Credential
+    from app.models.template import Template
+    from app.models.template_usage import TemplateUsage
 
 
 class UserRole(enum.StrEnum):
@@ -56,17 +64,17 @@ class User(Base, TimestampMixin):
     )
 
     # Relationships
-    credentials: Mapped[list["Credential"]] = relationship(
+    credentials: Mapped[list[Credential]] = relationship(
         "Credential",
         back_populates="owner",
         cascade="all, delete-orphan",
     )
-    templates: Mapped[list["Template"]] = relationship(
+    templates: Mapped[list[Template]] = relationship(
         "Template",
         back_populates="owner",
         cascade="all, delete-orphan",
     )
-    template_usage: Mapped[list["TemplateUsage"]] = relationship(
+    template_usage: Mapped[list[TemplateUsage]] = relationship(
         "TemplateUsage",
         back_populates="user",
         cascade="all, delete-orphan",

@@ -4,8 +4,11 @@ Allows users to designate trusted contacts who can request access
 to their vault after a configurable waiting period.
 """
 
+from __future__ import annotations
+
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text, func
@@ -13,6 +16,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class EmergencyStatus(enum.StrEnum):
@@ -94,8 +100,8 @@ class EmergencyAccess(Base):
     )
 
     # Relationships
-    grantor: Mapped["User"] = relationship("User", foreign_keys=[grantor_id])
-    grantee: Mapped["User"] = relationship("User", foreign_keys=[grantee_id])
+    grantor: Mapped[User] = relationship("User", foreign_keys=[grantor_id])
+    grantee: Mapped[User] = relationship("User", foreign_keys=[grantee_id])
 
     def __repr__(self) -> str:
         return f"<EmergencyAccess {self.grantor_id} -> {self.grantee_id} ({self.status})>"

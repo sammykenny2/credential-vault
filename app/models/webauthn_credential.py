@@ -1,6 +1,9 @@
 """WebAuthn credential model for passkey/security key storage."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, func
@@ -8,6 +11,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class WebAuthnCredential(Base):
@@ -54,7 +60,7 @@ class WebAuthnCredential(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    user: Mapped["User"] = relationship("User", backref="webauthn_credentials")
+    user: Mapped[User] = relationship("User", backref="webauthn_credentials")
 
     def __repr__(self) -> str:
         return f"<WebAuthnCredential {self.device_name} for {self.user_id}>"

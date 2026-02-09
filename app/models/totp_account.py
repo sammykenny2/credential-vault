@@ -4,7 +4,10 @@ Allows the vault to act as a TOTP authenticator (like Google Authenticator),
 storing TOTP secrets and generating codes for external services.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
@@ -12,6 +15,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.credential import Credential
+    from app.models.user import User
 
 
 class TOTPAccount(Base):
@@ -67,8 +74,8 @@ class TOTPAccount(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship("User", backref="totp_accounts")
-    credential: Mapped["Credential"] = relationship("Credential", backref="totp_accounts")
+    user: Mapped[User] = relationship("User", backref="totp_accounts")
+    credential: Mapped[Credential] = relationship("Credential", backref="totp_accounts")
 
     def __repr__(self) -> str:
         return f"<TOTPAccount {self.issuer}:{self.account_name}>"

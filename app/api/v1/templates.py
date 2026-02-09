@@ -10,6 +10,7 @@ from app.schemas.template import (
     SyncRequest,
     SyncResponse,
     TemplateCreate,
+    TemplateListItem,
     TemplateListResponse,
     TemplateRead,
     TemplateUpdate,
@@ -46,7 +47,10 @@ async def list_templates(
         owner_id=current_user.id,
         include_inactive=include_inactive,
     )
-    return TemplateListResponse(templates=templates, total=total)
+    return TemplateListResponse(
+        templates=[TemplateListItem.model_validate(t) for t in templates],
+        total=total,
+    )
 
 
 @router.post("/", response_model=TemplateRead, status_code=status.HTTP_201_CREATED)

@@ -1,5 +1,8 @@
 """Template model for credential templates."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -7,6 +10,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.template_usage import TemplateUsage
+    from app.models.user import User
 
 
 class Template(Base, TimestampMixin):
@@ -48,8 +55,8 @@ class Template(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
-    owner: Mapped["User"] = relationship("User", back_populates="templates")
-    usage_records: Mapped[list["TemplateUsage"]] = relationship(
+    owner: Mapped[User] = relationship("User", back_populates="templates")
+    usage_records: Mapped[list[TemplateUsage]] = relationship(
         "TemplateUsage",
         back_populates="template",
         cascade="all, delete-orphan",

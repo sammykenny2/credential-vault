@@ -18,12 +18,12 @@ class SecurityService:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt."""
-        return pwd_context.hash(password)
+        return pwd_context.hash(password)  # type: ignore[no-any-return]
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash."""
-        return pwd_context.verify(plain_password, hashed_password)
+        return pwd_context.verify(plain_password, hashed_password)  # type: ignore[no-any-return]
 
     @staticmethod
     def create_access_token(user_id: str) -> str:
@@ -34,7 +34,7 @@ class SecurityService:
             "exp": expire,
             "type": "access",
         }
-        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)  # type: ignore[no-any-return]
 
     @staticmethod
     def create_refresh_token(user_id: str) -> str:
@@ -45,7 +45,7 @@ class SecurityService:
             "exp": expire,
             "type": "refresh",
         }
-        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)  # type: ignore[no-any-return]
 
     @staticmethod
     def decode_token(token: str) -> dict | None:
@@ -56,7 +56,7 @@ class SecurityService:
                 settings.secret_key,
                 algorithms=[settings.jwt_algorithm],
             )
-            return payload
+            return payload  # type: ignore[no-any-return]
         except JWTError:
             return None
 

@@ -1,6 +1,9 @@
 """Template usage tracking model."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, func
@@ -8,6 +11,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.credential import Credential
+    from app.models.template import Template
+    from app.models.user import User
 
 
 class TemplateUsage(Base):
@@ -51,9 +59,9 @@ class TemplateUsage(Base):
     )
 
     # Relationships
-    template: Mapped["Template"] = relationship("Template", back_populates="usage_records")
-    user: Mapped["User"] = relationship("User", back_populates="template_usage")
-    credential: Mapped["Credential | None"] = relationship("Credential")
+    template: Mapped[Template] = relationship("Template", back_populates="usage_records")
+    user: Mapped[User] = relationship("User", back_populates="template_usage")
+    credential: Mapped[Credential | None] = relationship("Credential")
 
     # Constraints - prevent duplicate usage records for the same credential
     __table_args__ = (

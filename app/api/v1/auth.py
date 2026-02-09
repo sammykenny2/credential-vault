@@ -75,7 +75,12 @@ async def refresh_token(
             detail="Invalid refresh token",
         )
 
-    user_id = payload.get("sub")
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
     user_service = UserService(db)
     user = await user_service.get_by_id(user_id)
 
