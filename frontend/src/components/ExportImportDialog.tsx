@@ -17,7 +17,6 @@ import {
   Key,
   AlertTriangle,
   CheckCircle,
-  CloudUpload,
   Eye,
   EyeOff,
 } from 'lucide-react'
@@ -325,7 +324,7 @@ export default function ExportImportDialog({
               {/* Google Drive Hint */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex gap-2">
-                  <CloudUpload className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  <Upload className="w-5 h-5 text-blue-600 flex-shrink-0" />
                   <div className="text-sm text-blue-800">
                     <p className="font-medium">Tip: Back up to Google Drive</p>
                     <p>After downloading, upload the .cvault file to Google Drive or another cloud storage for safekeeping.</p>

@@ -159,7 +159,7 @@ export async function encryptCredential(
   credential: CredentialData,
   masterPassword: string
 ): Promise<string> {
-  return encryptData(credential, masterPassword)
+  return encryptData(credential as unknown as Record<string, unknown>, masterPassword)
 }
 
 /**
