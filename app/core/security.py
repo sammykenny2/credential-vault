@@ -16,13 +16,24 @@ class SecurityService:
     """Security service for password and JWT operations."""
 
     @staticmethod
+    def _truncate_password(password: str) -> str:
+        """Truncate password to 72 bytes (bcrypt maximum).
+
+        bcrypt 5.x raises ValueError for passwords > 72 bytes instead of
+        silently truncating. We handle this explicitly for compatibility.
+        """
+        return password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+
+    @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt."""
+        password = SecurityService._truncate_password(password)
         return pwd_context.hash(password)  # type: ignore[no-any-return]
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash."""
+        plain_password = SecurityService._truncate_password(plain_password)
         return pwd_context.verify(plain_password, hashed_password)  # type: ignore[no-any-return]
 
     @staticmethod

@@ -76,12 +76,20 @@ class TemplateService:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def count_by_owner(self, owner_id: str, include_inactive: bool = False) -> int:
+    async def count_by_owner(
+        self,
+        owner_id: str,
+        include_inactive: bool = False,
+        category: str | None = None,
+    ) -> int:
         """Count templates for a user."""
         query = select(func.count(Template.id)).where(Template.owner_id == owner_id)
 
         if not include_inactive:
             query = query.where(Template.is_active == True)  # noqa: E712
+
+        if category:
+            query = query.where(Template.category == category)
 
         result = await self.db.execute(query)
         return result.scalar() or 0

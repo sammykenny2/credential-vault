@@ -54,7 +54,7 @@ export default function MasterPasswordModal({
           setError('Incorrect master password')
         }
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.')
     } finally {
       setIsLoading(false)

@@ -148,8 +148,7 @@ class TestCredentialsAPI:
         # Create credentials
         for name in ["GitHub Account", "GitLab Account", "Email Account"]:
             encrypted_data = CredentialCrypto.encrypt_credential(
-                username="test",
-                password="test",
+                fields={"Username": "test", "Password": "test"},
             )
             await client.post(
                 "/api/v1/credentials",

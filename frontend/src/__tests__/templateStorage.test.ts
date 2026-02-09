@@ -5,7 +5,7 @@
  * Run with: npm test
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   loadTemplateData,
   saveTemplateData,
@@ -181,7 +181,7 @@ describe('Template Storage', () => {
 
   describe('getTemplate', () => {
     it('should get built-in template by ID', () => {
-      const template = getTemplate('builtin-login-login--basic-')
+      getTemplate('builtin-login-login--basic-')
       // Note: ID format depends on the actual template data
       // This test verifies the function works with built-in templates
       expect(BUILTIN_TEMPLATES.length).toBeGreaterThan(0)

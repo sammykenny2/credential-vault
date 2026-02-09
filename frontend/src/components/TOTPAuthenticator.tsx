@@ -9,7 +9,6 @@ function TOTPCard({ account, onDelete }: {
 }) {
   const [code, setCode] = useState<TOTPCodeResponse | null>(null)
   const [copied, setCopied] = useState(false)
-  const [loading, setLoading] = useState(false)
 
   const fetchCode = useCallback(async () => {
     try {
@@ -26,7 +25,7 @@ function TOTPCard({ account, onDelete }: {
     return () => clearInterval(interval)
   }, [fetchCode, account.period])
 
-  // Countdown timer
+  // Countdown timer - resets when a new TOTP code is generated
   useEffect(() => {
     if (!code) return
     const timer = setInterval(() => {
@@ -36,6 +35,7 @@ function TOTPCard({ account, onDelete }: {
       } : null)
     }, 1000)
     return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code?.code])
 
   const copyCode = async () => {

@@ -6,8 +6,6 @@
  */
 
 import type {
-  CredentialTemplate,
-  TemplateUsage,
   ExportFile,
   ExportedData,
   ImportResult,
@@ -145,7 +143,7 @@ async function decryptExport(file: ExportFile, password: string): Promise<Export
 
     const decoded = new TextDecoder().decode(plaintext)
     return JSON.parse(decoded) as ExportedData
-  } catch (error) {
+  } catch {
     throw new Error('Decryption failed. Invalid password or corrupted file.')
   }
 }

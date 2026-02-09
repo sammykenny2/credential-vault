@@ -343,7 +343,7 @@ export function checkStorageCapacity(): {
     }
 
     return { warning: false, usedBytes }
-  } catch (error) {
+  } catch {
     return { warning: false, usedBytes: 0 }
   }
 }
@@ -395,7 +395,7 @@ export function importTemplateData(
           }
           result.replaced++
           break
-        case 'keep-both':
+        case 'keep-both': {
           // Add with modified name
           const newTemplate = {
             ...template,
@@ -406,6 +406,7 @@ export function importTemplateData(
           data.customTemplates.push(newTemplate)
           result.imported++
           break
+        }
       }
     } else {
       // No conflict - add new template

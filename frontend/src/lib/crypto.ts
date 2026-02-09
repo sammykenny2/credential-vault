@@ -132,7 +132,7 @@ export async function decryptData<T = Record<string, unknown>>(
     // Parse JSON
     const decoded = new TextDecoder().decode(plaintext)
     return JSON.parse(decoded) as T
-  } catch (error) {
+  } catch {
     throw new Error('Decryption failed. Invalid password or corrupted data.')
   }
 }

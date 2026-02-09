@@ -46,6 +46,7 @@ async def list_templates(
     total = await service.count_by_owner(
         owner_id=current_user.id,
         include_inactive=include_inactive,
+        category=category,
     )
     return TemplateListResponse(
         templates=[TemplateListItem.model_validate(t) for t in templates],

@@ -494,5 +494,5 @@ class TestTemplatesAPI:
         client: AsyncClient,
     ):
         """Test that unauthenticated requests are rejected."""
-        response = await client.get("/api/v1/templates")
+        response = await client.get("/api/v1/templates/")
         assert response.status_code == 401

@@ -8,7 +8,7 @@ import clsx from 'clsx'
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuthStore()
   const queryClient = useQueryClient()
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [, setShowCreateModal] = useState(false)
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin', 'users'],

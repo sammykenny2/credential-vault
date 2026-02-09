@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { needsMigration, hasLocalTemplates, isMigrationCompleted } from '@/lib/templateStorage'
+import { hasLocalTemplates, isMigrationCompleted } from '@/lib/templateStorage'
 import { useHasBackendTemplates } from './useTemplates'
 
 interface MigrationState {

@@ -44,7 +44,7 @@ interface UseCredentialCryptoResult {
  * ```
  */
 export function useCredentialCrypto(): UseCredentialCryptoResult {
-  const { getMasterPassword, isUnlocked } = useMasterPassword()
+  const { getMasterPassword } = useMasterPassword()
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

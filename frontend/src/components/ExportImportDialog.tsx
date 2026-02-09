@@ -44,7 +44,7 @@ export default function ExportImportDialog({
   onClose,
   onImportComplete,
 }: ExportImportDialogProps) {
-  const { getMasterPassword, isUnlocked } = useMasterPassword()
+  const { getMasterPassword } = useMasterPassword()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Tab state

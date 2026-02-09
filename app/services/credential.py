@@ -154,6 +154,7 @@ class CredentialService:
         credential.is_active = False
         credential.revoked_at = datetime.now(UTC)
         await self.db.flush()
+        await self.db.refresh(credential)
         logger.info("Credential revoked: %s", credential.id)
         return credential
 

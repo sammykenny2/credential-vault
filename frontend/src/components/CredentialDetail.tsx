@@ -3,7 +3,7 @@
  * Displays pure key-value credential fields.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Eye, EyeOff, Copy, ExternalLink, X, Check } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { Credential } from '@/types'
@@ -34,6 +34,12 @@ export default function CredentialDetail({
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
+  const decryptCredential = useCallback(async () => {
+    if (!credential) return
+    const data = await decrypt(credential.encrypted_data)
+    setDecryptedData(data)
+  }, [credential, decrypt])
+
   useEffect(() => {
     if (credential && isOpen) {
       decryptCredential()
@@ -41,13 +47,7 @@ export default function CredentialDetail({
       setDecryptedData(null)
       setVisibleFields(new Set())
     }
-  }, [credential, isOpen])
-
-  const decryptCredential = async () => {
-    if (!credential) return
-    const data = await decrypt(credential.encrypted_data)
-    setDecryptedData(data)
-  }
+  }, [credential, isOpen, decryptCredential])
 
   const toggleFieldVisibility = (fieldKey: string) => {
     setVisibleFields(prev => {

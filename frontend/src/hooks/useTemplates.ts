@@ -14,7 +14,6 @@ import type {
   SyncRequest,
   VersionConflictError,
 } from '@/types/template'
-import { AxiosError } from 'axios'
 
 // Query keys for cache management
 export const templateKeys = {

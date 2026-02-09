@@ -47,6 +47,8 @@ class TestMFAService:
 
     def test_get_provisioning_uri(self):
         """Test generating a provisioning URI."""
+        from urllib.parse import unquote
+
         secret = MFAService.generate_secret()
         email = "test@example.com"
 
@@ -54,7 +56,8 @@ class TestMFAService:
 
         assert isinstance(uri, str)
         assert uri.startswith("otpauth://totp/")
-        assert email in uri
+        # The email may be URL-encoded (@ -> %40), so decode before checking
+        assert email in unquote(uri)
         assert "CredentialVault" in uri  # issuer
 
     def test_generate_qr_code_base64(self):

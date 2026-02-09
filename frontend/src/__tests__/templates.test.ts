@@ -14,7 +14,6 @@ import {
   getBuiltInTemplate,
   isBuiltInTemplateId,
 } from '@/data/templates'
-import type { CredentialTemplate, TemplateCategory } from '@/types/template'
 
 describe('Built-in Templates', () => {
   describe('Template Structure Validation', () => {
