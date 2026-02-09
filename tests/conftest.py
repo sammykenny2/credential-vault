@@ -13,6 +13,9 @@ from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.main import app
 from app.models.base import Base
+from app.models.user import User
+from app.schemas.user import UserCreate
+from app.services.user import UserService
 
 # Test database URL (in-memory SQLite for testing)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -91,6 +94,15 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user(db_session: AsyncSession, test_user_data) -> User:
+    """Create a test user in the database."""
+    service = UserService(db_session)
+    user = await service.create(UserCreate(**test_user_data))
+    await db_session.flush()
+    return user
 
 
 @pytest.fixture

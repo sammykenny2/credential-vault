@@ -151,9 +151,9 @@ class TestTemplateService:
         service = TemplateService(db_session)
 
         # Create templates in different categories
-        for category in ["dev", "dev", "finance"]:
+        for i, category in enumerate(["dev", "dev", "finance"]):
             template_create = TemplateCreate(
-                name=f"Template {category} {id(category)}",
+                name=f"Template {category} {i}",
                 category=category,
                 fields=[TemplateField(key="field", isSecret=False)],
             )
@@ -309,7 +309,9 @@ class TestTemplateService:
         template = await service.create(test_user.id, template_create)
 
         # Record usage with credential
-        credential_id = "fake-credential-id"
+        import uuid
+
+        credential_id = uuid.uuid4().hex
         count = await service.record_usage(template.id, test_user.id, credential_id)
         assert count == 1
 
