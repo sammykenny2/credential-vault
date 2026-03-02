@@ -3,8 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.core.security import SecurityService
 from app.models.user import UserRole
-from app.schemas.user import UserCreate
 from app.services.user import UserService
 
 
@@ -12,36 +12,30 @@ class TestUserRoleAPI:
     """Test user role management endpoints."""
 
     @pytest.fixture
-    async def admin_token(self, client: AsyncClient, db_session):
-        """Create an admin user and return their token."""
+    async def admin_token(self, db_session):
+        """Create an admin user and return their token + user."""
         service = UserService(db_session)
-        user_data = UserCreate(
+        admin = await service.create_oauth_user(
             email="admin@example.com",
-            password="AdminPassword123!",
             display_name="Admin User",
+            google_id="google-admin-1",
+            role=UserRole.ADMIN,
         )
-        admin = await service.create(user_data, role=UserRole.ADMIN)
         await db_session.commit()
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": "admin@example.com",
-                "password": "AdminPassword123!",
-            },
-        )
-        return login_response.json()["access_token"], admin
+        token = SecurityService.create_access_token(admin.id)
+        return token, admin
 
     @pytest.fixture
     async def regular_user(self, db_session):
         """Create a regular user."""
         service = UserService(db_session)
-        user_data = UserCreate(
+        user = await service.create_oauth_user(
             email="user@example.com",
-            password="UserPassword123!",
             display_name="Regular User",
+            google_id="google-user-1",
+            role=UserRole.USER,
         )
-        user = await service.create(user_data, role=UserRole.USER)
         await db_session.commit()
         return user
 
@@ -67,12 +61,12 @@ class TestUserRoleAPI:
 
         # Create another admin
         service = UserService(db_session)
-        user_data = UserCreate(
+        admin2 = await service.create_oauth_user(
             email="admin2@example.com",
-            password="Admin2Password123!",
             display_name="Admin User 2",
+            google_id="google-admin-2",
+            role=UserRole.ADMIN,
         )
-        admin2 = await service.create(user_data, role=UserRole.ADMIN)
         await db_session.commit()
 
         response = await client.patch(
@@ -108,12 +102,12 @@ class TestUserRoleAPI:
 
         # Create another admin
         service = UserService(db_session)
-        user_data = UserCreate(
+        await service.create_oauth_user(
             email="admin2@example.com",
-            password="Admin2Password123!",
             display_name="Admin User 2",
+            google_id="google-admin-2",
+            role=UserRole.ADMIN,
         )
-        await service.create(user_data, role=UserRole.ADMIN)
         await db_session.commit()
 
         # Now the first admin can demote themselves
@@ -132,24 +126,15 @@ class TestUserRoleAPI:
         self, client: AsyncClient, db_session, regular_user
     ):
         """Test regular user cannot change roles."""
-        # Login as regular user
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": "user@example.com",
-                "password": "UserPassword123!",
-            },
-        )
-        token = login_response.json()["access_token"]
+        token = SecurityService.create_access_token(regular_user.id)
 
         # Create another user to try to promote
         service = UserService(db_session)
-        user_data = UserCreate(
+        user2 = await service.create_oauth_user(
             email="user2@example.com",
-            password="User2Password123!",
             display_name="User 2",
+            google_id="google-user-2",
         )
-        user2 = await service.create(user_data)
         await db_session.commit()
 
         response = await client.patch(
@@ -178,25 +163,18 @@ class TestUserListAPI:
     """Test user listing endpoints."""
 
     @pytest.fixture
-    async def admin_token(self, client: AsyncClient, db_session):
+    async def admin_token(self, db_session):
         """Create an admin user and return their token."""
         service = UserService(db_session)
-        user_data = UserCreate(
+        admin = await service.create_oauth_user(
             email="listadmin@example.com",
-            password="AdminPassword123!",
             display_name="List Admin",
+            google_id="google-listadmin",
+            role=UserRole.ADMIN,
         )
-        await service.create(user_data, role=UserRole.ADMIN)
         await db_session.commit()
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": "listadmin@example.com",
-                "password": "AdminPassword123!",
-            },
-        )
-        return login_response.json()["access_token"]
+        return SecurityService.create_access_token(admin.id)
 
     @pytest.mark.asyncio
     async def test_admin_can_list_users(self, client: AsyncClient, admin_token, db_session):
@@ -204,12 +182,11 @@ class TestUserListAPI:
         # Create some users
         service = UserService(db_session)
         for i in range(3):
-            user_data = UserCreate(
+            await service.create_oauth_user(
                 email=f"listuser{i}@example.com",
-                password="Password123!",
                 display_name=f"List User {i}",
+                google_id=f"google-listuser-{i}",
             )
-            await service.create(user_data)
         await db_session.commit()
 
         response = await client.get(
@@ -225,22 +202,14 @@ class TestUserListAPI:
     async def test_regular_user_cannot_list_users(self, client: AsyncClient, db_session):
         """Test regular user cannot list all users."""
         service = UserService(db_session)
-        user_data = UserCreate(
+        user = await service.create_oauth_user(
             email="regularlist@example.com",
-            password="Password123!",
             display_name="Regular List User",
+            google_id="google-regularlist",
         )
-        await service.create(user_data)
         await db_session.commit()
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": "regularlist@example.com",
-                "password": "Password123!",
-            },
-        )
-        token = login_response.json()["access_token"]
+        token = SecurityService.create_access_token(user.id)
 
         response = await client.get(
             "/api/v1/users/",
@@ -254,25 +223,19 @@ class TestUserDeactivateAPI:
     """Test user deactivation endpoints."""
 
     @pytest.fixture
-    async def admin_token(self, client: AsyncClient, db_session):
-        """Create an admin user and return their token."""
+    async def admin_token(self, db_session):
+        """Create an admin user and return their token + user."""
         service = UserService(db_session)
-        user_data = UserCreate(
+        admin = await service.create_oauth_user(
             email="deactadmin@example.com",
-            password="AdminPassword123!",
             display_name="Deactivate Admin",
+            google_id="google-deactadmin",
+            role=UserRole.ADMIN,
         )
-        admin = await service.create(user_data, role=UserRole.ADMIN)
         await db_session.commit()
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": "deactadmin@example.com",
-                "password": "AdminPassword123!",
-            },
-        )
-        return login_response.json()["access_token"], admin
+        token = SecurityService.create_access_token(admin.id)
+        return token, admin
 
     @pytest.fixture
     async def user_with_credentials(self, db_session):
@@ -280,19 +243,18 @@ class TestUserDeactivateAPI:
         from app.models.credential import Credential
 
         service = UserService(db_session)
-        user_data = UserCreate(
+        user = await service.create_oauth_user(
             email="userwithcreds@example.com",
-            password="UserPassword123!",
             display_name="User With Creds",
+            google_id="google-userwithcreds",
+            role=UserRole.USER,
         )
-        user = await service.create(user_data, role=UserRole.USER)
 
-        # Add some credentials
+        # Add some credentials (no plaintext metadata with E2EE)
         for i in range(3):
             cred = Credential(
                 owner_id=user.id,
-                name=f"Test Credential {i}",
-                encrypted_data="encrypted_test_data",
+                encrypted_data=f"encrypted_test_data_{i}",
             )
             db_session.add(cred)
 
@@ -376,12 +338,11 @@ class TestUserDeactivateAPI:
 
         # Create and deactivate a user
         service = UserService(db_session)
-        user_data = UserCreate(
+        user = await service.create_oauth_user(
             email="toreactivate@example.com",
-            password="Password123!",
             display_name="To Reactivate",
+            google_id="google-toreactivate",
         )
-        user = await service.create(user_data)
         await service.deactivate(user)
         await db_session.commit()
 
@@ -404,12 +365,11 @@ class TestUserDeactivateAPI:
 
         # Create an active user
         service = UserService(db_session)
-        user_data = UserCreate(
+        user = await service.create_oauth_user(
             email="alreadyactive@example.com",
-            password="Password123!",
             display_name="Already Active",
+            google_id="google-alreadyactive",
         )
-        user = await service.create(user_data)
         await db_session.commit()
 
         response = await client.post(

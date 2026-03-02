@@ -1,9 +1,14 @@
 """Pydantic schemas for API request/response validation."""
 
-from app.schemas.auth import MFASetup, MFAVerify, Token, TokenPayload
+from app.schemas.auth import (
+    GoogleOAuthCallback,
+    LocalLoginRequest,
+    Token,
+    TokenPayload,
+    VaultSetupRequest,
+)
 from app.schemas.credential import (
     CredentialCreate,
-    CredentialData,
     CredentialRead,
     CredentialUpdate,
 )
@@ -28,8 +33,9 @@ __all__ = [
     # Auth
     "Token",
     "TokenPayload",
-    "MFASetup",
-    "MFAVerify",
+    "GoogleOAuthCallback",
+    "LocalLoginRequest",
+    "VaultSetupRequest",
     # User
     "UserCreate",
     "UserRead",
@@ -38,7 +44,6 @@ __all__ = [
     "CredentialCreate",
     "CredentialRead",
     "CredentialUpdate",
-    "CredentialData",
     # Template
     "TemplateField",
     "TemplateCreate",

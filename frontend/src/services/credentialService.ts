@@ -9,13 +9,6 @@ export const credentialService = {
     return response.data
   },
 
-  async search(query: string): Promise<CredentialListItem[]> {
-    const response = await api.get<CredentialListItem[]>('/credentials/search', {
-      params: { q: query },
-    })
-    return response.data
-  },
-
   async get(id: string): Promise<Credential> {
     const response = await api.get<Credential>(`/credentials/${id}`)
     return response.data

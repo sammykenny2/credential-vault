@@ -152,7 +152,7 @@ export default function HealthDashboard() {
           <div className="space-y-2">
             {health.weak_credentials.map((cred) => (
               <div key={cred.id} className="flex items-center justify-between py-1.5 px-2 bg-red-50 rounded text-sm">
-                <span className="font-medium text-gray-900">{cred.name}</span>
+                <span className="font-medium text-gray-900 font-mono text-xs">{cred.id.substring(0, 8)}...</span>
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                   cred.level === 'very_weak' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
                 }`}>
@@ -192,7 +192,7 @@ export default function HealthDashboard() {
           <div className="space-y-2">
             {health.expiring_soon.map((cred) => (
               <div key={cred.id} className="flex items-center justify-between py-1.5 px-2 bg-amber-50 rounded text-sm">
-                <span className="font-medium text-gray-900">{cred.name}</span>
+                <span className="font-medium text-gray-900 font-mono text-xs">{cred.id.substring(0, 8)}...</span>
                 <span className="text-amber-600">{cred.days_left} days left</span>
               </div>
             ))}

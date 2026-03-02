@@ -3,50 +3,6 @@
 from app.core.security import SecurityService
 
 
-class TestPasswordHashing:
-    """Test password hashing functions."""
-
-    def test_hash_password(self):
-        """Test that password hashing produces a hash."""
-        password = "testpassword123"
-        hashed = SecurityService.hash_password(password)
-
-        assert hashed != password
-        assert len(hashed) > 0
-        assert hashed.startswith("$2b$")  # bcrypt prefix
-
-    def test_hash_password_different_each_time(self):
-        """Test that hashing the same password produces different hashes."""
-        password = "testpassword123"
-        hash1 = SecurityService.hash_password(password)
-        hash2 = SecurityService.hash_password(password)
-
-        # Due to random salt, hashes should differ
-        assert hash1 != hash2
-
-    def test_verify_password_correct(self):
-        """Test that correct password verifies successfully."""
-        password = "testpassword123"
-        hashed = SecurityService.hash_password(password)
-
-        assert SecurityService.verify_password(password, hashed) is True
-
-    def test_verify_password_incorrect(self):
-        """Test that incorrect password fails verification."""
-        password = "testpassword123"
-        wrong_password = "wrongpassword"
-        hashed = SecurityService.hash_password(password)
-
-        assert SecurityService.verify_password(wrong_password, hashed) is False
-
-    def test_verify_password_empty(self):
-        """Test that empty password fails verification."""
-        password = "testpassword123"
-        hashed = SecurityService.hash_password(password)
-
-        assert SecurityService.verify_password("", hashed) is False
-
-
 class TestJWT:
     """Test JWT token functions."""
 
@@ -111,3 +67,39 @@ class TestJWT:
 
         assert access_payload["type"] == "access"
         assert refresh_payload["type"] == "refresh"
+
+
+class TestPasswordHashing:
+    """Test password hashing functions."""
+
+    def test_hash_password(self):
+        """Test password hashing produces a valid hash."""
+        hashed = SecurityService.hash_password("test-password-123")
+
+        assert isinstance(hashed, str)
+        assert hashed != "test-password-123"
+        assert hashed.startswith("$2")  # bcrypt hash prefix
+
+    def test_verify_password_correct(self):
+        """Test verifying correct password returns True."""
+        password = "my-secure-password"
+        hashed = SecurityService.hash_password(password)
+
+        assert SecurityService.verify_password(password, hashed) is True
+
+    def test_verify_password_incorrect(self):
+        """Test verifying incorrect password returns False."""
+        hashed = SecurityService.hash_password("correct-password")
+
+        assert SecurityService.verify_password("wrong-password", hashed) is False
+
+    def test_hash_uniqueness(self):
+        """Test that hashing the same password produces different hashes (salting)."""
+        password = "same-password"
+        hash1 = SecurityService.hash_password(password)
+        hash2 = SecurityService.hash_password(password)
+
+        assert hash1 != hash2
+        # Both should still verify
+        assert SecurityService.verify_password(password, hash1) is True
+        assert SecurityService.verify_password(password, hash2) is True

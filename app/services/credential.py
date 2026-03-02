@@ -72,10 +72,6 @@ class CredentialService:
         credentials = await self.list_by_owner(owner_id, limit=10000)
         return [
             {
-                "name": c.name,
-                "description": c.description,
-                "website_url": c.website_url,
-                "category": c.category,
                 "encrypted_data": c.encrypted_data,
                 "expires_at": c.expires_at.isoformat() if c.expires_at else None,
             }
@@ -96,17 +92,13 @@ class CredentialService:
 
                 credential = Credential(
                     owner_id=owner_id,
-                    name=cred_data["name"],
-                    description=cred_data.get("description"),
-                    website_url=cred_data.get("website_url"),
-                    category=cred_data.get("category"),
                     encrypted_data=cred_data["encrypted_data"],
                     expires_at=expires_at,
                 )
                 self.db.add(credential)
                 imported += 1
             except Exception as e:
-                errors.append(f"Failed to import '{cred_data.get('name', 'unknown')}': {str(e)}")
+                errors.append(f"Failed to import credential: {str(e)}")
 
         if imported > 0:
             await self.db.flush()
@@ -123,17 +115,13 @@ class CredentialService:
         """Create a new credential."""
         credential = Credential(
             owner_id=owner_id,
-            name=data.name,
-            description=data.description,
-            website_url=data.website_url,
-            category=data.category,
             encrypted_data=data.encrypted_data,
             expires_at=data.expires_at,
         )
         self.db.add(credential)
         await self.db.flush()
         await self.db.refresh(credential)
-        logger.info("Credential created: %s (owner=%s)", credential.name, owner_id)
+        logger.info("Credential created: %s (owner=%s)", credential.id, owner_id)
         return credential
 
     async def update(
@@ -164,25 +152,3 @@ class CredentialService:
         await self.db.delete(credential)
         await self.db.flush()
         logger.info("Credential deleted: %s", cred_id)
-
-    async def search(
-        self,
-        owner_id: str,
-        query: str,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> list[Credential]:
-        """Search credentials by name or description."""
-        search_term = f"%{query}%"
-        result = await self.db.execute(
-            select(Credential)
-            .where(
-                Credential.owner_id == owner_id,
-                Credential.is_active == True,  # noqa: E712
-                (Credential.name.ilike(search_term) | Credential.description.ilike(search_term)),
-            )
-            .offset(skip)
-            .limit(limit)
-            .order_by(Credential.name)
-        )
-        return list(result.scalars().all())

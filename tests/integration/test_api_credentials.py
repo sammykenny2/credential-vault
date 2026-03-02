@@ -3,29 +3,24 @@
 import pytest
 from httpx import AsyncClient
 
-from app.core.crypto import CredentialCrypto
-from app.schemas.user import UserCreate
+from app.core.security import SecurityService
 from app.services.user import UserService
 
 
 class TestCredentialsAPI:
     """Test credentials endpoints."""
 
-    async def _create_user_and_login(self, client: AsyncClient, db_session, test_user_data):
-        """Helper to create user and get auth token."""
+    async def _create_user_and_get_token(self, db_session, test_user_data) -> str:
+        """Helper to create an OAuth user and get a JWT token directly."""
         service = UserService(db_session)
-        user_create = UserCreate(**test_user_data)
-        await service.create(user_create)
+        user = await service.create_oauth_user(
+            email=test_user_data["email"],
+            display_name=test_user_data["display_name"],
+            google_id=test_user_data["google_id"],
+        )
         await db_session.commit()
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": test_user_data["email"],
-                "password": test_user_data["password"],
-            },
-        )
-        return login_response.json()["access_token"]
+        return SecurityService.create_access_token(user.id)
 
     @pytest.mark.asyncio
     async def test_create_credential(
@@ -35,30 +30,24 @@ class TestCredentialsAPI:
         test_user_data,
         test_credential_data,
     ):
-        """Test creating a credential."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
-
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields=test_credential_data["fields"],
-        )
+        """Test creating a credential (encrypted blob only, no plaintext metadata)."""
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         response = await client.post(
             "/api/v1/credentials",
             headers={"Authorization": f"Bearer {token}"},
             json={
-                "name": test_credential_data["name"],
-                "description": test_credential_data["description"],
-                "website_url": test_credential_data["website_url"],
-                "category": test_credential_data["category"],
-                "encrypted_data": encrypted_data,
+                "encrypted_data": test_credential_data["encrypted_data"],
             },
         )
 
         assert response.status_code == 201
         data = response.json()
-        assert data["name"] == test_credential_data["name"]
-        assert data["description"] == test_credential_data["description"]
+        assert data["encrypted_data"] == test_credential_data["encrypted_data"]
         assert data["is_active"] is True
+        # No plaintext metadata fields
+        assert "name" not in data
+        assert "description" not in data
 
     @pytest.mark.asyncio
     async def test_list_credentials(
@@ -67,20 +56,16 @@ class TestCredentialsAPI:
         db_session,
         test_user_data,
     ):
-        """Test listing credentials."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        """Test listing credentials returns encrypted_data."""
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
-        # Create some credentials
+        # Create some credentials with opaque encrypted data
         for i in range(3):
-            encrypted_data = CredentialCrypto.encrypt_credential(
-                fields={"Username": f"user{i}", "Password": f"pass{i}"},
-            )
             await client.post(
                 "/api/v1/credentials",
                 headers={"Authorization": f"Bearer {token}"},
                 json={
-                    "name": f"Credential {i}",
-                    "encrypted_data": encrypted_data,
+                    "encrypted_data": f"opaque-encrypted-blob-{i}",
                 },
             )
 
@@ -93,6 +78,8 @@ class TestCredentialsAPI:
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 3
+        # List items now include encrypted_data for client-side search
+        assert "encrypted_data" in data[0]
 
     @pytest.mark.asyncio
     async def test_get_credential(
@@ -103,18 +90,13 @@ class TestCredentialsAPI:
         test_credential_data,
     ):
         """Test getting a specific credential."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
-
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields=test_credential_data["fields"],
-        )
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/credentials",
             headers={"Authorization": f"Bearer {token}"},
             json={
-                "name": test_credential_data["name"],
-                "encrypted_data": encrypted_data,
+                "encrypted_data": test_credential_data["encrypted_data"],
             },
         )
         credential_id = create_response.json()["id"]
@@ -128,44 +110,7 @@ class TestCredentialsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == credential_id
-        assert data["name"] == test_credential_data["name"]
-
-        # Verify encrypted data can be decrypted
-        decrypted = CredentialCrypto.decrypt_credential(data["encrypted_data"])
-        assert decrypted["fields"]["Username"] == test_credential_data["fields"]["Username"]
-        assert decrypted["fields"]["Password"] == test_credential_data["fields"]["Password"]
-
-    @pytest.mark.asyncio
-    async def test_search_credentials(
-        self,
-        client: AsyncClient,
-        db_session,
-        test_user_data,
-    ):
-        """Test searching credentials."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
-
-        # Create credentials
-        for name in ["GitHub Account", "GitLab Account", "Email Account"]:
-            encrypted_data = CredentialCrypto.encrypt_credential(
-                fields={"Username": "test", "Password": "test"},
-            )
-            await client.post(
-                "/api/v1/credentials",
-                headers={"Authorization": f"Bearer {token}"},
-                json={"name": name, "encrypted_data": encrypted_data},
-            )
-
-        # Search
-        response = await client.get(
-            "/api/v1/credentials/search",
-            headers={"Authorization": f"Bearer {token}"},
-            params={"q": "Git"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 2
+        assert data["encrypted_data"] == test_credential_data["encrypted_data"]
 
     @pytest.mark.asyncio
     async def test_revoke_credential(
@@ -176,18 +121,13 @@ class TestCredentialsAPI:
         test_credential_data,
     ):
         """Test revoking a credential."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
-
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields={"Username": "test", "Password": "test"},
-        )
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/credentials",
             headers={"Authorization": f"Bearer {token}"},
             json={
-                "name": test_credential_data["name"],
-                "encrypted_data": encrypted_data,
+                "encrypted_data": test_credential_data["encrypted_data"],
             },
         )
         credential_id = create_response.json()["id"]
@@ -212,18 +152,13 @@ class TestCredentialsAPI:
         test_credential_data,
     ):
         """Test deleting a credential."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
-
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields={"Username": "test", "Password": "test"},
-        )
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/credentials",
             headers={"Authorization": f"Bearer {token}"},
             json={
-                "name": test_credential_data["name"],
-                "encrypted_data": encrypted_data,
+                "encrypted_data": test_credential_data["encrypted_data"],
             },
         )
         credential_id = create_response.json()["id"]
@@ -252,35 +187,25 @@ class TestCredentialsAPI:
     ):
         """Test that users cannot access each other's credentials."""
         # Create first user and credential
-        token1 = await self._create_user_and_login(client, db_session, test_user_data)
-
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields={"Username": "secret", "Password": "secret"},
-        )
+        token1 = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/credentials",
             headers={"Authorization": f"Bearer {token1}"},
-            json={"name": "User1 Secret", "encrypted_data": encrypted_data},
+            json={"encrypted_data": "opaque-encrypted-blob"},
         )
         credential_id = create_response.json()["id"]
 
         # Create second user
-        user2_data = {
-            "email": "user2@example.com",
-            "display_name": "User 2",
-            "password": "Password123!",
-        }
         service = UserService(db_session)
-        user_create = UserCreate(**user2_data)
-        await service.create(user_create)
+        user2 = await service.create_oauth_user(
+            email="user2@example.com",
+            display_name="User 2",
+            google_id="google-user2-id",
+        )
         await db_session.commit()
 
-        login2_response = await client.post(
-            "/api/v1/auth/login",
-            data={"username": user2_data["email"], "password": user2_data["password"]},
-        )
-        token2 = login2_response.json()["access_token"]
+        token2 = SecurityService.create_access_token(user2.id)
 
         # User 2 should not be able to access User 1's credential
         response = await client.get(

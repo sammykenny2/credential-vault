@@ -3,15 +3,15 @@
  */
 
 export {
-  encryptData,
-  decryptData,
   encryptCredential,
   decryptCredential,
   generatePassword,
-  verifyPassword,
   sha256,
-  deriveKey,
+  deriveKEK,
   generateSalt,
+  setupVault,
+  unlockVault,
+  KDF_VERSION,
   type CredentialData,
 } from './crypto'
 

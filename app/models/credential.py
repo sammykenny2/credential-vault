@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,7 +17,11 @@ if TYPE_CHECKING:
 
 
 class Credential(Base, TimestampMixin):
-    """Encrypted credential storage model."""
+    """Encrypted credential storage model.
+
+    All metadata (name, description, website_url, category) is stored
+    inside the encrypted_data blob. The server cannot read any credential content.
+    """
 
     __tablename__ = "credentials"
 
@@ -35,14 +39,7 @@ class Credential(Base, TimestampMixin):
         index=True,
     )
 
-    # Metadata (not encrypted)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    website_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
-
-    # Encrypted data (stored as encrypted JSON)
-    # Contains: username, password, notes, custom_fields
+    # Encrypted data (contains all credential fields + metadata as encrypted JSON)
     encrypted_data: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Expiration (optional - for API keys, certificates, etc.)
@@ -63,4 +60,4 @@ class Credential(Base, TimestampMixin):
     owner: Mapped[User] = relationship("User", back_populates="credentials")
 
     def __repr__(self) -> str:
-        return f"<Credential {self.name}>"
+        return f"<Credential {self.id}>"

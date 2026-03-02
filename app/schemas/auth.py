@@ -1,8 +1,6 @@
 """Authentication schemas."""
 
-import re
-
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel
 
 
 class Token(BaseModel):
@@ -21,45 +19,32 @@ class TokenPayload(BaseModel):
     type: str  # "access" or "refresh"
 
 
-class LoginRequest(BaseModel):
-    """Login request."""
-
-    email: EmailStr
-    password: str
-
-
-class MFASetup(BaseModel):
-    """MFA setup response."""
-
-    secret: str
-    provisioning_uri: str
-    qr_code_base64: str
-
-
-class MFAVerify(BaseModel):
-    """MFA verification request."""
+class GoogleOAuthCallback(BaseModel):
+    """Google OAuth callback payload."""
 
     code: str
+    redirect_uri: str
 
 
-class PasswordChange(BaseModel):
-    """Password change request."""
+class GoogleUserInfo(BaseModel):
+    """User info returned from Google OAuth."""
 
-    current_password: str
-    new_password: str
+    google_id: str
+    email: str
+    display_name: str
+    picture: str | None = None
 
-    @field_validator("new_password")
-    @classmethod
-    def validate_password_strength(cls, v: str) -> str:
-        """Validate new password meets complexity requirements."""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", v):
-            raise ValueError("Password must contain at least one special character")
-        return v
+
+class VaultSetupRequest(BaseModel):
+    """Request to set up E2EE vault keys after initial login."""
+
+    public_key: str
+    encrypted_private_key: str
+    key_salt: str
+
+
+class LocalLoginRequest(BaseModel):
+    """Break-glass local login request (admin only)."""
+
+    email: str
+    password: str

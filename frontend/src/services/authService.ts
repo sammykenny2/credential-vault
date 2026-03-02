@@ -1,15 +1,21 @@
 import api from './api'
-import type { LoginRequest, TokenResponse, MFASetup, User } from '@/types'
+import type { TokenResponse, GoogleOAuthCallback, User, VaultSetupRequest } from '@/types'
 
 export const authService = {
-  async login(data: LoginRequest): Promise<TokenResponse> {
-    const formData = new URLSearchParams()
-    formData.append('username', data.username)
-    formData.append('password', data.password)
-
-    const response = await api.post<TokenResponse>('/auth/login', formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  async getGoogleAuthUrl(redirectUri: string): Promise<string> {
+    const response = await api.get<{ authorization_url: string }>('/oauth/google/authorize', {
+      params: { redirect_uri: redirectUri },
     })
+    return response.data.authorization_url
+  },
+
+  async googleCallback(data: GoogleOAuthCallback): Promise<TokenResponse> {
+    const response = await api.post<TokenResponse>('/oauth/google/callback', data)
+    return response.data
+  },
+
+  async login(email: string, password: string): Promise<TokenResponse> {
+    const response = await api.post<TokenResponse>('/auth/login', { email, password })
     return response.data
   },
 
@@ -18,27 +24,7 @@ export const authService = {
     return response.data
   },
 
-  async setupMFA(): Promise<MFASetup> {
-    const response = await api.post<MFASetup>('/auth/mfa/setup')
-    return response.data
-  },
-
-  async enableMFA(code: string, secret: string): Promise<void> {
-    await api.post('/auth/mfa/enable', { code }, { params: { secret } })
-  },
-
-  async verifyMFA(code: string): Promise<void> {
-    await api.post('/auth/mfa/verify', { code })
-  },
-
-  async disableMFA(code: string): Promise<void> {
-    await api.post('/auth/mfa/disable', { code })
-  },
-
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await api.post('/auth/password/change', {
-      current_password: currentPassword,
-      new_password: newPassword,
-    })
+  async setupVault(data: VaultSetupRequest): Promise<void> {
+    await api.post('/auth/vault/setup', data)
   },
 }

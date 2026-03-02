@@ -4,8 +4,6 @@ import { credentialService } from '@/services/credentialService'
 import { Key, ShieldCheck, Clock, Wand2 } from 'lucide-react'
 import HealthDashboard from '@/components/HealthDashboard'
 import PasswordGenerator from '@/components/PasswordGenerator'
-import TOTPAuthenticator from '@/components/TOTPAuthenticator'
-import SharingPanel from '@/components/SharingPanel'
 import { useState } from 'react'
 
 export default function DashboardPage() {
@@ -25,10 +23,10 @@ export default function DashboardPage() {
       color: 'bg-blue-500',
     },
     {
-      label: 'MFA Status',
-      value: user?.mfa_enabled ? 'Enabled' : 'Disabled',
+      label: 'Vault Status',
+      value: user?.has_vault_keys ? 'Configured' : 'Not Set Up',
       icon: ShieldCheck,
-      color: user?.mfa_enabled ? 'bg-green-500' : 'bg-yellow-500',
+      color: user?.has_vault_keys ? 'bg-green-500' : 'bg-yellow-500',
     },
     {
       label: 'Last Login',
@@ -82,19 +80,6 @@ export default function DashboardPage() {
         <HealthDashboard />
       </div>
 
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* TOTP Authenticator */}
-        <div className="card">
-          <TOTPAuthenticator />
-        </div>
-
-        {/* Shared Credentials */}
-        <div className="card">
-          <SharingPanel />
-        </div>
-      </div>
-
       {/* Recent Credentials */}
       <div className="card">
         <h2 className="text-lg font-semibold mb-4">Recent Credentials</h2>
@@ -105,10 +90,9 @@ export default function DashboardPage() {
             {credentials?.slice(0, 5).map((cred) => (
               <li key={cred.id} className="py-3 flex justify-between items-center">
                 <div>
-                  <p className="font-medium">{cred.name}</p>
-                  {cred.website_url && (
-                    <p className="text-sm text-gray-500">{cred.website_url}</p>
-                  )}
+                  <p className="font-medium text-gray-600 text-sm font-mono">
+                    {cred.id.substring(0, 8)}...
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   {cred.expires_at && (

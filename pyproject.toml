@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "credential-vault"
-version = "0.1.0"
-description = "Self-hosted credential management system with MFA and role-based access control"
+version = "0.2.0"
+description = "Self-hosted credential management system with E2EE and Google OAuth"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
@@ -29,11 +29,9 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     # Security
-    "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=4.0.0,<5.0.0",
     "python-jose[cryptography]>=3.3.0",
-    "pyotp>=2.9.0",  # TOTP for MFA
-    "cryptography>=42.0.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt<5",
     # Validation
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -43,7 +41,6 @@ dependencies = [
     # Utilities
     "python-multipart>=0.0.6",
     "httpx>=0.26.0",
-    "qrcode[pil]>=7.4.0",
 ]
 
 [project.optional-dependencies]

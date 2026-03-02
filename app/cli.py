@@ -6,7 +6,6 @@ import sys
 
 from app.db.session import AsyncSessionLocal
 from app.models.user import UserRole
-from app.schemas.user import UserCreate
 from app.services.user import UserService
 
 
@@ -57,24 +56,35 @@ async def demote_admin(email: str, force: bool = False) -> None:
         print(f"Successfully demoted '{email}' to regular user.")
 
 
-async def create_admin(email: str, password: str, display_name: str) -> None:
-    """Create a new admin user."""
+async def create_admin(email: str, display_name: str, password: str | None = None) -> None:
+    """Create a new admin user. Optionally set a break-glass password."""
+    from app.core.security import SecurityService
+
     async with AsyncSessionLocal() as db:
         user_service = UserService(db)
 
         existing = await user_service.get_by_email(email)
         if existing:
             print(f"Error: User with email '{email}' already exists.")
+            print("Use 'promote-admin' to promote an existing user.")
             sys.exit(1)
 
-        user_data = UserCreate(
+        user = await user_service.create_oauth_user(
             email=email,
-            password=password,
             display_name=display_name,
+            google_id=f"cli-created-{email}",
+            role=UserRole.ADMIN,
         )
-        user = await user_service.create(user_data, role=UserRole.ADMIN)
+
+        if password:
+            user.hashed_password = SecurityService.hash_password(password)
+
         await db.commit()
         print(f"Successfully created admin user '{user.email}' (ID: {user.id})")
+        if password:
+            print("Break-glass password has been set for local login.")
+        else:
+            print("Note: User must complete Google OAuth login to link their account.")
 
 
 async def list_admins() -> None:
@@ -95,7 +105,8 @@ async def list_admins() -> None:
         print("-" * 60)
         for admin in admins:
             status = "active" if admin.is_active else "inactive"
-            print(f"  {admin.email} ({admin.display_name}) - {status}")
+            vault = "vault set up" if admin.has_vault_keys else "no vault"
+            print(f"  {admin.email} ({admin.display_name}) - {status}, {vault}")
         print("-" * 60)
         print(f"Total: {len(admins)} admin(s)")
 
@@ -119,9 +130,11 @@ def main():
     # create-admin command
     create_parser = subparsers.add_parser("create-admin", help="Create a new admin user")
     create_parser.add_argument("email", help="Email for the new admin")
-    create_parser.add_argument("password", help="Password for the new admin")
     create_parser.add_argument(
         "--name", default="Administrator", help="Display name (default: Administrator)"
+    )
+    create_parser.add_argument(
+        "--password", default=None, help="Break-glass login password (optional)"
     )
 
     # list-admins command
@@ -139,7 +152,7 @@ def main():
     elif args.command == "demote-admin":
         asyncio.run(demote_admin(args.email, args.force))
     elif args.command == "create-admin":
-        asyncio.run(create_admin(args.email, args.password, args.name))
+        asyncio.run(create_admin(args.email, args.name, args.password))
     elif args.command == "list-admins":
         asyncio.run(list_admins())
 

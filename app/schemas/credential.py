@@ -1,33 +1,17 @@
-"""Credential schemas."""
+"""Credential schemas.
+
+All metadata (name, description, etc.) is stored inside the encrypted_data blob.
+The server only sees opaque encrypted data.
+"""
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
-class CredentialData(BaseModel):
-    """Decrypted credential data (client-side).
-
-    Pure key-value storage - all fields are dynamic.
-    """
-
-    fields: dict[str, str] = {}
-    notes: str | None = None
-
-
-class CredentialBase(BaseModel):
-    """Base credential schema (metadata only)."""
-
-    name: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(None, max_length=1000)
-    website_url: str | None = Field(None, max_length=2048)
-    category: str | None = Field(None, max_length=100)
-
-
-class CredentialCreate(CredentialBase):
+class CredentialCreate(BaseModel):
     """Credential creation schema."""
 
-    # Encrypted data from client
     encrypted_data: str
     expires_at: datetime | None = None
 
@@ -35,15 +19,11 @@ class CredentialCreate(CredentialBase):
 class CredentialUpdate(BaseModel):
     """Credential update schema."""
 
-    name: str | None = Field(None, min_length=1, max_length=255)
-    description: str | None = Field(None, max_length=1000)
-    website_url: str | None = Field(None, max_length=2048)
-    category: str | None = Field(None, max_length=100)
     encrypted_data: str | None = None
     expires_at: datetime | None = None
 
 
-class CredentialRead(CredentialBase):
+class CredentialRead(BaseModel):
     """Credential read schema."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -59,15 +39,12 @@ class CredentialRead(CredentialBase):
 
 
 class CredentialListItem(BaseModel):
-    """Credential list item (metadata only, no encrypted data)."""
+    """Credential list item (includes encrypted_data for client-side search/display)."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    name: str
-    description: str | None
-    website_url: str | None
-    category: str | None
+    encrypted_data: str
     is_active: bool
     expires_at: datetime | None
     created_at: datetime
@@ -77,10 +54,6 @@ class CredentialListItem(BaseModel):
 class CredentialExport(BaseModel):
     """Schema for credential export."""
 
-    name: str
-    description: str | None = None
-    website_url: str | None = None
-    category: str | None = None
     encrypted_data: str
     expires_at: datetime | None = None
 

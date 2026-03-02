@@ -21,7 +21,7 @@ interface FieldEntry {
 interface CredentialFormProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: { name: string; description?: string; website_url?: string; category?: string; encrypted_data: string }, templateId?: string) => Promise<void>
+  onSave: (data: { encrypted_data: string; expires_at?: string }, templateId?: string) => Promise<void>
   initialData?: {
     name: string
     description?: string
@@ -191,9 +191,21 @@ export default function CredentialForm({
     setIsSaving(true)
 
     try {
-      // Build credential data
+      // Build credential data — all metadata goes into the encrypted blob
       const credentialData: CredentialData = {
+        name: name.trim(),
         fields: {},
+      }
+
+      // Add metadata into encrypted blob
+      if (description.trim()) {
+        credentialData.description = description.trim()
+      }
+      if (websiteUrl.trim()) {
+        credentialData.website_url = websiteUrl.trim()
+      }
+      if (category.trim()) {
+        credentialData.category = category.trim()
       }
 
       // Add all non-empty fields
@@ -215,12 +227,8 @@ export default function CredentialForm({
         return
       }
 
-      // Save to server (pass templateId for usage tracking)
+      // Save to server — only encrypted_data (all metadata is inside)
       await onSave({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        website_url: websiteUrl.trim() || undefined,
-        category: category.trim() || undefined,
         encrypted_data: encryptedData,
       }, template?.id)
 

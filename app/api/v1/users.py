@@ -65,7 +65,10 @@ async def create_user(
     admin_user: AdminUser,
     db: DbSession,
 ):
-    """Create a new user (admin only)."""
+    """Create a new user (admin only).
+
+    Creates a user account that can be claimed via Google OAuth login.
+    """
     user_service = UserService(db)
 
     # Check if email already exists

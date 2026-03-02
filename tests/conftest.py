@@ -14,7 +14,6 @@ from app.db.session import get_db
 from app.main import app
 from app.models.base import Base
 from app.models.user import User
-from app.schemas.user import UserCreate
 from app.services.user import UserService
 
 # Test database URL (in-memory SQLite for testing)
@@ -28,8 +27,8 @@ def get_test_settings() -> Settings:
         app_debug=True,
         database_url=TEST_DATABASE_URL,
         secret_key="test-secret-key-for-testing-only",
-        encryption_key="test-encryption-key-32-bytes!!",
-        mfa_required=False,
+        google_client_id="test-google-client-id",
+        google_client_secret="test-google-client-secret",
     )
 
 
@@ -100,7 +99,11 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 async def test_user(db_session: AsyncSession, test_user_data) -> User:
     """Create a test user in the database."""
     service = UserService(db_session)
-    user = await service.create(UserCreate(**test_user_data))
+    user = await service.create_oauth_user(
+        email=test_user_data["email"],
+        display_name=test_user_data["display_name"],
+        google_id=test_user_data["google_id"],
+    )
     await db_session.flush()
     return user
 
@@ -111,24 +114,21 @@ def test_user_data() -> dict[str, Any]:
     return {
         "email": "test@example.com",
         "display_name": "Test User",
-        "password": "TestP@ssw0rd!",
+        "google_id": "google-test-user-123",
     }
 
 
 @pytest.fixture
 def test_credential_data() -> dict[str, Any]:
-    """Sample credential data for testing."""
+    """Sample credential data for testing.
+
+    All metadata (name, description, etc.) is inside encrypted_data blob.
+    The server only sees the opaque encrypted data.
+    """
     return {
-        "name": "Test Credential",
-        "description": "A test credential",
-        "website_url": "https://example.com",
-        "category": "testing",
-        # Pure key-value fields
-        "fields": {
-            "Username": "testuser",
-            "Password": "testpass123",
-        },
-        "notes": "Some notes",
+        # E2EE: encrypted_data is an opaque blob from the client
+        # Contains name, description, fields, etc. all encrypted
+        "encrypted_data": "dGVzdC1lbmNyeXB0ZWQtZGF0YQ==",  # base64 test data
     }
 
 
@@ -138,7 +138,7 @@ def test_template_data() -> dict[str, Any]:
     return {
         "name": "Test Template",
         "description": "A test template",
-        "icon": "🔑",
+        "icon": "key",
         "category": "testing",
         "fields": [
             {"key": "username", "isSecret": False, "required": True},

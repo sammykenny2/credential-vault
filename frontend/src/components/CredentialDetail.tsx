@@ -1,6 +1,6 @@
 /**
  * Credential detail view with decryption.
- * Displays pure key-value credential fields.
+ * All metadata (name, description, website_url, category) is read from decrypted data.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -76,16 +76,18 @@ export default function CredentialDetail({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 m-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
+        {/* Header — metadata from decrypted data */}
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{credential.name}</h2>
-            {credential.description && (
-              <p className="text-gray-500 text-sm mt-1">{credential.description}</p>
+            <h2 className="text-xl font-bold text-gray-900">
+              {decryptedData?.name || 'Decrypting...'}
+            </h2>
+            {decryptedData?.description && (
+              <p className="text-gray-500 text-sm mt-1">{decryptedData.description}</p>
             )}
-            {credential.category && (
+            {decryptedData?.category && (
               <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-gray-100 rounded-full">
-                {credential.category}
+                {decryptedData.category}
               </span>
             )}
           </div>
@@ -107,17 +109,17 @@ export default function CredentialDetail({
         ) : decryptedData ? (
           <div className="space-y-4">
             {/* Website */}
-            {credential.website_url && (
+            {decryptedData.website_url && (
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Website</p>
                   <a
-                    href={credential.website_url}
+                    href={decryptedData.website_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary-600 hover:underline flex items-center gap-1"
                   >
-                    {credential.website_url}
+                    {decryptedData.website_url}
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </div>

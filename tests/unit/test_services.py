@@ -4,7 +4,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import CredentialCrypto
 from app.models.user import User, UserRole
 from app.schemas.credential import CredentialCreate
 from app.schemas.user import UserCreate
@@ -28,7 +27,23 @@ class TestUserService:
         assert user.display_name == test_user_data["display_name"]
         assert user.role == UserRole.USER
         assert user.is_active is True
-        assert user.mfa_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_create_oauth_user(self, db_session: AsyncSession):
+        """Test creating a user via OAuth."""
+        service = UserService(db_session)
+
+        user = await service.create_oauth_user(
+            email="oauth@example.com",
+            display_name="OAuth User",
+            google_id="google-oauth-123",
+        )
+
+        assert user.id is not None
+        assert user.email == "oauth@example.com"
+        assert user.display_name == "OAuth User"
+        assert user.google_id == "google-oauth-123"
+        assert user.role == UserRole.USER
 
     @pytest.mark.asyncio
     async def test_get_user_by_email(self, db_session: AsyncSession, test_user_data):
@@ -55,45 +70,58 @@ class TestUserService:
         assert fetched.email == test_user_data["email"]
 
     @pytest.mark.asyncio
-    async def test_authenticate_success(self, db_session: AsyncSession, test_user_data):
-        """Test successful authentication."""
+    async def test_get_by_google_id(self, db_session: AsyncSession):
+        """Test fetching a user by Google ID."""
         service = UserService(db_session)
-        user_create = UserCreate(**test_user_data)
-        await service.create(user_create)
 
-        authenticated = await service.authenticate(
-            test_user_data["email"],
-            test_user_data["password"],
+        user = await service.create_oauth_user(
+            email="google@example.com",
+            display_name="Google User",
+            google_id="google-id-456",
         )
 
-        assert authenticated is not None
-        assert authenticated.email == test_user_data["email"]
+        fetched = await service.get_by_google_id("google-id-456")
+        assert fetched is not None
+        assert fetched.id == user.id
+
+        # Non-existent google_id
+        not_found = await service.get_by_google_id("nonexistent")
+        assert not_found is None
 
     @pytest.mark.asyncio
-    async def test_authenticate_wrong_password(self, db_session: AsyncSession, test_user_data):
-        """Test authentication with wrong password."""
+    async def test_setup_vault_keys(self, db_session: AsyncSession):
+        """Test setting up E2EE vault keys."""
         service = UserService(db_session)
-        user_create = UserCreate(**test_user_data)
-        await service.create(user_create)
 
-        authenticated = await service.authenticate(
-            test_user_data["email"],
-            "wrongpassword",
+        user = await service.create_oauth_user(
+            email="vault@example.com",
+            display_name="Vault User",
+            google_id="google-vault-123",
+        )
+        assert user.has_vault_keys is False
+
+        updated = await service.setup_vault_keys(
+            user=user,
+            public_key="test-public-key-base64",
+            encrypted_private_key="test-encrypted-private-key-base64",
+            key_salt="test-salt-base64",
         )
 
-        assert authenticated is None
+        assert updated.public_key == "test-public-key-base64"
+        assert updated.encrypted_private_key == "test-encrypted-private-key-base64"
+        assert updated.key_salt == "test-salt-base64"
+        assert updated.has_vault_keys is True
 
     @pytest.mark.asyncio
-    async def test_authenticate_nonexistent_user(self, db_session: AsyncSession):
-        """Test authentication with non-existent user."""
+    async def test_link_google_account(self, db_session: AsyncSession, test_user_data):
+        """Test linking a Google account to an existing user."""
         service = UserService(db_session)
+        user_create = UserCreate(**test_user_data)
+        user = await service.create(user_create)
 
-        authenticated = await service.authenticate(
-            "nonexistent@example.com",
-            "anypassword",
-        )
+        updated = await service.link_google_account(user, "new-google-id-789")
 
-        assert authenticated is None
+        assert updated.google_id == "new-google-id-789"
 
     @pytest.mark.asyncio
     async def test_deactivate_user(self, db_session: AsyncSession, test_user_data):
@@ -105,21 +133,6 @@ class TestUserService:
         await service.deactivate(user)
 
         assert user.is_active is False
-
-    @pytest.mark.asyncio
-    async def test_authenticate_inactive_user(self, db_session: AsyncSession, test_user_data):
-        """Test that inactive users cannot authenticate."""
-        service = UserService(db_session)
-        user_create = UserCreate(**test_user_data)
-        user = await service.create(user_create)
-        await service.deactivate(user)
-
-        authenticated = await service.authenticate(
-            test_user_data["email"],
-            test_user_data["password"],
-        )
-
-        assert authenticated is None
 
     @pytest.mark.asyncio
     async def test_count_active_admins_none(self, db_session: AsyncSession):
@@ -134,21 +147,30 @@ class TestUserService:
         service = UserService(db_session)
 
         # Create regular user
-        user1 = UserCreate(email="user1@test.com", password="P@ssw0rd!23", display_name="User 1")
-        await service.create(user1, role=UserRole.USER)
+        await service.create_oauth_user(
+            email="user1@test.com", display_name="User 1", google_id="g-user1"
+        )
 
         # Create two admins
-        admin1 = UserCreate(email="admin1@test.com", password="P@ssw0rd!23", display_name="Admin 1")
-        await service.create(admin1, role=UserRole.ADMIN)
+        await service.create_oauth_user(
+            email="admin1@test.com",
+            display_name="Admin 1",
+            google_id="g-admin1",
+            role=UserRole.ADMIN,
+        )
 
-        admin2 = UserCreate(email="admin2@test.com", password="P@ssw0rd!23", display_name="Admin 2")
-        admin2_user = await service.create(admin2, role=UserRole.ADMIN)
+        admin2 = await service.create_oauth_user(
+            email="admin2@test.com",
+            display_name="Admin 2",
+            google_id="g-admin2",
+            role=UserRole.ADMIN,
+        )
 
         count = await service.count_active_admins()
         assert count == 2
 
         # Deactivate one admin
-        await service.deactivate(admin2_user)
+        await service.deactivate(admin2)
         count = await service.count_active_admins()
         assert count == 1
 
@@ -158,16 +180,24 @@ class TestUserService:
         service = UserService(db_session)
 
         # Create single admin
-        admin1 = UserCreate(email="admin1@test.com", password="P@ssw0rd!23", display_name="Admin 1")
-        admin1_user = await service.create(admin1, role=UserRole.ADMIN)
+        admin1 = await service.create_oauth_user(
+            email="admin1@test.com",
+            display_name="Admin 1",
+            google_id="g-admin1",
+            role=UserRole.ADMIN,
+        )
 
-        assert await service.is_last_admin(admin1_user) is True
+        assert await service.is_last_admin(admin1) is True
 
         # Create another admin
-        admin2 = UserCreate(email="admin2@test.com", password="P@ssw0rd!23", display_name="Admin 2")
-        await service.create(admin2, role=UserRole.ADMIN)
+        await service.create_oauth_user(
+            email="admin2@test.com",
+            display_name="Admin 2",
+            google_id="g-admin2",
+            role=UserRole.ADMIN,
+        )
 
-        assert await service.is_last_admin(admin1_user) is False
+        assert await service.is_last_admin(admin1) is False
 
     @pytest.mark.asyncio
     async def test_is_last_admin_non_admin(self, db_session: AsyncSession, test_user_data):
@@ -187,12 +217,11 @@ class TestUserService:
         user_create = UserCreate(**test_user_data)
         user = await service.create(user_create)
 
-        # Create some credentials
+        # Create some credentials (no plaintext metadata)
         for i in range(3):
             cred = Credential(
                 owner_id=user.id,
-                name=f"Test Cred {i}",
-                encrypted_data="test_data",
+                encrypted_data=f"test_data_{i}",
             )
             db_session.add(cred)
         await db_session.flush()
@@ -234,12 +263,11 @@ class TestUserService:
         user = await service.create(user_create)
         user_id = user.id
 
-        # Add some credentials
+        # Add some credentials (no plaintext metadata)
         for i in range(2):
             cred = Credential(
                 owner_id=user.id,
-                name=f"Test Cred {i}",
-                encrypted_data="test_data",
+                encrypted_data=f"test_data_{i}",
             )
             db_session.add(cred)
         await db_session.flush()
@@ -263,8 +291,11 @@ class TestCredentialService:
     async def test_user(self, db_session: AsyncSession, test_user_data) -> User:
         """Create a test user for credential tests."""
         service = UserService(db_session)
-        user_create = UserCreate(**test_user_data)
-        return await service.create(user_create)
+        return await service.create_oauth_user(
+            email=test_user_data["email"],
+            display_name=test_user_data["display_name"],
+            google_id=test_user_data["google_id"],
+        )
 
     @pytest.mark.asyncio
     async def test_create_credential(
@@ -273,28 +304,19 @@ class TestCredentialService:
         test_user: User,
         test_credential_data,
     ):
-        """Test creating a new credential."""
+        """Test creating a new credential (encrypted blob only)."""
         service = CredentialService(db_session)
 
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields=test_credential_data["fields"],
-            notes=test_credential_data["notes"],
-        )
-
         credential_create = CredentialCreate(
-            name=test_credential_data["name"],
-            description=test_credential_data["description"],
-            website_url=test_credential_data["website_url"],
-            category=test_credential_data["category"],
-            encrypted_data=encrypted_data,
+            encrypted_data=test_credential_data["encrypted_data"],
         )
 
         credential = await service.create(test_user.id, credential_create)
 
         assert credential.id is not None
         assert credential.owner_id == test_user.id
-        assert credential.name == test_credential_data["name"]
         assert credential.is_active is True
+        assert credential.encrypted_data == test_credential_data["encrypted_data"]
 
     @pytest.mark.asyncio
     async def test_get_credential_by_owner(
@@ -306,13 +328,8 @@ class TestCredentialService:
         """Test fetching a credential by owner."""
         service = CredentialService(db_session)
 
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields=test_credential_data["fields"],
-        )
-
         credential_create = CredentialCreate(
-            name=test_credential_data["name"],
-            encrypted_data=encrypted_data,
+            encrypted_data=test_credential_data["encrypted_data"],
         )
 
         created = await service.create(test_user.id, credential_create)
@@ -331,13 +348,8 @@ class TestCredentialService:
         """Test that credentials cannot be accessed by wrong owner."""
         service = CredentialService(db_session)
 
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields={"Username": "test", "Password": "test"},
-        )
-
         credential_create = CredentialCreate(
-            name=test_credential_data["name"],
-            encrypted_data=encrypted_data,
+            encrypted_data=test_credential_data["encrypted_data"],
         )
 
         created = await service.create(test_user.id, credential_create)
@@ -354,14 +366,10 @@ class TestCredentialService:
         """Test listing credentials."""
         service = CredentialService(db_session)
 
-        # Create multiple credentials
+        # Create multiple credentials with opaque encrypted data
         for i in range(3):
-            encrypted_data = CredentialCrypto.encrypt_credential(
-                fields={"Username": f"user{i}", "Password": f"pass{i}"},
-            )
             credential_create = CredentialCreate(
-                name=f"Credential {i}",
-                encrypted_data=encrypted_data,
+                encrypted_data=f"opaque-encrypted-blob-{i}",
             )
             await service.create(test_user.id, credential_create)
 
@@ -379,13 +387,8 @@ class TestCredentialService:
         """Test revoking a credential."""
         service = CredentialService(db_session)
 
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields={"Username": "test", "Password": "test"},
-        )
-
         credential_create = CredentialCreate(
-            name=test_credential_data["name"],
-            encrypted_data=encrypted_data,
+            encrypted_data=test_credential_data["encrypted_data"],
         )
 
         credential = await service.create(test_user.id, credential_create)
@@ -393,58 +396,3 @@ class TestCredentialService:
 
         assert revoked.is_active is False
         assert revoked.revoked_at is not None
-
-    @pytest.mark.asyncio
-    async def test_search_credentials(
-        self,
-        db_session: AsyncSession,
-        test_user: User,
-    ):
-        """Test searching credentials."""
-        service = CredentialService(db_session)
-
-        # Create credentials with different names
-        for name in ["GitHub Account", "GitLab Account", "Email Account"]:
-            encrypted_data = CredentialCrypto.encrypt_credential(
-                fields={"Username": "test", "Password": "test"},
-            )
-            credential_create = CredentialCreate(
-                name=name,
-                encrypted_data=encrypted_data,
-            )
-            await service.create(test_user.id, credential_create)
-
-        # Search for "Git"
-        results = await service.search(test_user.id, "Git")
-
-        assert len(results) == 2
-        assert all("Git" in c.name for c in results)
-
-    @pytest.mark.asyncio
-    async def test_decrypt_credential_data(
-        self,
-        db_session: AsyncSession,
-        test_user: User,
-        test_credential_data,
-    ):
-        """Test that credential data can be decrypted."""
-        service = CredentialService(db_session)
-
-        encrypted_data = CredentialCrypto.encrypt_credential(
-            fields=test_credential_data["fields"],
-            notes=test_credential_data["notes"],
-        )
-
-        credential_create = CredentialCreate(
-            name=test_credential_data["name"],
-            encrypted_data=encrypted_data,
-        )
-
-        credential = await service.create(test_user.id, credential_create)
-
-        # Decrypt the stored data
-        decrypted = CredentialCrypto.decrypt_credential(credential.encrypted_data)
-
-        assert decrypted["fields"]["Username"] == test_credential_data["fields"]["Username"]
-        assert decrypted["fields"]["Password"] == test_credential_data["fields"]["Password"]
-        assert decrypted["notes"] == test_credential_data["notes"]

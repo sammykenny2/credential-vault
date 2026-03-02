@@ -26,32 +26,16 @@ async def list_credentials(
     limit: int = Query(100, ge=1, le=500),
     include_revoked: bool = False,
 ):
-    """List all credentials for current user."""
+    """List all credentials for current user.
+
+    Returns encrypted_data for client-side decryption and search.
+    """
     service = CredentialService(db)
     credentials = await service.list_by_owner(
         owner_id=current_user.id,
         skip=skip,
         limit=limit,
         include_revoked=include_revoked,
-    )
-    return credentials
-
-
-@router.get("/search", response_model=list[CredentialListItem])
-async def search_credentials(
-    current_user: CurrentUser,
-    db: DbSession,
-    q: str = Query(min_length=1),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-):
-    """Search credentials by name or description."""
-    service = CredentialService(db)
-    credentials = await service.search(
-        owner_id=current_user.id,
-        query=q,
-        skip=skip,
-        limit=limit,
     )
     return credentials
 
@@ -74,10 +58,55 @@ async def create_credential(
         user_id=current_user.id,
         resource_type="credential",
         resource_id=credential.id,
-        details={"name": credential.name},
     )
 
     return credential
+
+
+@router.get("/expiring", response_model=list[CredentialListItem])
+async def get_expiring_credentials(
+    current_user: CurrentUser,
+    db: DbSession,
+    days: int = Query(30, ge=1, le=365),
+):
+    """Get credentials expiring within the given number of days."""
+    service = CredentialService(db)
+    return await service.get_expiring(owner_id=current_user.id, days=days)
+
+
+@router.get("/export")
+async def export_credentials(
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Export all credentials as JSON."""
+    service = CredentialService(db)
+    data = await service.export_all(current_user.id)
+    return {"credentials": data, "count": len(data)}
+
+
+@router.post("/import", response_model=CredentialImportResult)
+async def import_credentials(
+    request: Request,
+    data: CredentialImportRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Import credentials from JSON."""
+    service = CredentialService(db)
+    creds_data = [c.model_dump() for c in data.credentials]
+    result = await service.import_credentials(current_user.id, creds_data)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_CREATED,
+        user_id=current_user.id,
+        resource_type="credential",
+        details={"action": "import", "count": result["imported"]},
+    )
+
+    return CredentialImportResult(**result)
 
 
 @router.get("/{credential_id}", response_model=CredentialRead)
@@ -195,7 +224,6 @@ async def delete_credential(
             detail="Credential not found",
         )
 
-    credential_name = credential.name
     await service.delete(credential)
 
     audit_service = AuditLogService(db)
@@ -205,51 +233,4 @@ async def delete_credential(
         user_id=current_user.id,
         resource_type="credential",
         resource_id=credential_id,
-        details={"name": credential_name},
     )
-
-
-@router.get("/expiring", response_model=list[CredentialListItem])
-async def get_expiring_credentials(
-    current_user: CurrentUser,
-    db: DbSession,
-    days: int = Query(30, ge=1, le=365),
-):
-    """Get credentials expiring within the given number of days."""
-    service = CredentialService(db)
-    return await service.get_expiring(owner_id=current_user.id, days=days)
-
-
-@router.get("/export")
-async def export_credentials(
-    current_user: CurrentUser,
-    db: DbSession,
-):
-    """Export all credentials as JSON."""
-    service = CredentialService(db)
-    data = await service.export_all(current_user.id)
-    return {"credentials": data, "count": len(data)}
-
-
-@router.post("/import", response_model=CredentialImportResult)
-async def import_credentials(
-    request: Request,
-    data: CredentialImportRequest,
-    current_user: CurrentUser,
-    db: DbSession,
-):
-    """Import credentials from JSON."""
-    service = CredentialService(db)
-    creds_data = [c.model_dump() for c in data.credentials]
-    result = await service.import_credentials(current_user.id, creds_data)
-
-    audit_service = AuditLogService(db)
-    await audit_service.log_from_request(
-        request,
-        action=AuditAction.CREDENTIAL_CREATED,
-        user_id=current_user.id,
-        resource_type="credential",
-        details={"action": "import", "count": result["imported"]},
-    )
-
-    return CredentialImportResult(**result)
