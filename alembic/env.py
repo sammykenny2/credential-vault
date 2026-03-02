@@ -14,11 +14,8 @@ from app.config import get_settings
 from app.models import (  # noqa: F401
     AuditLog,
     Credential,
-    CredentialShare,
-    EmergencyAccess,
     Template,
     TemplateUsage,
-    TOTPAccount,
     User,
     WebAuthnCredential,
 )
