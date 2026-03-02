@@ -7,11 +7,9 @@ interface AuthState {
   accessToken: string | null
   refreshToken: string | null
   isAuthenticated: boolean
-  requiresMFA: boolean
 
   setTokens: (accessToken: string, refreshToken: string) => void
   setUser: (user: User) => void
-  setRequiresMFA: (requires: boolean) => void
   logout: () => void
 }
 
@@ -22,7 +20,6 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
-      requiresMFA: false,
 
       setTokens: (accessToken, refreshToken) =>
         set({
@@ -33,15 +30,12 @@ export const useAuthStore = create<AuthState>()(
 
       setUser: (user) => set({ user }),
 
-      setRequiresMFA: (requires) => set({ requiresMFA: requires }),
-
       logout: () =>
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
-          requiresMFA: false,
         }),
     }),
     {

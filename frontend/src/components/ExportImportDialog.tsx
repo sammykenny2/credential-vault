@@ -20,7 +20,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react'
-import { useMasterPassword } from '@/hooks/useMasterPassword'
+import { useMasterPassword } from '@/hooks/useVaultKey'
 import {
   exportTemplates,
   downloadExportFile,

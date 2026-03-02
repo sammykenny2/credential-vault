@@ -2,7 +2,7 @@
  * React hooks for the application.
  */
 
-export { useMasterPassword, useMasterPasswordStore } from './useMasterPassword'
+export { useVaultKey, useVaultKeyStore, useMasterPassword, useMasterPasswordStore } from './useVaultKey'
 export { useCredentialCrypto } from './useCredentialCrypto'
 export {
   useTemplates,

@@ -42,8 +42,23 @@ class User(Base, TimestampMixin):
         index=True,
         nullable=False,
     )
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    # Google OAuth identity
+    google_id: Mapped[str | None] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+
+    # Legacy password (nullable for OAuth-only users)
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # E2EE key material
+    public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    key_salt: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Role
     role: Mapped[UserRole] = mapped_column(
@@ -51,10 +66,6 @@ class User(Base, TimestampMixin):
         default=UserRole.USER,
         nullable=False,
     )
-
-    # MFA
-    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    mfa_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -79,6 +90,11 @@ class User(Base, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def has_vault_keys(self) -> bool:
+        """Check if user has set up E2EE vault keys."""
+        return self.public_key is not None and self.encrypted_private_key is not None
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

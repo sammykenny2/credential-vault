@@ -19,16 +19,11 @@ class AuditAction(enum.StrEnum):
     LOGIN_FAILURE = "login_failure"
     LOGOUT = "logout"
     TOKEN_REFRESH = "token_refresh"
+    OAUTH_LOGIN = "oauth_login"
 
-    # MFA
-    MFA_SETUP = "mfa_setup"
-    MFA_ENABLED = "mfa_enabled"
-    MFA_DISABLED = "mfa_disabled"
-    MFA_VERIFY_SUCCESS = "mfa_verify_success"
-    MFA_VERIFY_FAILURE = "mfa_verify_failure"
-
-    # Password
-    PASSWORD_CHANGED = "password_changed"
+    # Vault
+    VAULT_SETUP = "vault_setup"
+    VAULT_UNLOCK = "vault_unlock"
 
     # Credential
     CREDENTIAL_CREATED = "credential_created"
@@ -36,20 +31,6 @@ class AuditAction(enum.StrEnum):
     CREDENTIAL_UPDATED = "credential_updated"
     CREDENTIAL_REVOKED = "credential_revoked"
     CREDENTIAL_DELETED = "credential_deleted"
-
-    # Sharing
-    CREDENTIAL_SHARED = "credential_shared"
-    SHARE_REVOKED = "share_revoked"
-
-    # Emergency Access
-    EMERGENCY_GRANT_CREATED = "emergency_grant_created"
-    EMERGENCY_RECOVERY_INITIATED = "emergency_recovery_initiated"
-    EMERGENCY_RECOVERY_APPROVED = "emergency_recovery_approved"
-    EMERGENCY_RECOVERY_REJECTED = "emergency_recovery_rejected"
-
-    # Backup
-    BACKUP_CREATED = "backup_created"
-    BACKUP_RESTORED = "backup_restored"
 
     # WebAuthn
     WEBAUTHN_REGISTERED = "webauthn_registered"

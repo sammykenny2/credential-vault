@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
-import MFAPage from '@/pages/MFAPage'
 import DashboardPage from '@/pages/DashboardPage'
 import CredentialsPage from '@/pages/CredentialsPage'
 import SettingsPage from '@/pages/SettingsPage'
@@ -10,14 +9,10 @@ import AdminUsersPage from '@/pages/AdminUsersPage'
 import OfflineIndicator from '@/components/OfflineIndicator'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, requiresMFA } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
-  }
-
-  if (requiresMFA) {
-    return <Navigate to="/mfa" replace />
   }
 
   return <>{children}</>
@@ -30,7 +25,6 @@ function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/mfa" element={<MFAPage />} />
 
       {/* Protected routes */}
       <Route

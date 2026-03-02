@@ -6,19 +6,22 @@
 
 Credential Vault 是一個自託管的憑證管理系統，專為安全性設計：
 
+- **零知識端到端加密 (E2EE)**：憑證在瀏覽器端加密，伺服器無法解密
+- **Google OAuth 登入**：透過 Google 帳號驗證身份
 - **零信任存取**：僅透過 Tailscale VPN 連入，不暴露 Web Port
-- **MFA 認證**：連入後需完成多因素認證
 - **角色分離**：Admin 管理使用者但無法查看個人憑證
 - **個人保險箱**：每位使用者獨立管理自己的 credentials (新增/刪除/撤銷)
 - **NAS 部署**：透過 Docker Compose 部署至 NAS
 
 ## Current Status
 
-- [ ] 系統架構設計
-- [ ] 後端 API 開發
-- [ ] 前端 UI 開發
-- [ ] MFA 整合
+- [x] 系統架構設計
+- [x] 後端 API 開發
+- [x] 前端 UI 開發
+- [x] E2EE 加密架構 (RSA-OAEP + AES-256-GCM 混合加密)
+- [x] Google OAuth 2.0 整合
 - [ ] Docker 部署設定
+- [ ] 完整測試驗證
 
 ## Quick Start
 

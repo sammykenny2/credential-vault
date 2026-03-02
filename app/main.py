@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Self-hosted credential management system with MFA",
+    description="Self-hosted credential management system with E2EE and Google OAuth",
     docs_url="/docs" if settings.is_development else None,
     redoc_url="/redoc" if settings.is_development else None,
     lifespan=lifespan,

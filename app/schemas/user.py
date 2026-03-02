@@ -1,9 +1,8 @@
 """User schemas."""
 
-import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import UserRole
 
@@ -16,25 +15,9 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    """User creation schema."""
+    """User creation schema (OAuth-based, no password)."""
 
-    password: str = Field(min_length=8, max_length=128)
-
-    @field_validator("password")
-    @classmethod
-    def validate_password_strength(cls, v: str) -> str:
-        """Validate password meets complexity requirements."""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", v):
-            raise ValueError("Password must contain at least one special character")
-        return v
+    google_id: str | None = None
 
 
 class UserUpdate(BaseModel):
@@ -57,8 +40,8 @@ class UserRead(UserBase):
 
     id: str
     role: UserRole
-    mfa_enabled: bool
     is_active: bool
+    has_vault_keys: bool
     created_at: datetime
     last_login_at: datetime | None
 

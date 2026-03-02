@@ -11,7 +11,7 @@ from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.services.user import UserService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/oauth/google/callback")
 
 
 async def get_current_user(
@@ -72,15 +72,6 @@ async def get_current_admin_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
-    return current_user
-
-
-async def require_mfa_verified(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-) -> User:
-    """Ensure user has completed MFA if enabled."""
-    # Note: MFA verification should be tracked in session/token
-    # This is a placeholder - implement session-based MFA tracking
     return current_user
 
 

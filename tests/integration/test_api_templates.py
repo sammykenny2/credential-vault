@@ -3,28 +3,24 @@
 import pytest
 from httpx import AsyncClient
 
-from app.schemas.user import UserCreate
+from app.core.security import SecurityService
 from app.services.user import UserService
 
 
 class TestTemplatesAPI:
     """Test templates endpoints."""
 
-    async def _create_user_and_login(self, client: AsyncClient, db_session, test_user_data):
-        """Helper to create user and get auth token."""
+    async def _create_user_and_get_token(self, db_session, test_user_data) -> str:
+        """Helper to create an OAuth user and get a JWT token directly."""
         service = UserService(db_session)
-        user_create = UserCreate(**test_user_data)
-        await service.create(user_create)
+        user = await service.create_oauth_user(
+            email=test_user_data["email"],
+            display_name=test_user_data["display_name"],
+            google_id=test_user_data["google_id"],
+        )
         await db_session.commit()
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={
-                "username": test_user_data["email"],
-                "password": test_user_data["password"],
-            },
-        )
-        return login_response.json()["access_token"]
+        return SecurityService.create_access_token(user.id)
 
     @pytest.mark.asyncio
     async def test_create_template(
@@ -35,7 +31,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test creating a template."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         response = await client.post(
             "/api/v1/templates",
@@ -61,7 +57,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test creating template with duplicate name fails."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         # Create first template
         await client.post(
@@ -88,7 +84,7 @@ class TestTemplatesAPI:
         test_user_data,
     ):
         """Test listing templates."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         # Create templates
         for i in range(3):
@@ -119,7 +115,7 @@ class TestTemplatesAPI:
         test_user_data,
     ):
         """Test filtering templates by category."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         # Create templates in different categories
         for i, category in enumerate(["dev", "dev", "finance"]):
@@ -152,7 +148,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test getting a specific template."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -179,7 +175,7 @@ class TestTemplatesAPI:
         test_user_data,
     ):
         """Test getting non-existent template returns 404."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         response = await client.get(
             "/api/v1/templates/non-existent-id",
@@ -197,7 +193,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test updating a template."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -229,7 +225,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test update with wrong version returns 409."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -267,7 +263,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test soft deleting a template."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -307,7 +303,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test hard deleting a template."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -341,7 +337,7 @@ class TestTemplatesAPI:
         test_template_data,
     ):
         """Test recording template usage."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -368,7 +364,7 @@ class TestTemplatesAPI:
         test_user_data,
     ):
         """Test getting usage statistics."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         # Create templates
         template_ids = []
@@ -415,7 +411,7 @@ class TestTemplatesAPI:
         test_user_data,
     ):
         """Test syncing templates from localStorage."""
-        token = await self._create_user_and_login(client, db_session, test_user_data)
+        token = await self._create_user_and_get_token(db_session, test_user_data)
 
         response = await client.post(
             "/api/v1/templates/sync",
@@ -454,7 +450,7 @@ class TestTemplatesAPI:
     ):
         """Test that users cannot access each other's templates."""
         # Create first user and template
-        token1 = await self._create_user_and_login(client, db_session, test_user_data)
+        token1 = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
             "/api/v1/templates",
@@ -464,21 +460,15 @@ class TestTemplatesAPI:
         template_id = create_response.json()["id"]
 
         # Create second user
-        user2_data = {
-            "email": "user2@example.com",
-            "display_name": "User 2",
-            "password": "Password123!",
-        }
         service = UserService(db_session)
-        user_create = UserCreate(**user2_data)
-        await service.create(user_create)
+        user2 = await service.create_oauth_user(
+            email="user2@example.com",
+            display_name="User 2",
+            google_id="google-user2-id",
+        )
         await db_session.commit()
 
-        login2_response = await client.post(
-            "/api/v1/auth/login",
-            data={"username": user2_data["email"], "password": user2_data["password"]},
-        )
-        token2 = login2_response.json()["access_token"]
+        token2 = SecurityService.create_access_token(user2.id)
 
         # User 2 should not be able to access User 1's template
         response = await client.get(

@@ -77,7 +77,7 @@ export default function AdminUsersPage() {
                   Credentials
                 </th>
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">
-                  MFA
+                  Vault
                 </th>
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">
                   Status
@@ -118,12 +118,12 @@ export default function AdminUsersPage() {
                     <span
                       className={clsx(
                         'px-2 py-1 text-xs font-medium rounded-full',
-                        user.mfa_enabled
+                        user.has_vault_keys
                           ? 'bg-green-100 text-green-700'
                           : 'bg-yellow-100 text-yellow-700'
                       )}
                     >
-                      {user.mfa_enabled ? 'Enabled' : 'Disabled'}
+                      {user.has_vault_keys ? 'Set Up' : 'Not Set Up'}
                     </span>
                   </td>
                   <td className="px-6 py-4">

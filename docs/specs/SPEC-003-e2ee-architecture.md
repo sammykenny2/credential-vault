@@ -6,7 +6,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft |
+| **Status** | Implemented |
 | **Owner** | Gemini (Architect) |
 | **Reviewer** | User |
 
@@ -71,10 +71,13 @@ This specification defines the complete overhaul of the Credential Vault's crypt
 - **Backend:** `authlib` or `httpx` for handling Google OAuth protocols.
 - **Frontend:** A robust, audited cryptography library for Argon2id (e.g., `argon2-browser` or `libsodium.js` WASM port) since `Argon2` is not natively supported by the Web Crypto API.
 
-## Open Questions
+## Open Questions (Resolved)
 
-- [ ] Will we use strictly RSA-OAEP for encrypting the credentials, or a hybrid approach (generating a unique AES key per credential, encrypting the credential with the AES key, and then encrypting the AES key with the user's RSA Public Key)? (Hybrid is recommended for arbitrary length data).
-- [ ] Should the transition script wipe existing server-encrypted credentials during the migration, or attempt a server-coordinated migration to E2EE for existing data? (For a fresh setup, wiping is acceptable).
+- [x] **Hybrid encryption**: Yes — each credential gets a random AES-256 key, data is encrypted with AES-256-GCM, and the AES key is wrapped with RSA-OAEP. This handles arbitrary-length credential data.
+- [x] **Migration strategy**: Wipe existing data and start fresh. No migration script for SSE→E2EE.
+- [x] **Key derivation**: PBKDF2 (600K iterations, SHA-256) used instead of Argon2id for native Web Crypto API compatibility. Argon2id upgrade deferred to future.
+- [x] **Metadata visibility**: `name`, `description`, `website_url`, `category` remain plaintext for server-side search. Only `encrypted_data` is E2EE.
+- [x] **Removed features**: Sharing, Emergency Access, Backup, TOTP MFA permanently removed (incompatible with E2EE or redundant with Google OAuth 2FA).
 
 ## References
 

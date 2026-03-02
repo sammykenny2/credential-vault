@@ -1,90 +1,10 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
-import { authService } from '@/services/authService'
-import { Shield, Key, User, FileText } from 'lucide-react'
+import { User, FileText, ShieldCheck } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
 import WebAuthnPanel from '@/components/WebAuthnPanel'
-import EmergencyAccessPanel from '@/components/EmergencyAccessPanel'
-import BackupRestorePanel from '@/components/BackupRestorePanel'
 
 export default function SettingsPage() {
-  const { user, setUser } = useAuthStore()
-
-  // Password change state
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordError, setPasswordError] = useState('')
-  const [passwordSuccess, setPasswordSuccess] = useState('')
-
-  // MFA state
-  const [mfaSetup, setMfaSetup] = useState<{ secret: string; qr_code_base64: string } | null>(null)
-  const [mfaCode, setMfaCode] = useState('')
-  const [mfaError, setMfaError] = useState('')
-
-  const changePasswordMutation = useMutation({
-    mutationFn: () => authService.changePassword(currentPassword, newPassword),
-    onSuccess: () => {
-      setPasswordSuccess('Password changed successfully')
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-    },
-    onError: () => {
-      setPasswordError('Failed to change password. Check your current password.')
-    },
-  })
-
-  const setupMfaMutation = useMutation({
-    mutationFn: authService.setupMFA,
-    onSuccess: (data) => {
-      setMfaSetup({ secret: data.secret, qr_code_base64: data.qr_code_base64 })
-    },
-  })
-
-  const enableMfaMutation = useMutation({
-    mutationFn: () => authService.enableMFA(mfaCode, mfaSetup!.secret),
-    onSuccess: async () => {
-      const updatedUser = await authService.getMe()
-      setUser(updatedUser)
-      setMfaSetup(null)
-      setMfaCode('')
-    },
-    onError: () => {
-      setMfaError('Invalid code. Please try again.')
-    },
-  })
-
-  const disableMfaMutation = useMutation({
-    mutationFn: () => authService.disableMFA(mfaCode),
-    onSuccess: async () => {
-      const updatedUser = await authService.getMe()
-      setUser(updatedUser)
-      setMfaCode('')
-    },
-    onError: () => {
-      setMfaError('Invalid code. Please try again.')
-    },
-  })
-
-  const handlePasswordChange = (e: React.FormEvent) => {
-    e.preventDefault()
-    setPasswordError('')
-    setPasswordSuccess('')
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match')
-      return
-    }
-
-    if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters')
-      return
-    }
-
-    changePasswordMutation.mutate()
-  }
+  const { user } = useAuthStore()
 
   return (
     <div className="max-w-2xl">
@@ -109,76 +29,33 @@ export default function SettingsPage() {
             <label className="text-sm text-gray-500">Role</label>
             <p className="font-medium capitalize">{user?.role}</p>
           </div>
+          <div>
+            <label className="text-sm text-gray-500">Authentication</label>
+            <p className="font-medium">Google OAuth</p>
+          </div>
         </div>
       </section>
 
-      {/* MFA Section */}
+      {/* Vault Status Section */}
       <section className="card mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <Shield className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold">Two-Factor Authentication</h2>
+          <ShieldCheck className="w-5 h-5 text-gray-600" />
+          <h2 className="text-lg font-semibold">Vault Encryption</h2>
         </div>
-
-        {user?.mfa_enabled ? (
-          <div>
-            <p className="text-green-600 mb-4">MFA is enabled</p>
-            <div className="space-y-4">
-              <input
-                type="text"
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Enter code to disable"
-                className="input"
-                maxLength={6}
-              />
-              {mfaError && <p className="text-red-600 text-sm">{mfaError}</p>}
-              <button
-                onClick={() => disableMfaMutation.mutate()}
-                disabled={mfaCode.length !== 6}
-                className="btn btn-danger"
-              >
-                Disable MFA
-              </button>
-            </div>
-          </div>
-        ) : mfaSetup ? (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Scan this QR code with your authenticator app:
+        {user?.has_vault_keys ? (
+          <div className="space-y-2">
+            <p className="text-green-600 font-medium">E2EE vault is configured</p>
+            <p className="text-sm text-gray-500">
+              Your credentials are encrypted end-to-end with your vault password.
+              The server never sees your plaintext data.
             </p>
-            <img
-              src={`data:image/png;base64,${mfaSetup.qr_code_base64}`}
-              alt="MFA QR Code"
-              className="w-48 h-48 mx-auto"
-            />
-            <input
-              type="text"
-              value={mfaCode}
-              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="Enter 6-digit code"
-              className="input text-center"
-              maxLength={6}
-            />
-            {mfaError && <p className="text-red-600 text-sm">{mfaError}</p>}
-            <button
-              onClick={() => enableMfaMutation.mutate()}
-              disabled={mfaCode.length !== 6}
-              className="btn btn-primary w-full"
-            >
-              Verify & Enable
-            </button>
           </div>
         ) : (
-          <div>
-            <p className="text-gray-500 mb-4">
-              Add an extra layer of security to your account
+          <div className="space-y-2">
+            <p className="text-yellow-600 font-medium">Vault not configured</p>
+            <p className="text-sm text-gray-500">
+              Visit the Credentials page to set up your vault password and encryption keys.
             </p>
-            <button
-              onClick={() => setupMfaMutation.mutate()}
-              className="btn btn-primary"
-            >
-              Enable MFA
-            </button>
           </div>
         )}
       </section>
@@ -188,16 +65,6 @@ export default function SettingsPage() {
         <WebAuthnPanel />
       </section>
 
-      {/* Emergency Access Section */}
-      <section className="card mb-6">
-        <EmergencyAccessPanel />
-      </section>
-
-      {/* Backup & Restore Section */}
-      <section className="card mb-6">
-        <BackupRestorePanel />
-      </section>
-
       {/* Templates Section */}
       <section className="card mb-6">
         <div className="flex items-center gap-3 mb-4">
@@ -205,66 +72,6 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">Credential Templates</h2>
         </div>
         <TemplateManager />
-      </section>
-
-      {/* Password Section */}
-      <section className="card">
-        <div className="flex items-center gap-3 mb-4">
-          <Key className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold">Change Password</h2>
-        </div>
-
-        <form onSubmit={handlePasswordChange} className="space-y-4">
-          {passwordError && (
-            <p className="text-red-600 text-sm">{passwordError}</p>
-          )}
-          {passwordSuccess && (
-            <p className="text-green-600 text-sm">{passwordSuccess}</p>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Current Password
-            </label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="input"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              New Password
-            </label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="input"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm New Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="input"
-              required
-            />
-          </div>
-
-          <button type="submit" className="btn btn-primary">
-            Change Password
-          </button>
-        </form>
       </section>
     </div>
   )

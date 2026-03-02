@@ -1,12 +1,11 @@
 /**
- * React hook for credential encryption/decryption.
+ * React hook for credential encryption/decryption using hybrid E2EE.
  *
- * Provides easy-to-use functions for encrypting credentials before
- * sending to server and decrypting after fetching.
+ * Uses RSA-OAEP public key for encryption and private key for decryption.
  */
 
 import { useCallback, useState } from 'react'
-import { useMasterPassword } from './useMasterPassword'
+import { useVaultKey } from './useVaultKey'
 import {
   encryptCredential,
   decryptCredential,
@@ -30,29 +29,18 @@ interface UseCredentialCryptoResult {
 }
 
 /**
- * Hook for encrypting and decrypting credentials.
- *
- * @example
- * ```tsx
- * const { encrypt, decrypt, isProcessing, error } = useCredentialCrypto()
- *
- * // Encrypt before saving
- * const encrypted = await encrypt({ username: 'user', password: 'pass' })
- *
- * // Decrypt after fetching
- * const decrypted = await decrypt(credential.encrypted_data)
- * ```
+ * Hook for encrypting and decrypting credentials with hybrid E2EE.
  */
 export function useCredentialCrypto(): UseCredentialCryptoResult {
-  const { getMasterPassword } = useMasterPassword()
+  const { getPrivateKey, getPublicKey } = useVaultKey()
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const encrypt = useCallback(async (data: CredentialData): Promise<string | null> => {
-    const masterPassword = getMasterPassword()
+    const publicKey = getPublicKey()
 
-    if (!masterPassword) {
-      setError('Vault is locked. Please enter your master password.')
+    if (!publicKey) {
+      setError('Vault is locked. Please enter your vault password.')
       return null
     }
 
@@ -60,7 +48,7 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
     setError(null)
 
     try {
-      const encrypted = await encryptCredential(data, masterPassword)
+      const encrypted = await encryptCredential(data, publicKey)
       return encrypted
     } catch (err) {
       setError('Encryption failed. Please try again.')
@@ -69,13 +57,13 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
     } finally {
       setIsProcessing(false)
     }
-  }, [getMasterPassword])
+  }, [getPublicKey])
 
   const decrypt = useCallback(async (encryptedData: string): Promise<CredentialData | null> => {
-    const masterPassword = getMasterPassword()
+    const privateKey = getPrivateKey()
 
-    if (!masterPassword) {
-      setError('Vault is locked. Please enter your master password.')
+    if (!privateKey) {
+      setError('Vault is locked. Please enter your vault password.')
       return null
     }
 
@@ -83,16 +71,16 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
     setError(null)
 
     try {
-      const decrypted = await decryptCredential(encryptedData, masterPassword)
+      const decrypted = await decryptCredential(encryptedData, privateKey)
       return decrypted
     } catch (err) {
-      setError('Decryption failed. Wrong master password or corrupted data.')
+      setError('Decryption failed. Wrong vault password or corrupted data.')
       console.error('Decryption error:', err)
       return null
     } finally {
       setIsProcessing(false)
     }
-  }, [getMasterPassword])
+  }, [getPrivateKey])
 
   const clearError = useCallback(() => {
     setError(null)

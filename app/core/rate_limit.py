@@ -27,7 +27,6 @@ limiter = Limiter(
 
 # Stricter limits for auth endpoints
 AUTH_RATE_LIMIT = "10/minute"
-MFA_RATE_LIMIT = "5/minute"
 
 
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
