@@ -264,6 +264,13 @@ async def delete_user(
             detail="User not found",
         )
 
+    # Protect the last admin from deletion/deactivation
+    if await user_service.is_last_admin(user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete or deactivate the last admin",
+        )
+
     audit_service = AuditLogService(db)
 
     if hard_delete:
