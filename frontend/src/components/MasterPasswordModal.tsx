@@ -105,12 +105,14 @@ export default function MasterPasswordModal({
         setKeys(keys.privateKey, keys.publicKey)
         onUnlock()
       }
-    } catch {
-      setError(
-        needsSetup
-          ? 'Failed to set up vault. Please try again.'
-          : 'Incorrect vault password or corrupted data.'
-      )
+    } catch (err) {
+      console.error('Vault operation failed:', err)
+      if (needsSetup) {
+        const detail = err instanceof Error ? err.message : String(err)
+        setError(`Failed to set up vault: ${detail}`)
+      } else {
+        setError('Incorrect vault password or corrupted data.')
+      }
     } finally {
       setIsLoading(false)
       setPasswordInput('')

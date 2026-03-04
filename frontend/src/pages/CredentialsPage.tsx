@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { credentialService } from '@/services/credentialService'
 import { useMasterPassword } from '@/hooks/useVaultKey'
+import { useAuthStore } from '@/stores/authStore'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialForm from '@/components/CredentialForm'
@@ -25,7 +26,8 @@ interface DecryptedCredentialEntry {
 
 export default function CredentialsPage() {
   const queryClient = useQueryClient()
-  const { isUnlocked, hasPassword } = useMasterPassword()
+  const { isUnlocked } = useMasterPassword()
+  const { user } = useAuthStore()
   const { decrypt } = useCredentialCrypto()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -180,7 +182,7 @@ export default function CredentialsPage() {
         <MasterPasswordModal
           isOpen={showMasterPasswordModal}
           onUnlock={() => setShowMasterPasswordModal(false)}
-          isFirstTime={!hasPassword}
+          isFirstTime={!user?.has_vault_keys}
         />
       </>
     )
@@ -336,7 +338,7 @@ export default function CredentialsPage() {
       <MasterPasswordModal
         isOpen={showMasterPasswordModal}
         onUnlock={() => setShowMasterPasswordModal(false)}
-        isFirstTime={!hasPassword}
+        isFirstTime={!user?.has_vault_keys}
       />
 
       <TemplateSelector
