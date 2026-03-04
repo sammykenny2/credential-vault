@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { authService } from '@/services/authService'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
@@ -19,6 +21,15 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const { isAuthenticated, user, setUser, logout } = useAuthStore()
+
+  // Rehydrate user data on page refresh when token is persisted but user is not
+  useEffect(() => {
+    if (isAuthenticated && !user) {
+      authService.getMe().then(setUser).catch(() => logout())
+    }
+  }, [isAuthenticated, user, setUser, logout])
+
   return (
     <>
     <OfflineIndicator />

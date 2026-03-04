@@ -41,12 +41,12 @@ export default function CredentialsPage() {
   const [decryptedCache, setDecryptedCache] = useState<DecryptedCredentialEntry[]>([])
   const [isDecrypting, setIsDecrypting] = useState(false)
 
-  // Check if vault needs to be unlocked
+  // Auto-open modal only for first-time vault setup
   useEffect(() => {
-    if (!isUnlocked) {
+    if (!isUnlocked && !user?.has_vault_keys) {
       setShowMasterPasswordModal(true)
     }
-  }, [isUnlocked])
+  }, [isUnlocked, user?.has_vault_keys])
 
   // Fetch all credentials (including encrypted_data for client-side search)
   const { data: credentials, isLoading } = useQuery({
@@ -182,6 +182,7 @@ export default function CredentialsPage() {
         <MasterPasswordModal
           isOpen={showMasterPasswordModal}
           onUnlock={() => setShowMasterPasswordModal(false)}
+          onClose={() => setShowMasterPasswordModal(false)}
           isFirstTime={!user?.has_vault_keys}
         />
       </>
@@ -338,6 +339,7 @@ export default function CredentialsPage() {
       <MasterPasswordModal
         isOpen={showMasterPasswordModal}
         onUnlock={() => setShowMasterPasswordModal(false)}
+        onClose={() => setShowMasterPasswordModal(false)}
         isFirstTime={!user?.has_vault_keys}
       />
 

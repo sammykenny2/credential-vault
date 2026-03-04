@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { Lock, Eye, EyeOff } from 'lucide-react'
+import { Lock, Eye, EyeOff, X } from 'lucide-react'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
@@ -15,12 +15,14 @@ import { setupVault, unlockVault } from '@/lib/crypto'
 interface MasterPasswordModalProps {
   isOpen: boolean
   onUnlock: () => void
+  onClose?: () => void
   isFirstTime?: boolean
 }
 
 export default function MasterPasswordModal({
   isOpen,
   onUnlock,
+  onClose,
   isFirstTime = false,
 }: MasterPasswordModalProps) {
   const { setKeys } = useVaultKey()
@@ -122,9 +124,32 @@ export default function MasterPasswordModal({
 
   if (!isOpen) return null
 
+  const handleClose = () => {
+    if (onClose) {
+      setError('')
+      setPasswordInput('')
+      setConfirmPassword('')
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 m-4">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={onClose ? handleClose : undefined}
+    >
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 m-4 relative" onClick={(e) => e.stopPropagation()}>
+        {/* Close button */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={handleClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+
         {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
