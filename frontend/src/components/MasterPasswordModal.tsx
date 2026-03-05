@@ -77,30 +77,23 @@ export default function MasterPasswordModal({
           return
         }
 
-        // Fetch user's key material from the /auth/me response
-        // The public_key and encrypted_private_key are stored on the user
-        // We need to get them from the server
-        const meResponse = await fetch('/api/v1/auth/me', {
+        // Fetch vault key material
+        const keyResponse = await fetch('/api/v1/auth/vault/keys', {
           headers: {
             'Authorization': `Bearer ${useAuthStore.getState().accessToken}`,
           },
         })
-        const meData = await meResponse.json()
-
-        // Also fetch vault key material
-        const keyResponse = await fetch('/api/v1/users/me', {
-          headers: {
-            'Authorization': `Bearer ${useAuthStore.getState().accessToken}`,
-          },
-        })
+        if (!keyResponse.ok) {
+          throw new Error('Failed to fetch vault keys')
+        }
         const keyData = await keyResponse.json()
 
         // Try to decrypt the private key
         const keys = await unlockVault(
           password,
-          keyData.key_salt || meData.key_salt,
-          keyData.encrypted_private_key || meData.encrypted_private_key,
-          keyData.public_key || meData.public_key,
+          keyData.key_salt,
+          keyData.encrypted_private_key,
+          keyData.public_key,
         )
 
         // Store decrypted keys in memory

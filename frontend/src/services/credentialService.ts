@@ -3,7 +3,7 @@ import type { Credential, CredentialListItem, CredentialCreate } from '@/types'
 
 export const credentialService = {
   async list(includeRevoked = false): Promise<CredentialListItem[]> {
-    const response = await api.get<CredentialListItem[]>('/credentials', {
+    const response = await api.get<CredentialListItem[]>('/credentials/', {
       params: { include_revoked: includeRevoked },
     })
     return response.data

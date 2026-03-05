@@ -130,6 +130,21 @@ async def get_current_user_info(current_user: CurrentUser):
     }
 
 
+@router.get("/vault/keys")
+async def get_vault_keys(current_user: CurrentUser):
+    """Get vault key material for unlocking the vault client-side."""
+    if not current_user.has_vault_keys:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vault keys not configured",
+        )
+    return {
+        "public_key": current_user.public_key,
+        "encrypted_private_key": current_user.encrypted_private_key,
+        "key_salt": current_user.key_salt,
+    }
+
+
 @router.post("/vault/setup")
 async def setup_vault(
     request: Request,

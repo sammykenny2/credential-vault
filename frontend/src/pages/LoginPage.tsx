@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
@@ -62,10 +62,13 @@ export default function LoginPage() {
     },
   })
 
-  // Auto-process OAuth callback if code is present
+  // Auto-process OAuth callback if code is present (ref prevents double-fire in strict mode)
+  const oauthProcessed = useRef(false)
   useEffect(() => {
     const code = searchParams.get('code')
-    if (code && !oauthCallbackMutation.isPending) {
+    if (code && !oauthProcessed.current) {
+      oauthProcessed.current = true
+      window.history.replaceState({}, '', '/login')
       oauthCallbackMutation.mutate()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
