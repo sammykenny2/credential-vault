@@ -8,11 +8,12 @@ import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialForm from '@/components/CredentialForm'
 import CredentialDetail from '@/components/CredentialDetail'
 import TemplateSelector from '@/components/TemplateSelector'
-import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban } from 'lucide-react'
+import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive } from 'lucide-react'
 import clsx from 'clsx'
 import type { Credential, CredentialListItem, CredentialTemplate } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
 import { recordTemplateUsage } from '@/lib/templateStorage'
+import CredentialBackupDialog from '@/components/CredentialBackupDialog'
 
 // Decrypted credential cache entry
 interface DecryptedCredentialEntry {
@@ -40,6 +41,7 @@ export default function CredentialsPage() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [decryptedCache, setDecryptedCache] = useState<DecryptedCredentialEntry[]>([])
   const [isDecrypting, setIsDecrypting] = useState(false)
+  const [showBackupDialog, setShowBackupDialog] = useState(false)
 
   // Auto-open modal only for first-time vault setup
   useEffect(() => {
@@ -196,13 +198,23 @@ export default function CredentialsPage() {
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Credentials</h1>
-        <button
-          onClick={handleAddCredential}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Add Credential
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowBackupDialog(true)}
+            className="btn btn-secondary flex items-center gap-2"
+            title="Backup / Restore"
+          >
+            <Archive className="w-4 h-4" />
+            <span className="hidden sm:inline">Backup</span>
+          </button>
+          <button
+            onClick={handleAddCredential}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Add Credential
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -369,6 +381,15 @@ export default function CredentialsPage() {
           setShowDetail(false)
           setSelectedCredential(null)
         }}
+      />
+
+      <CredentialBackupDialog
+        isOpen={showBackupDialog}
+        onClose={() => setShowBackupDialog(false)}
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['credentials'] })
+        }}
+        decryptedCache={decryptedCache}
       />
     </div>
   )

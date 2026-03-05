@@ -32,4 +32,18 @@ export const credentialService = {
   async delete(id: string): Promise<void> {
     await api.delete(`/credentials/${id}`)
   },
+
+  async importBatch(
+    credentials: Array<{ encrypted_data: string; expires_at?: string | null }>
+  ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    const response = await api.post<{ imported: number; skipped: number; errors: string[] }>(
+      '/credentials/import',
+      { credentials, format: 'json' }
+    )
+    return response.data
+  },
+
+  async deleteAll(ids: string[]): Promise<void> {
+    await Promise.all(ids.map((id) => api.delete(`/credentials/${id}`)))
+  },
 }
