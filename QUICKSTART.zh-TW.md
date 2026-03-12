@@ -84,6 +84,21 @@ pip install -e ".[dev]"
 
 #### 設定本地 PostgreSQL
 
+**方式一：使用 Docker（推薦）**
+
+```bash
+docker run --name postgres-local \
+  -e POSTGRES_USER=vault \
+  -e "POSTGRES_PASSWORD=your-password" \
+  -e POSTGRES_DB=credential_vault \
+  -p 5432:5432 \
+  -d postgres:16-alpine
+```
+
+> 如果密碼含有 `!`、`$` 等特殊字元，請用單引號包裹：`-e 'POSTGRES_PASSWORD=my!p@ss'`
+
+**方式二：本機安裝 PostgreSQL**
+
 確保 PostgreSQL 服務已啟動，並建立資料庫：
 
 ```sql
@@ -93,10 +108,24 @@ CREATE USER vault WITH PASSWORD 'your-password';
 GRANT ALL PRIVILEGES ON DATABASE credential_vault TO vault;
 ```
 
-更新 `.env` 中的 `DATABASE_URL`：
+**設定連線**
+
+`.env` 中可以保留佔位值：
 
 ```
-DATABASE_URL=postgresql+asyncpg://vault:your-password@localhost:5432/credential_vault
+DATABASE_URL=postgresql+asyncpg://vault:dummy@localhost:5432/credential_vault
+```
+
+實際密碼透過 OS 環境變數覆蓋（不會存在任何檔案中）：
+
+```powershell
+# PowerShell
+$env:DATABASE_URL = "postgresql+asyncpg://vault:你的真實密碼@localhost:5432/credential_vault"
+```
+
+```bash
+# Bash / Git Bash
+export DATABASE_URL="postgresql+asyncpg://vault:你的真實密碼@localhost:5432/credential_vault"
 ```
 
 #### 執行資料庫遷移

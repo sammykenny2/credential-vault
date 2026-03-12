@@ -10,6 +10,7 @@ import { Lock, Eye, EyeOff, X } from 'lucide-react'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
+import api from '@/services/api'
 import { setupVault, unlockVault } from '@/lib/crypto'
 
 interface MasterPasswordModalProps {
@@ -77,16 +78,8 @@ export default function MasterPasswordModal({
           return
         }
 
-        // Fetch vault key material
-        const keyResponse = await fetch('/api/v1/auth/vault/keys', {
-          headers: {
-            'Authorization': `Bearer ${useAuthStore.getState().accessToken}`,
-          },
-        })
-        if (!keyResponse.ok) {
-          throw new Error('Failed to fetch vault keys')
-        }
-        const keyData = await keyResponse.json()
+        // Fetch vault key material (uses axios with auto token refresh)
+        const { data: keyData } = await api.get('/auth/vault/keys')
 
         // Try to decrypt the private key
         const keys = await unlockVault(
