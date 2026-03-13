@@ -7,7 +7,7 @@ interface UserAdminRead extends User {
 
 export const userService = {
   async list(): Promise<UserAdminRead[]> {
-    const response = await api.get<UserAdminRead[]>('/users')
+    const response = await api.get<UserAdminRead[]>('/users/')
     return response.data
   },
 
@@ -17,7 +17,7 @@ export const userService = {
   },
 
   async create(data: UserCreate): Promise<User> {
-    const response = await api.post<User>('/users', data)
+    const response = await api.post<User>('/users/', data)
     return response.data
   },
 

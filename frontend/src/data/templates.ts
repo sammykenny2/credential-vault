@@ -199,6 +199,17 @@ const developmentTemplates: CredentialTemplate[] = [
     ],
     'Discord bot credentials'
   ),
+  createBuiltInTemplate(
+    'development',
+    'Telegram App',
+    '✈️',
+    [
+      { key: 'API ID', placeholder: '1234567', isSecret: false, required: true },
+      { key: 'API Hash', placeholder: '0123456789abcdef0123456789abcdef', isSecret: true, required: true },
+      { key: 'Session String', placeholder: 'Pyrogram/Telethon session string', isSecret: true },
+    ],
+    'Telegram API application credentials'
+  ),
 ]
 
 // =============================================================================

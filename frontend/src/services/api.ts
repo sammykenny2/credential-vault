@@ -69,10 +69,12 @@ api.interceptors.response.use(
 
           originalRequest.headers.Authorization = `Bearer ${access_token}`
           return api(originalRequest)
-        } catch {
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError)
           isRefreshing = false
           refreshSubscribers = []
           useAuthStore.getState().logout()
+          return Promise.reject(refreshError)
         }
       }
     }

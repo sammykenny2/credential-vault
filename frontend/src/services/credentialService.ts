@@ -15,7 +15,7 @@ export const credentialService = {
   },
 
   async create(data: CredentialCreate): Promise<Credential> {
-    const response = await api.post<Credential>('/credentials', data)
+    const response = await api.post<Credential>('/credentials/', data)
     return response.data
   },
 

@@ -69,6 +69,19 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
   },
 }))
 
+// Stable getters — defined outside the hook so they never change reference
+function getPrivateKey(): CryptoKey | null {
+  const store = useVaultKeyStore.getState()
+  store.checkTimeout()
+  return store.privateKey
+}
+
+function getPublicKey(): CryptoKey | null {
+  const store = useVaultKeyStore.getState()
+  store.checkTimeout()
+  return store.publicKey
+}
+
 /**
  * Hook to access vault key functionality.
  */
@@ -81,16 +94,8 @@ export function useVaultKey() {
     setKeys: store.setKeys,
     clearKeys: store.clearKeys,
     updateActivity: store.updateActivity,
-    getPrivateKey: () => {
-      store.checkTimeout()
-      store.updateActivity()
-      return store.privateKey
-    },
-    getPublicKey: () => {
-      store.checkTimeout()
-      store.updateActivity()
-      return store.publicKey
-    },
+    getPrivateKey,
+    getPublicKey,
   }
 }
 

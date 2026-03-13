@@ -57,7 +57,7 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
     } finally {
       setIsProcessing(false)
     }
-  }, [getPublicKey])
+  }, [])
 
   const decrypt = useCallback(async (encryptedData: string): Promise<CredentialData | null> => {
     const privateKey = getPrivateKey()
@@ -80,7 +80,7 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
     } finally {
       setIsProcessing(false)
     }
-  }, [getPrivateKey])
+  }, [])
 
   const clearError = useCallback(() => {
     setError(null)
