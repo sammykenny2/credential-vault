@@ -20,9 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add OAUTH_LOGIN, VAULT_SETUP, VAULT_UNLOCK to auditaction enum."""
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'OAUTH_LOGIN'")
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'VAULT_SETUP'")
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'VAULT_UNLOCK'")
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'OAUTH_LOGIN'")
+        op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'VAULT_SETUP'")
+        op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'VAULT_UNLOCK'")
 
 
 def downgrade() -> None:
