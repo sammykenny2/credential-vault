@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from app.api.deps import AdminUser, CurrentUser, DbSession
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
+from app.schemas.auth import GoogleOAuthCallback
 from app.schemas.user import UserAdminRead, UserCreate, UserRead, UserRoleUpdate, UserUpdate
 from app.services.audit_log import AuditLogService
 from app.services.user import UserService
@@ -32,6 +33,57 @@ async def update_me(
     user_service = UserService(db)
     updated_user = await user_service.update(current_user, data)
     return updated_user
+
+
+@router.post("/me/link-google", response_model=UserRead)
+async def link_google_account(
+    request: Request,
+    data: GoogleOAuthCallback,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Link a Google account to the current user.
+
+    Used by setup-wizard admins who have a placeholder google_id (setup-*)
+    to bind their real Google account for OAuth login.
+    """
+    from app.api.v1.oauth import exchange_google_code
+
+    # Exchange the OAuth code for Google user info
+    google_info = await exchange_google_code(data.code, data.redirect_uri)
+    google_id = google_info["google_id"]
+    google_email = google_info["email"]
+
+    # Verify email matches (case-insensitive)
+    if current_user.email.lower() != google_email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account email does not match your account email",
+        )
+
+    # Check google_id not already used by another user
+    user_service = UserService(db)
+    existing = await user_service.get_by_google_id(google_id)
+    if existing and existing.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Google account is already linked to another user",
+        )
+
+    # Link the account
+    await user_service.link_google_account(current_user, google_id)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.GOOGLE_ACCOUNT_LINKED,
+        user_id=current_user.id,
+        details={"google_id": google_id},
+    )
+
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
 
 
 # ==================== Admin Endpoints ====================

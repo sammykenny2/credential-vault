@@ -27,4 +27,14 @@ export const authService = {
   async setupVault(data: VaultSetupRequest): Promise<void> {
     await api.post('/auth/vault/setup', data)
   },
+
+  async verifyPassword(password: string): Promise<{ verified: boolean }> {
+    const response = await api.post<{ verified: boolean }>('/auth/verify-password', { password })
+    return response.data
+  },
+
+  async linkGoogleAccount(data: GoogleOAuthCallback): Promise<User> {
+    const response = await api.post<User>('/users/me/link-google', data)
+    return response.data
+  },
 }

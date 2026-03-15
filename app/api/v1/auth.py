@@ -7,7 +7,7 @@ from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import SecurityService
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
-from app.schemas.auth import LocalLoginRequest, Token, VaultSetupRequest
+from app.schemas.auth import LocalLoginRequest, Token, VerifyPasswordRequest, VaultSetupRequest
 from app.services.audit_log import AuditLogService
 from app.services.user import UserService
 
@@ -127,7 +127,30 @@ async def get_current_user_info(current_user: CurrentUser):
         "display_name": current_user.display_name,
         "role": current_user.role,
         "has_vault_keys": current_user.has_vault_keys,
+        "has_google_linked": current_user.has_google_linked,
     }
+
+
+@router.post("/verify-password")
+async def verify_password(
+    data: VerifyPasswordRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Verify user's password (for sensitive operations like linking Google account)."""
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No password set for this account",
+        )
+
+    if not SecurityService.verify_password(data.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password",
+        )
+
+    return {"verified": True}
 
 
 @router.get("/vault/keys")

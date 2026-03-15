@@ -1,10 +1,14 @@
+import { useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
+import { authService } from '@/services/authService'
 import { User, FileText, ShieldCheck } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
 import WebAuthnPanel from '@/components/WebAuthnPanel'
+import PasswordVerifyModal from '@/components/PasswordVerifyModal'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
 
   return (
     <div className="max-w-2xl">
@@ -31,7 +35,24 @@ export default function SettingsPage() {
           </div>
           <div>
             <label className="text-sm text-gray-500">Authentication</label>
-            <p className="font-medium">Google OAuth</p>
+            {user?.has_google_linked ? (
+              <div className="flex items-center gap-2">
+                <p className="font-medium">Google OAuth</p>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Linked
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <p className="font-medium">Local (password)</p>
+                <button
+                  onClick={() => setShowPasswordModal(true)}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Link Google Account
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -73,6 +94,24 @@ export default function SettingsPage() {
         </div>
         <TemplateManager />
       </section>
+
+      {showPasswordModal && (
+        <PasswordVerifyModal
+          onClose={() => setShowPasswordModal(false)}
+          onVerified={async () => {
+            setShowPasswordModal(false)
+            localStorage.setItem('oauth_action', 'link')
+            try {
+              const redirectUri = `${window.location.origin}/login`
+              const authUrl = await authService.getGoogleAuthUrl(redirectUri)
+              window.location.href = authUrl
+            } catch {
+              // If Google auth URL fails, clean up
+              localStorage.removeItem('oauth_action')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

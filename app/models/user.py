@@ -95,5 +95,10 @@ class User(Base, TimestampMixin):
         """Check if user has set up E2EE vault keys."""
         return self.public_key is not None and self.encrypted_private_key is not None
 
+    @property
+    def has_google_linked(self) -> bool:
+        """Check if user has a real Google account linked (not a setup placeholder)."""
+        return self.google_id is not None and not self.google_id.startswith("setup-")
+
     def __repr__(self) -> str:
         return f"<User {self.email}>"

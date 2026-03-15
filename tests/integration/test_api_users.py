@@ -1,11 +1,156 @@
 """Integration tests for user management API endpoints."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 
 from app.core.security import SecurityService
 from app.models.user import UserRole
 from app.services.user import UserService
+
+
+class TestUserMeAPI:
+    """Test /users/me endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_me_includes_has_google_linked(self, client: AsyncClient, db_session):
+        """Test that /users/me response includes has_google_linked field."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="me@example.com",
+            display_name="Me User",
+            google_id="google-me-123",
+        )
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        response = await client.get(
+            "/api/v1/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "has_google_linked" in data
+        assert data["has_google_linked"] is True
+
+
+class TestLinkGoogleAccountAPI:
+    """Test POST /users/me/link-google endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_link_google_success(self, client: AsyncClient, db_session):
+        """Test successfully linking a Google account."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="setup-admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        user.hashed_password = SecurityService.hash_password("password")
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        mock_google_info = {
+            "google_id": "real-google-id-123",
+            "email": "admin@example.com",
+            "display_name": "Admin",
+        }
+
+        with patch(
+            "app.api.v1.oauth.exchange_google_code",
+            new_callable=AsyncMock,
+            return_value=mock_google_info,
+        ):
+            response = await client.post(
+                "/api/v1/users/me/link-google",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"code": "fake-code", "redirect_uri": "http://test/login"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["has_google_linked"] is True
+
+    @pytest.mark.asyncio
+    async def test_link_google_email_mismatch(self, client: AsyncClient, db_session):
+        """Test linking fails when Google email doesn't match."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="setup-admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        mock_google_info = {
+            "google_id": "real-google-id-123",
+            "email": "different@example.com",
+            "display_name": "Different User",
+        }
+
+        with patch(
+            "app.api.v1.oauth.exchange_google_code",
+            new_callable=AsyncMock,
+            return_value=mock_google_info,
+        ):
+            response = await client.post(
+                "/api/v1/users/me/link-google",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"code": "fake-code", "redirect_uri": "http://test/login"},
+            )
+
+        assert response.status_code == 400
+        assert "email does not match" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_link_google_id_conflict(self, client: AsyncClient, db_session):
+        """Test linking fails when Google ID is already used by another user."""
+        service = UserService(db_session)
+
+        # Create another user who already has this google_id
+        await service.create_oauth_user(
+            email="other@example.com",
+            display_name="Other",
+            google_id="taken-google-id",
+        )
+
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="setup-admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        mock_google_info = {
+            "google_id": "taken-google-id",
+            "email": "admin@example.com",
+            "display_name": "Admin",
+        }
+
+        with patch(
+            "app.api.v1.oauth.exchange_google_code",
+            new_callable=AsyncMock,
+            return_value=mock_google_info,
+        ):
+            response = await client.post(
+                "/api/v1/users/me/link-google",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"code": "fake-code", "redirect_uri": "http://test/login"},
+            )
+
+        assert response.status_code == 409
+        assert "already linked" in response.json()["detail"]
 
 
 class TestUserRoleAPI:

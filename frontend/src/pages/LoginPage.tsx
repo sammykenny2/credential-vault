@@ -14,12 +14,14 @@ export default function LoginPage() {
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [checkingSetup, setCheckingSetup] = useState(true)
 
-  // If already authenticated, redirect to dashboard
+  // If already authenticated, redirect to dashboard (unless handling link callback)
   useEffect(() => {
-    if (isAuthenticated) {
+    const code = searchParams.get('code')
+    const oauthAction = localStorage.getItem('oauth_action')
+    if (isAuthenticated && !(code && oauthAction === 'link')) {
       navigate('/dashboard')
     }
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated, navigate, searchParams])
 
   // Check if setup is needed (no admin exists)
   useEffect(() => {
@@ -46,21 +48,39 @@ export default function LoginPage() {
 
   // Handle OAuth callback (code in URL params)
   const oauthCallbackMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const code = searchParams.get('code')
       if (!code) throw new Error('No OAuth code')
+
+      const oauthAction = localStorage.getItem('oauth_action')
+
+      if (oauthAction === 'link') {
+        // Link Google account flow — user is already authenticated
+        localStorage.removeItem('oauth_action')
+        const updatedUser = await authService.linkGoogleAccount({
+          code,
+          redirect_uri: `${window.location.origin}/login`,
+        })
+        setUser(updatedUser)
+        navigate('/settings')
+        return null
+      }
+
+      // Normal login flow
       return authService.googleCallback({
         code,
         redirect_uri: `${window.location.origin}/login`,
       })
     },
     onSuccess: async (data) => {
+      if (!data) return // Link flow already handled
       setTokens(data.access_token, data.refresh_token)
       const user = await authService.getMe()
       setUser(user)
       navigate('/dashboard')
     },
     onError: () => {
+      localStorage.removeItem('oauth_action')
       setError('Authentication failed. Please try again.')
       // Clear the OAuth code from URL
       window.history.replaceState({}, '', '/login')

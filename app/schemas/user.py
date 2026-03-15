@@ -42,6 +42,7 @@ class UserRead(UserBase):
     role: UserRole
     is_active: bool
     has_vault_keys: bool
+    has_google_linked: bool
     created_at: datetime
     last_login_at: datetime | None
 

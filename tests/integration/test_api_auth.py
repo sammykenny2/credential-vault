@@ -44,6 +44,7 @@ class TestAuthAPI:
         assert data["email"] == test_user_data["email"]
         assert data["display_name"] == "Test User"
         assert "has_vault_keys" in data
+        assert "has_google_linked" in data
 
     @pytest.mark.asyncio
     async def test_get_me_unauthenticated(self, client: AsyncClient):
@@ -232,3 +233,100 @@ class TestBreakGlassLogin:
         )
 
         assert response.status_code == 401
+
+
+class TestVerifyPassword:
+    """Test password verification endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_verify_password_correct(self, client: AsyncClient, db_session):
+        """Test that correct password returns verified=true."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="setup-admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        user.hashed_password = SecurityService.hash_password("my-password")
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        response = await client.post(
+            "/api/v1/auth/verify-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"password": "my-password"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["verified"] is True
+
+    @pytest.mark.asyncio
+    async def test_verify_password_wrong(self, client: AsyncClient, db_session):
+        """Test that wrong password returns 401."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="setup-admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        user.hashed_password = SecurityService.hash_password("correct-pw")
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        response = await client.post(
+            "/api/v1/auth/verify-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"password": "wrong-pw"},
+        )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_verify_password_no_password_set(self, client: AsyncClient, db_session):
+        """Test that user without password returns 400."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="oauthuser@example.com",
+            display_name="OAuth User",
+            google_id="google-oauth-user",
+        )
+        await db_session.commit()
+
+        token = SecurityService.create_access_token(user.id)
+
+        response = await client.post(
+            "/api/v1/auth/verify-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"password": "any-password"},
+        )
+
+        assert response.status_code == 400
+
+
+class TestHasGoogleLinked:
+    """Test has_google_linked property on User model."""
+
+    def test_real_google_id(self):
+        """User with a real Google ID has google linked."""
+        from app.models.user import User
+
+        user = User(email="a@b.com", display_name="A", google_id="1234567890")
+        assert user.has_google_linked is True
+
+    def test_setup_placeholder(self):
+        """User with setup-* placeholder does not have google linked."""
+        from app.models.user import User
+
+        user = User(email="a@b.com", display_name="A", google_id="setup-a@b.com")
+        assert user.has_google_linked is False
+
+    def test_none_google_id(self):
+        """User with no google_id does not have google linked."""
+        from app.models.user import User
+
+        user = User(email="a@b.com", display_name="A", google_id=None)
+        assert user.has_google_linked is False

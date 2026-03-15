@@ -43,6 +43,12 @@ class VaultSetupRequest(BaseModel):
     key_salt: str
 
 
+class VerifyPasswordRequest(BaseModel):
+    """Request to verify user's password."""
+
+    password: str
+
+
 class LocalLoginRequest(BaseModel):
     """Break-glass local login request (admin only)."""
 

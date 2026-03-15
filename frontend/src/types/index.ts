@@ -7,6 +7,7 @@ export interface User {
   display_name: string
   role: UserRole
   has_vault_keys: boolean
+  has_google_linked: boolean
   is_active: boolean
   created_at: string
   last_login_at: string | null

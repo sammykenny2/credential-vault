@@ -42,6 +42,7 @@ class AuditAction(enum.StrEnum):
     USER_REACTIVATED = "user_reactivated"
     USER_DELETED = "user_deleted"
     USER_ROLE_CHANGED = "user_role_changed"
+    GOOGLE_ACCOUNT_LINKED = "google_account_linked"
 
 
 class AuditLog(Base):

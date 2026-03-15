@@ -51,40 +51,29 @@ async def google_authorize(redirect_uri: str):
     return {"authorization_url": f"{GOOGLE_AUTH_URL}?{urlencode(params)}"}
 
 
-@router.post("/google/callback", response_model=Token)
-@limiter.limit(AUTH_RATE_LIMIT)
-async def google_callback(
-    request: Request,
-    data: GoogleOAuthCallback,
-    db: DbSession,
-):
-    """Exchange Google OAuth code for tokens and authenticate user.
+async def exchange_google_code(code: str, redirect_uri: str) -> dict:
+    """Exchange a Google OAuth authorization code for user info.
 
-    Creates a new user account if one doesn't exist for the Google account.
+    Returns dict with keys: google_id, email, display_name.
+    Raises HTTPException on failure.
     """
     settings = get_settings()
-    audit_service = AuditLogService(db)
 
     # Exchange code for Google tokens
     async with httpx.AsyncClient() as client:
         token_response = await client.post(
             GOOGLE_TOKEN_URL,
             data={
-                "code": data.code,
+                "code": code,
                 "client_id": settings.google_client_id,
                 "client_secret": settings.google_client_secret,
-                "redirect_uri": data.redirect_uri,
+                "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
         )
 
     if token_response.status_code != 200:
         logger.warning("Google token exchange failed: %s", token_response.text)
-        await audit_service.log_from_request(
-            request,
-            action=AuditAction.LOGIN_FAILURE,
-            details={"reason": "google_token_exchange_failed"},
-        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Failed to authenticate with Google",
@@ -116,6 +105,36 @@ async def google_callback(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Google user info",
         )
+
+    return {"google_id": google_id, "email": email, "display_name": display_name}
+
+
+@router.post("/google/callback", response_model=Token)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def google_callback(
+    request: Request,
+    data: GoogleOAuthCallback,
+    db: DbSession,
+):
+    """Exchange Google OAuth code for tokens and authenticate user.
+
+    Creates a new user account if one doesn't exist for the Google account.
+    """
+    audit_service = AuditLogService(db)
+
+    try:
+        google_info = await exchange_google_code(data.code, data.redirect_uri)
+    except HTTPException:
+        await audit_service.log_from_request(
+            request,
+            action=AuditAction.LOGIN_FAILURE,
+            details={"reason": "google_token_exchange_failed"},
+        )
+        raise
+
+    google_id = google_info["google_id"]
+    email = google_info["email"]
+    display_name = google_info["display_name"]
 
     user_service = UserService(db)
 
