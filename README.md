@@ -38,6 +38,7 @@ cp .env.example .env
 python -m venv .venv
 .venv\Scripts\activate  # Windows
 pip install -e ".[dev]"
+alembic upgrade head
 uvicorn app.main:app --reload
 
 # Production (Docker)
@@ -68,6 +69,7 @@ credential-vault/
 ├── docs/              # Documentation
 ├── scripts/           # Build/deployment scripts
 ├── config/            # Configuration files
+├── data/              # SQLite database (auto-created)
 └── docker-compose.yaml
 ```
 

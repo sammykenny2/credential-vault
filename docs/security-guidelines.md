@@ -19,10 +19,10 @@ This document outlines security practices for developers and AI agents working o
 
 ```bash
 # CORRECT: Use .env (not committed)
-DATABASE_URL=postgresql://user:password@localhost/db
+DATABASE_URL=sqlite+aiosqlite:///data/credential_vault.db
 
 # Provide template in .env.example (committed)
-DATABASE_URL=postgresql://user:password@localhost/db
+# DATABASE_URL=sqlite+aiosqlite:///data/credential_vault.db
 ```
 
 ### Pre-commit Check

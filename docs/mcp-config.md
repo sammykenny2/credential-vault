@@ -42,7 +42,7 @@ Location: `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
       "args": ["-m", "mcp_server"],
       "cwd": "C:/path/to/project",
       "env": {
-        "DATABASE_URL": "postgresql://localhost/db"
+        "DATABASE_URL": "sqlite+aiosqlite:///data/credential_vault.db"
       }
     }
   }

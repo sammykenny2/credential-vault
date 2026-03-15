@@ -8,7 +8,6 @@
 
 - [x] Python 3.11+
 - [x] Node.js 18+
-- [x] PostgreSQL 16
 - [x] Docker & Docker Compose (for production deployment)
 
 ## Installation
@@ -56,10 +55,12 @@ npm install
 yarn install
 ```
 
-### 4. Database Setup (if applicable)
+### 4. Database Setup
+
+The project uses SQLite — no external database needed. Initialize with:
 
 ```bash
-# (Add database setup commands)
+alembic upgrade head
 ```
 
 ### 5. Verify Installation
@@ -100,4 +101,4 @@ npm run dev
 
 ---
 
-*Last updated: 2026-02-05*
+*Last updated: 2026-03-15*

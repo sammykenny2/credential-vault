@@ -95,7 +95,7 @@ If an agent realizes it has violated a MUST/MUST NOT directive:
 |----------|------------|---------|
 | Language | Python | 3.11+ |
 | Framework | FastAPI | 0.109+ |
-| Database | PostgreSQL | 16 |
+| Database | SQLite | 3 |
 | ORM | SQLAlchemy (async) | 2.0+ |
 | Migration | Alembic | 1.13+ |
 | Testing | pytest | 7.0+ |

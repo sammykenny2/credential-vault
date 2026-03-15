@@ -24,7 +24,6 @@
 |------|----------|------|
 | Python | 3.11+ | 後端執行環境 |
 | Node.js | 18+ | 前端建置工具 |
-| PostgreSQL | 16 | 資料庫 |
 | Git | 2.0+ | 版本控制 |
 
 ### Docker 部署
@@ -82,51 +81,9 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-#### 設定本地 PostgreSQL
+#### 初始化資料庫
 
-**方式一：使用 Docker（推薦）**
-
-```bash
-docker run --name postgres-local \
-  -e POSTGRES_USER=vault \
-  -e "POSTGRES_PASSWORD=your-password" \
-  -e POSTGRES_DB=credential_vault \
-  -p 5432:5432 \
-  -d postgres:16-alpine
-```
-
-> 如果密碼含有 `!`、`$` 等特殊字元，請用單引號包裹：`-e 'POSTGRES_PASSWORD=my!p@ss'`
-
-**方式二：本機安裝 PostgreSQL**
-
-確保 PostgreSQL 服務已啟動，並建立資料庫：
-
-```sql
--- 使用 psql 或資料庫管理工具執行
-CREATE DATABASE credential_vault;
-CREATE USER vault WITH PASSWORD 'your-password';
-GRANT ALL PRIVILEGES ON DATABASE credential_vault TO vault;
-```
-
-**設定連線**
-
-`.env` 中可以保留佔位值：
-
-```
-DATABASE_URL=postgresql+asyncpg://vault:dummy@localhost:5432/credential_vault
-```
-
-實際密碼透過 OS 環境變數覆蓋（不會存在任何檔案中）：
-
-```powershell
-# PowerShell
-$env:DATABASE_URL = "postgresql+asyncpg://vault:你的真實密碼@localhost:5432/credential_vault"
-```
-
-```bash
-# Bash / Git Bash
-export DATABASE_URL="postgresql+asyncpg://vault:你的真實密碼@localhost:5432/credential_vault"
-```
+專案使用 SQLite，無需額外安裝資料庫。資料庫檔案會自動建立在 `data/` 目錄。
 
 #### 執行資料庫遷移
 
@@ -197,7 +154,6 @@ cp .env.example .env
 # 編輯 .env，確保以下值已正確設定：
 # - SECRET_KEY（使用 openssl rand -hex 32 產生）
 # - ENCRYPTION_KEY（使用 openssl rand -hex 32 產生）
-# - DB_PASSWORD（強密碼）
 # - TS_AUTHKEY（Tailscale 認證金鑰）
 ```
 
@@ -283,7 +239,6 @@ docker-compose down -v
 |------|------|------|
 | `SECRET_KEY` | JWT 簽章金鑰（至少 32 字元） | `openssl rand -hex 32` |
 | `ENCRYPTION_KEY` | 憑證加密金鑰 | `openssl rand -hex 32` |
-| `DB_PASSWORD` | 資料庫密碼 | 強密碼 |
 
 ### 應用程式設定
 
@@ -296,9 +251,7 @@ docker-compose down -v
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
-| `DB_USER` | `vault` | 資料庫使用者 |
-| `DB_NAME` | `credential_vault` | 資料庫名稱 |
-| `DATABASE_URL` | - | 完整資料庫 URL（覆蓋上述設定） |
+| `DATABASE_URL` | `sqlite+aiosqlite:///data/credential_vault.db` | 資料庫連線 URL（預設使用 SQLite，免設定） |
 
 ### MFA 設定
 
@@ -403,9 +356,9 @@ curl http://localhost:8000/health
 ### Q: 無法連線到資料庫
 
 **A:** 確認以下事項：
-1. PostgreSQL 服務已啟動
-2. `.env` 中的資料庫連線資訊正確
-3. 資料庫使用者有足夠權限
+1. `data/` 目錄存在且有寫入權限
+2. `.env` 中的 `DATABASE_URL` 路徑正確
+3. 已執行 `alembic upgrade head` 初始化資料庫
 
 ### Q: 前端無法連線到後端 API
 
@@ -453,4 +406,4 @@ vault-cli reset-password --email admin@example.com
 
 ---
 
-*最後更新：2026-02-05*
+*最後更新：2026-03-15*
