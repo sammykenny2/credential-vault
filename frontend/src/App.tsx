@@ -13,10 +13,19 @@ import AdminUsersPage from '@/pages/AdminUsersPage'
 import OfflineIndicator from '@/components/OfflineIndicator'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  // Wait for user data to be loaded (happens after page reload)
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    )
   }
 
   return <>{children}</>
