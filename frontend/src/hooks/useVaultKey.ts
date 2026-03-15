@@ -11,13 +11,15 @@ interface VaultKeyState {
   // RSA key pair (in memory only, never persisted)
   privateKey: CryptoKey | null
   publicKey: CryptoKey | null
+  // Server-registered public key base64 (used to verify key correctness before encryption)
+  expectedPublicKeyBase64: string | null
   // Timestamp when vault was last unlocked
   lastActivity: number | null
   // Session timeout in milliseconds (default: 15 minutes)
   sessionTimeout: number
 
   // Actions
-  setKeys: (privateKey: CryptoKey, publicKey: CryptoKey) => void
+  setKeys: (privateKey: CryptoKey, publicKey: CryptoKey, expectedPublicKeyBase64: string) => void
   clearKeys: () => void
   isUnlocked: () => boolean
   updateActivity: () => void
@@ -27,13 +29,15 @@ interface VaultKeyState {
 export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
   privateKey: null,
   publicKey: null,
+  expectedPublicKeyBase64: null,
   lastActivity: null,
   sessionTimeout: 15 * 60 * 1000, // 15 minutes
 
-  setKeys: (privateKey: CryptoKey, publicKey: CryptoKey) => {
+  setKeys: (privateKey: CryptoKey, publicKey: CryptoKey, expectedPublicKeyBase64: string) => {
     set({
       privateKey,
       publicKey,
+      expectedPublicKeyBase64,
       lastActivity: Date.now(),
     })
   },
@@ -42,6 +46,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
     set({
       privateKey: null,
       publicKey: null,
+      expectedPublicKeyBase64: null,
       lastActivity: null,
     })
   },
@@ -62,7 +67,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
 
     if (Date.now() - lastActivity >= sessionTimeout) {
       // Auto-lock after timeout
-      set({ privateKey: null, publicKey: null })
+      set({ privateKey: null, publicKey: null, expectedPublicKeyBase64: null })
       return true
     }
     return false
@@ -82,6 +87,10 @@ function getPublicKey(): CryptoKey | null {
   return store.publicKey
 }
 
+function getExpectedPublicKeyBase64(): string | null {
+  return useVaultKeyStore.getState().expectedPublicKeyBase64
+}
+
 /**
  * Hook to access vault key functionality.
  */
@@ -96,6 +105,7 @@ export function useVaultKey() {
     updateActivity: store.updateActivity,
     getPrivateKey,
     getPublicKey,
+    getExpectedPublicKeyBase64,
   }
 }
 

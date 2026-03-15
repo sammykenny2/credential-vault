@@ -16,11 +16,24 @@ export const credentialService = {
 
   async create(data: CredentialCreate): Promise<Credential> {
     const response = await api.post<Credential>('/credentials/', data)
+
+    // Verify server stored the encrypted blob correctly
+    if (response.data.encrypted_data !== data.encrypted_data) {
+      await api.delete(`/credentials/${response.data.id}`)
+      throw new Error('Storage integrity check failed: server returned different encrypted data. The credential was not saved.')
+    }
+
     return response.data
   },
 
   async update(id: string, data: Partial<CredentialCreate>): Promise<Credential> {
     const response = await api.patch<Credential>(`/credentials/${id}`, data)
+
+    // Verify server stored the encrypted blob correctly
+    if (data.encrypted_data && response.data.encrypted_data !== data.encrypted_data) {
+      throw new Error('Storage integrity check failed: server returned different encrypted data after update.')
+    }
+
     return response.data
   },
 

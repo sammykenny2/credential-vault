@@ -63,8 +63,8 @@ export default function MasterPasswordModal({
           key_salt: vaultKeys.saltBase64,
         })
 
-        // Store keys in memory
-        setKeys(vaultKeys.privateKey, vaultKeys.publicKey)
+        // Store keys in memory (with server-registered public key for verification)
+        setKeys(vaultKeys.privateKey, vaultKeys.publicKey, vaultKeys.publicKeyBase64)
 
         // Update user state to reflect vault setup
         const updatedUser = await authService.getMe()
@@ -89,8 +89,8 @@ export default function MasterPasswordModal({
           keyData.public_key,
         )
 
-        // Store decrypted keys in memory
-        setKeys(keys.privateKey, keys.publicKey)
+        // Store decrypted keys in memory (with server-registered public key for verification)
+        setKeys(keys.privateKey, keys.publicKey, keyData.public_key)
         onUnlock()
       }
     } catch (err) {

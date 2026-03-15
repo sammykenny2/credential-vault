@@ -9,6 +9,7 @@ import { useVaultKey } from './useVaultKey'
 import {
   encryptCredential,
   decryptCredential,
+  exportPublicKey,
   generatePassword,
   type CredentialData,
 } from '@/lib/crypto'
@@ -32,7 +33,7 @@ interface UseCredentialCryptoResult {
  * Hook for encrypting and decrypting credentials with hybrid E2EE.
  */
 export function useCredentialCrypto(): UseCredentialCryptoResult {
-  const { getPrivateKey, getPublicKey } = useVaultKey()
+  const { getPrivateKey, getPublicKey, getExpectedPublicKeyBase64 } = useVaultKey()
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,6 +49,16 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
     setError(null)
 
     try {
+      // Verify the in-memory public key matches the server-registered key
+      const expectedBase64 = getExpectedPublicKeyBase64()
+      if (expectedBase64) {
+        const currentBase64 = await exportPublicKey(publicKey)
+        if (currentBase64 !== expectedBase64) {
+          setError('Public key mismatch: in-memory key does not match the registered key. Please re-unlock your vault.')
+          return null
+        }
+      }
+
       const encrypted = await encryptCredential(data, publicKey)
       return encrypted
     } catch (err) {
