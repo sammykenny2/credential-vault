@@ -49,16 +49,15 @@ services:
       dockerfile: Dockerfile
     environment:
       - APP_ENV=${APP_ENV:-production}
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-vault}:${DB_PASSWORD}@db:5432/${DB_NAME:-credential_vault}
+      - DATABASE_URL=sqlite+aiosqlite:///data/credential_vault.db
       - SECRET_KEY=${SECRET_KEY}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - TS_HOSTNAME=${TS_HOSTNAME:-credential-vault}
       - REQUIRE_TAILSCALE=${REQUIRE_TAILSCALE:-true}
     env_file:
       - .env
-    depends_on:
-      db:
-        condition: service_healthy
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - vault-internal
@@ -100,48 +99,11 @@ services:
           cpus: '0.5'
     # No ports exposed - access only via Tailscale
 
-  # ============================================
-  # Database (PostgreSQL)
-  # ============================================
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${DB_USER:-vault}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-credential_vault}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - vault-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-vault} -d ${DB_NAME:-credential_vault}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    logging:
-      driver: json-file
-      options:
-        max-size: "25m"
-        max-file: "5"
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-        reservations:
-          memory: 128M
-    shm_size: '128mb'
-    ports:
-      - "5432:5432"
-    # No ports exposed - internal only
 
 # ============================================
 # Volumes
 # ============================================
 volumes:
-  postgres_data:
-    driver: local
   tailscale_state:
     driver: local
 
