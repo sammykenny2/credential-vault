@@ -25,6 +25,18 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+// Disable browser autocomplete on all inputs (credential vault security)
+new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (node instanceof HTMLElement) {
+        const inputs = node.tagName === 'INPUT' ? [node] : node.querySelectorAll('input')
+        inputs.forEach((input) => input.setAttribute('autocomplete', 'off'))
+      }
+    }
+  }
+}).observe(document.getElementById('root')!, { childList: true, subtree: true })
+
 // Register service worker for PWA/offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
