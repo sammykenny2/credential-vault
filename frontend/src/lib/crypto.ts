@@ -118,7 +118,7 @@ export async function importPublicKey(base64Key: string): Promise<CryptoKey> {
     'spki',
     keyData,
     { name: RSA_ALGORITHM, hash: RSA_HASH },
-    false,
+    true, // extractable — public key, safe to export for verification
     ['encrypt']  // Note: wrapKey uses encrypt internally
   )
 }
