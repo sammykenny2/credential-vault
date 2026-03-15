@@ -1,5 +1,5 @@
 import api from './api'
-import type { User, UserCreate } from '@/types'
+import type { User, UserRole } from '@/types'
 
 interface UserAdminRead extends User {
   credential_count: number
@@ -16,8 +16,8 @@ export const userService = {
     return response.data
   },
 
-  async create(data: UserCreate): Promise<User> {
-    const response = await api.post<User>('/users/', data)
+  async updateRole(id: string, role: UserRole): Promise<User> {
+    const response = await api.patch<User>(`/users/${id}/role`, { role })
     return response.data
   },
 
