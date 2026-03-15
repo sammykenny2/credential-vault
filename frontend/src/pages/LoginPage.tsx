@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
-import { Shield, ChevronDown, ChevronUp } from 'lucide-react'
+import { setupService } from '@/services/setupService'
+import { Shield } from 'lucide-react'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -11,11 +12,7 @@ export default function LoginPage() {
   const { setTokens, setUser, isAuthenticated } = useAuthStore()
   const [error, setError] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
-
-  // Break-glass admin login
-  const [showAdminLogin, setShowAdminLogin] = useState(false)
-  const [adminEmail, setAdminEmail] = useState('')
-  const [adminPassword, setAdminPassword] = useState('')
+  const [checkingSetup, setCheckingSetup] = useState(true)
 
   // If already authenticated, redirect to dashboard
   useEffect(() => {
@@ -23,6 +20,29 @@ export default function LoginPage() {
       navigate('/dashboard')
     }
   }, [isAuthenticated, navigate])
+
+  // Check if setup is needed (no admin exists)
+  useEffect(() => {
+    // Don't check setup if we're processing an OAuth callback
+    if (searchParams.get('code')) {
+      setCheckingSetup(false)
+      return
+    }
+
+    setupService
+      .getStatus()
+      .then((status) => {
+        if (!status.is_initialized) {
+          navigate('/admin/setup', { replace: true })
+        } else {
+          setCheckingSetup(false)
+        }
+      })
+      .catch(() => {
+        // If status check fails, show login anyway
+        setCheckingSetup(false)
+      })
+  }, [navigate, searchParams])
 
   // Handle OAuth callback (code in URL params)
   const oauthCallbackMutation = useMutation({
@@ -44,21 +64,6 @@ export default function LoginPage() {
       setError('Authentication failed. Please try again.')
       // Clear the OAuth code from URL
       window.history.replaceState({}, '', '/login')
-    },
-  })
-
-  // Break-glass local login mutation
-  const localLoginMutation = useMutation({
-    mutationFn: () => authService.login(adminEmail, adminPassword),
-    onSuccess: async (data) => {
-      setTokens(data.access_token, data.refresh_token)
-      const user = await authService.getMe()
-      setUser(user)
-      navigate('/dashboard')
-    },
-    onError: (err: unknown) => {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(message || 'Login failed. Check your credentials.')
     },
   })
 
@@ -86,13 +91,15 @@ export default function LoginPage() {
     }
   }
 
-  const handleLocalLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    localLoginMutation.mutate()
-  }
+  const isProcessing = oauthCallbackMutation.isPending || isRedirecting
 
-  const isProcessing = oauthCallbackMutation.isPending || isRedirecting || localLoginMutation.isPending
+  if (checkingSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -141,45 +148,6 @@ export default function LoginPage() {
             {isProcessing ? 'Signing in...' : 'Sign in with Google'}
           </span>
         </button>
-
-        {/* Admin Break-Glass Login */}
-        <div className="mt-6 border-t border-gray-200 pt-4">
-          <button
-            onClick={() => setShowAdminLogin(!showAdminLogin)}
-            className="w-full flex items-center justify-center gap-2 text-xs text-gray-400 hover:text-gray-600"
-          >
-            Admin Login
-            {showAdminLogin ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-
-          {showAdminLogin && (
-            <form onSubmit={handleLocalLogin} className="mt-3 space-y-3">
-              <input
-                type="email"
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                placeholder="Admin email"
-                className="input text-sm"
-                required
-              />
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="Password"
-                className="input text-sm"
-                required
-              />
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full btn btn-secondary text-sm"
-              >
-                {localLoginMutation.isPending ? 'Signing in...' : 'Sign in as Admin'}
-              </button>
-            </form>
-          )}
-        </div>
 
         {/* Info */}
         <p className="text-xs text-gray-400 text-center mt-6">

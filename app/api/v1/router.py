@@ -8,6 +8,7 @@ from app.api.v1 import (
     credentials,
     health,
     oauth,
+    setup,
     stubs,
     templates,
     tools,
@@ -26,4 +27,5 @@ api_router.include_router(audit.router, prefix="/audit-logs", tags=["audit"])
 api_router.include_router(tools.router, prefix="/tools", tags=["tools"])
 api_router.include_router(health.router, prefix="/credential-health", tags=["health"])
 api_router.include_router(webauthn.router, prefix="/webauthn", tags=["webauthn"])
+api_router.include_router(setup.router, prefix="/setup", tags=["setup"])
 api_router.include_router(stubs.router, tags=["offline-features"])

@@ -4,6 +4,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
+import AdminSetupPage from '@/pages/AdminSetupPage'
+import AdminLoginPage from '@/pages/AdminLoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import CredentialsPage from '@/pages/CredentialsPage'
 import SettingsPage from '@/pages/SettingsPage'
@@ -36,6 +38,8 @@ function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin/setup" element={<AdminSetupPage />} />
+      <Route path="/admin/login" element={<AdminLoginPage />} />
 
       {/* Protected routes */}
       <Route
