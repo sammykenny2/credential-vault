@@ -16,24 +16,38 @@ export const credentialService = {
 
   async create(data: CredentialCreate): Promise<Credential> {
     const response = await api.post<Credential>('/credentials/', data)
+    const id = response.data.id
 
-    // Verify server stored the encrypted blob correctly
-    if (response.data.encrypted_data !== data.encrypted_data) {
-      await api.delete(`/credentials/${response.data.id}`)
-      throw new Error('Storage integrity check failed: server returned different encrypted data. The credential was not saved.')
+    // Independent re-read to verify persistence
+    const verification = await api.get<Credential>(`/credentials/${id}`)
+    if (verification.data.encrypted_data !== data.encrypted_data) {
+      await api.delete(`/credentials/${id}`)
+      throw new Error('Storage integrity check failed: re-read encrypted data does not match. The credential was not saved.')
     }
 
     return response.data
   },
 
   async update(id: string, data: Partial<CredentialCreate>): Promise<Credential> {
-    const response = await api.patch<Credential>(`/credentials/${id}`, data)
+    if (data.encrypted_data) {
+      // Fetch current data before update (for rollback on mismatch)
+      const previous = await api.get<Credential>(`/credentials/${id}`)
+      const previousBlob = previous.data.encrypted_data
 
-    // Verify server stored the encrypted blob correctly
-    if (data.encrypted_data && response.data.encrypted_data !== data.encrypted_data) {
-      throw new Error('Storage integrity check failed: server returned different encrypted data after update.')
+      const response = await api.patch<Credential>(`/credentials/${id}`, data)
+
+      // Independent re-read to verify persistence
+      const verification = await api.get<Credential>(`/credentials/${id}`)
+      if (verification.data.encrypted_data !== data.encrypted_data) {
+        // Rollback to previous data
+        await api.patch(`/credentials/${id}`, { encrypted_data: previousBlob })
+        throw new Error('Storage integrity check failed: re-read encrypted data does not match after update. Rolled back to previous data.')
+      }
+
+      return response.data
     }
 
+    const response = await api.patch<Credential>(`/credentials/${id}`, data)
     return response.data
   },
 
