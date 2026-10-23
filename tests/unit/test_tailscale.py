@@ -1,15 +1,60 @@
 """Tests for Tailscale integration utilities."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.core import tailscale
 from app.core.client_ip import parse_networks
 from app.core.tailscale import (
+    TailscaleMiddleware,
     get_client_ip,
     get_tailscale_user_info,
     is_tailscale_ip,
 )
 
 TRUSTED = parse_networks("10.0.0.0/8")
+
+
+@pytest.fixture
+def guarded_app(monkeypatch):
+    """A tiny app behind TailscaleMiddleware with REQUIRE_TAILSCALE on."""
+    monkeypatch.setattr(tailscale, "get_settings", lambda: SimpleNamespace(require_tailscale=True))
+    app = FastAPI()
+    app.add_middleware(TailscaleMiddleware)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    @app.get("/api/v1/setup/status")
+    def setup_status():
+        return {"is_initialized": True}
+
+    return app
+
+
+class TestTailscaleMiddleware:
+    def test_non_tailscale_client_gets_403_not_500(self, guarded_app):
+        client = TestClient(guarded_app, client=("192.168.1.50", 50000))
+
+        response = client.get("/api/v1/setup/status")
+
+        assert response.status_code == 403
+        assert "only accessible via Tailscale" in response.json()["detail"]
+
+    def test_tailscale_client_passes(self, guarded_app):
+        client = TestClient(guarded_app, client=("100.100.1.1", 50000))
+
+        assert client.get("/api/v1/setup/status").json() == {"is_initialized": True}
+
+    def test_health_is_exempt(self, guarded_app):
+        client = TestClient(guarded_app, client=("192.168.1.50", 50000))
+
+        assert client.get("/health").status_code == 200
 
 
 class TestIsTailscaleIP:

@@ -8,9 +8,9 @@ import ipaddress
 import logging
 from collections.abc import Callable
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.config import get_settings
 from app.core.client_ip import get_client_ip
@@ -76,9 +76,11 @@ class TailscaleMiddleware(BaseHTTPMiddleware):
                 "Blocked non-Tailscale request from %r to %s", client_ip, request.url.path
             )
 
-            raise HTTPException(
+            # Middleware runs outside FastAPI's exception handlers: raising
+            # HTTPException here turns into a 500 with a traceback in the log.
+            return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. This service is only accessible via Tailscale.",
+                content={"detail": "Access denied. This service is only accessible via Tailscale."},
             )
 
         # Add Tailscale info to request state for later use
