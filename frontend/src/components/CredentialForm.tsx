@@ -10,6 +10,7 @@ import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { CredentialData } from '@/lib/crypto'
 import type { CredentialTemplate } from '@/types/template'
 import { CATEGORY_LABELS } from '@/data/templates'
+import { secretFieldProps, privateFieldProps } from '@/lib/inputProps'
 
 interface FieldEntry {
   id: string
@@ -305,6 +306,7 @@ export default function CredentialForm({
                 Name <span className="text-red-500">*</span>
               </label>
               <input
+                {...privateFieldProps}
                 id="name"
                 type="text"
                 value={name}
@@ -320,6 +322,7 @@ export default function CredentialForm({
                 Website URL
               </label>
               <input
+                {...privateFieldProps}
                 id="website"
                 type="url"
                 value={websiteUrl}
@@ -335,6 +338,7 @@ export default function CredentialForm({
                   Category
                 </label>
                 <input
+                  {...privateFieldProps}
                   id="category"
                   type="text"
                   value={category}
@@ -348,6 +352,7 @@ export default function CredentialForm({
                   Description
                 </label>
                 <input
+                  {...privateFieldProps}
                   id="description"
                   type="text"
                   value={description}
@@ -380,6 +385,7 @@ export default function CredentialForm({
                 <div key={field.id} className="flex gap-2 items-start">
                   <div className="flex-1">
                     <input
+                      {...privateFieldProps}
                       type="text"
                       value={field.key}
                       onChange={(e) => updateField(field.id, 'key', e.target.value)}
@@ -388,6 +394,7 @@ export default function CredentialForm({
                     />
                     <div className="relative">
                       <input
+                        {...secretFieldProps}
                         type={field.isSecret && !visibleFields.has(field.id) ? 'password' : 'text'}
                         value={field.value}
                         onChange={(e) => updateField(field.id, 'value', e.target.value)}
@@ -441,6 +448,7 @@ export default function CredentialForm({
                 Notes
               </label>
               <textarea
+                {...secretFieldProps}
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

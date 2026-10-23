@@ -121,6 +121,7 @@ export default function AdminSetupPage() {
               Email
             </label>
             <input
+              autoComplete="username"
               id="email"
               type="email"
               value={email}
@@ -140,6 +141,7 @@ export default function AdminSetupPage() {
               <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <input
+              autoComplete="nickname"
               id="displayName"
               type="text"
               value={displayName}
@@ -157,6 +159,7 @@ export default function AdminSetupPage() {
               Password
             </label>
             <input
+              autoComplete="new-password"
               id="password"
               type="password"
               value={password}
@@ -176,6 +179,7 @@ export default function AdminSetupPage() {
               Confirm Password
             </label>
             <input
+              autoComplete="new-password"
               id="confirmPassword"
               type="password"
               value={confirmPassword}

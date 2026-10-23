@@ -25,6 +25,7 @@ import {
 } from '@/lib/credentialBackup'
 import type { CredentialBackupFile, CredentialBackupEntry } from '@/lib/credentialBackup'
 import { recordBackupCompleted } from '@/lib/backupReminder'
+import { secretFieldProps } from '@/lib/inputProps'
 
 interface CredentialBackupDialogProps {
   isOpen: boolean
@@ -273,6 +274,7 @@ export default function CredentialBackupDialog({
                 </label>
                 <div className="relative">
                   <input
+                    {...secretFieldProps}
                     type={showExportPassword ? 'text' : 'password'}
                     value={exportPassword}
                     onChange={(e) => setExportPassword(e.target.value)}
@@ -294,6 +296,7 @@ export default function CredentialBackupDialog({
                   Confirm Password
                 </label>
                 <input
+                  {...secretFieldProps}
                   type={showExportPassword ? 'text' : 'password'}
                   value={exportPasswordConfirm}
                   onChange={(e) => setExportPasswordConfirm(e.target.value)}
@@ -396,6 +399,7 @@ export default function CredentialBackupDialog({
                     </label>
                     <div className="relative">
                       <input
+                        {...secretFieldProps}
                         type={showImportPassword ? 'text' : 'password'}
                         value={importPassword}
                         onChange={(e) => setImportPassword(e.target.value)}

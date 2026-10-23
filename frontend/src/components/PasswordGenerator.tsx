@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { Copy, RefreshCw, Check } from 'lucide-react'
 import { analyzePassword, generatePassphrase, generatePassword } from '@/lib/passwordTools'
 import type { PasswordStrengthResult } from '@/types'
+import { privateFieldProps } from '@/lib/inputProps'
 
 interface PasswordGeneratorProps {
   onSelect?: (password: string) => void
@@ -166,6 +167,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
             <div>
               <label className="text-sm text-gray-600">Separator</label>
               <input
+                {...privateFieldProps}
                 type="text"
                 value={separator}
                 onChange={(e) => setSeparator(e.target.value)}

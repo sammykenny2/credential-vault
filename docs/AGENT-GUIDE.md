@@ -63,6 +63,12 @@ project-specific procedures that are too detailed for always-loaded instructions
   `frontend/src/hooks/`, API clients in `frontend/src/services/`, Vitest tests in
   `frontend/src/__tests__/`. Tailwind 4 with CSS-first configuration: the theme
   and the `btn`/`input`/`card` utilities live in `frontend/src/index.css`.
+- Every text `<input>` / `<textarea>` declares how browsers may treat it:
+  spread `secretFieldProps` (credential values, notes, vault and backup
+  passwords) or `privateFieldProps` (other private text) from
+  `frontend/src/lib/inputProps.ts`, or set a standard `autoComplete` token on
+  account fields (`username`, `new-password`, `current-password`).
+  `inputProps.test.tsx` scans the sources and fails on an undeclared field.
 - ESLint 10 with eslint-plugin-react-hooks 7 (React Compiler rules) is an
   error-free gate: do not call setState synchronously inside effects. Derive
   state, use a `key` to remount, or move async work into react-query hooks.

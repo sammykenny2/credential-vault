@@ -32,6 +32,7 @@ import {
   deleteCustomTemplate,
   getTemplateUsageStats,
 } from '@/lib/templateStorage'
+import { privateFieldProps } from '@/lib/inputProps'
 
 // =============================================================================
 // Template Editor Dialog
@@ -133,6 +134,7 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Icon</label>
               <input
+                {...privateFieldProps}
                 type="text"
                 value={icon}
                 onChange={(e) => setIcon(e.target.value.slice(0, 2))}
@@ -146,6 +148,7 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
                 Name <span className="text-red-500">*</span>
               </label>
               <input
+                {...privateFieldProps}
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -160,6 +163,7 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <input
+              {...privateFieldProps}
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -207,6 +211,7 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
             {fields.map((field, index) => (
               <div key={index} className="flex items-center gap-2">
                 <input
+                  {...privateFieldProps}
                   type="text"
                   value={field.key}
                   onChange={(e) => handleFieldChange(index, { key: e.target.value })}

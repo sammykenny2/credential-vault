@@ -17,6 +17,7 @@ import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { MIN_VAULT_PASSWORD_LENGTH } from '@/components/MasterPasswordModal'
 import type { VaultKeyMaterial } from '@/types'
+import { secretFieldProps } from '@/lib/inputProps'
 
 export default function VaultPasswordChange() {
   const { isUnlocked } = useVaultKey()
@@ -125,6 +126,7 @@ export default function VaultPasswordChange() {
           </label>
           <div className="relative">
             <input
+              {...secretFieldProps}
               id="current-vault-password"
               type={showPasswords ? 'text' : 'password'}
               value={currentPassword}
@@ -149,6 +151,7 @@ export default function VaultPasswordChange() {
             New Vault Password
           </label>
           <input
+            {...secretFieldProps}
             id="new-vault-password"
             type={showPasswords ? 'text' : 'password'}
             value={newPassword}
@@ -166,6 +169,7 @@ export default function VaultPasswordChange() {
             Confirm New Vault Password
           </label>
           <input
+            {...secretFieldProps}
             id="confirm-vault-password"
             type={showPasswords ? 'text' : 'password'}
             value={confirmPassword}

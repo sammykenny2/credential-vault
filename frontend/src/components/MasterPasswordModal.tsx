@@ -13,6 +13,7 @@ import { authService } from '@/services/authService'
 import api from '@/services/api'
 import { setupVault, unlockVault, KDF_VERSION } from '@/lib/crypto'
 import type { VaultKeyMaterial } from '@/types'
+import { secretFieldProps } from '@/lib/inputProps'
 
 /**
  * The encrypted private key is downloadable by anyone holding a session token,
@@ -174,6 +175,7 @@ export default function MasterPasswordModal({
             </label>
             <div className="relative">
               <input
+                {...secretFieldProps}
                 id="vault-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
@@ -199,6 +201,7 @@ export default function MasterPasswordModal({
                 Confirm Password
               </label>
               <input
+                {...secretFieldProps}
                 id="confirm-password"
                 type={showPassword ? 'text' : 'password'}
                 value={confirmPassword}

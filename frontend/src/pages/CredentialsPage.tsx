@@ -16,6 +16,7 @@ import { recordTemplateUsage } from '@/lib/templateStorage'
 import CredentialBackupDialog from '@/components/CredentialBackupDialog'
 import { BACKUP_REMINDER_DAYS, daysSinceBackup, isBackupDue } from '@/lib/backupReminder'
 import { VaultLockedError } from '@/lib/vaultProof'
+import { privateFieldProps } from '@/lib/inputProps'
 
 // Decrypted credential cache entry
 interface DecryptedCredentialEntry {
@@ -275,6 +276,7 @@ export default function CredentialsPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
+            {...privateFieldProps}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

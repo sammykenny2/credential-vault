@@ -29,6 +29,7 @@ import {
   getExportMetadata,
 } from '@/lib/templateExport'
 import type { ExportFile, ImportConflictStrategy, ImportResult } from '@/types/template'
+import { secretFieldProps } from '@/lib/inputProps'
 
 interface ExportImportDialogProps {
   isOpen: boolean
@@ -257,6 +258,7 @@ export default function ExportImportDialog({
                     </label>
                     <div className="relative">
                       <input
+                        {...secretFieldProps}
                         type={showExportPassword ? 'text' : 'password'}
                         value={exportPassword}
                         onChange={(e) => setExportPassword(e.target.value)}
@@ -378,6 +380,7 @@ export default function ExportImportDialog({
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <input
+                          {...secretFieldProps}
                           type={showImportPassword ? 'text' : 'password'}
                           value={importPassword}
                           onChange={(e) => setImportPassword(e.target.value)}

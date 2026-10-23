@@ -57,6 +57,7 @@ export default function PasswordVerifyModal({ onVerified, onClose }: PasswordVer
 
         <form onSubmit={handleSubmit}>
           <input
+            autoComplete="current-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

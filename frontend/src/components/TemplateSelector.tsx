@@ -15,6 +15,7 @@ import { X, Search, FileText, Sparkles } from 'lucide-react'
 import type { CredentialTemplate, TemplateCategory } from '@/types/template'
 import { BUILTIN_TEMPLATES_BY_CATEGORY, CATEGORY_LABELS, CATEGORY_ORDER } from '@/data/templates'
 import { getCustomTemplates, getAllUsageStats } from '@/lib/templateStorage'
+import { privateFieldProps } from '@/lib/inputProps'
 
 interface TemplateSelectorProps {
   isOpen: boolean
@@ -197,6 +198,7 @@ export default function TemplateSelector({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
+              {...privateFieldProps}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
