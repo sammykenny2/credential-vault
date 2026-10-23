@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     ts_cert_domain: str = ""
     require_tailscale: bool = False  # Set to True in production
 
+    # Reverse proxies whose X-Forwarded-For chain is trusted (comma-separated
+    # CIDRs). Defaults cover loopback and the Docker bridge networks used by
+    # the compose stack (nginx and the tailscale sidecar).
+    trusted_proxies: str = "127.0.0.1/32,::1/128,172.16.0.0/12"
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"

@@ -2,25 +2,24 @@
 
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.config import get_settings
+from app.core.client_ip import get_client_ip
 
 
-def _get_client_ip(request: Request) -> str:
-    """Extract client IP for rate limiting."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return get_remote_address(request)
+def _rate_limit_key(request: Request) -> str:
+    """Key requests by the client address resolved through trusted proxies only."""
+    return get_client_ip(request) or "unknown"
 
 
 settings = get_settings()
 
+# Counters live in process memory: run uvicorn with a single worker (see
+# Dockerfile) or every worker keeps its own count.
 limiter = Limiter(
-    key_func=_get_client_ip,
+    key_func=_rate_limit_key,
     default_limits=[f"{settings.rate_limit_per_minute}/minute"],
 )
 

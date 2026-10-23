@@ -2,11 +2,14 @@
 
 from unittest.mock import MagicMock
 
+from app.core.client_ip import parse_networks
 from app.core.tailscale import (
     get_client_ip,
     get_tailscale_user_info,
     is_tailscale_ip,
 )
+
+TRUSTED = parse_networks("10.0.0.0/8")
 
 
 class TestIsTailscaleIP:
@@ -54,34 +57,30 @@ class TestIsTailscaleIP:
 
 
 class TestGetClientIP:
-    """Test client IP extraction."""
+    """Client IP extraction (re-exported from app.core.client_ip)."""
 
-    def test_get_ip_from_x_forwarded_for(self):
-        """Test extracting IP from X-Forwarded-For header."""
+    def test_trusted_peer_walks_forwarded_chain(self):
+        """Behind a trusted proxy the hop it appended is used, not the client's own entry."""
         request = MagicMock()
-        request.headers = {"X-Forwarded-For": "100.100.1.1, 192.168.1.1"}
+        request.headers = {"X-Forwarded-For": "203.0.113.9, 100.100.1.1, 10.0.0.2"}
         request.client = MagicMock(host="10.0.0.1")
 
-        ip = get_client_ip(request)
-        assert ip == "100.100.1.1"
+        assert get_client_ip(request, TRUSTED) == "100.100.1.1"
 
-    def test_get_ip_from_x_forwarded_for_single(self):
-        """Test X-Forwarded-For with single IP."""
+    def test_untrusted_peer_ignores_forwarded_for(self):
+        """A direct LAN client cannot claim a Tailscale address via headers."""
         request = MagicMock()
         request.headers = {"X-Forwarded-For": "100.100.1.1"}
-        request.client = MagicMock(host="10.0.0.1")
+        request.client = MagicMock(host="192.168.1.50")
 
-        ip = get_client_ip(request)
-        assert ip == "100.100.1.1"
+        assert get_client_ip(request, TRUSTED) == "192.168.1.50"
 
-    def test_get_ip_from_x_real_ip(self):
-        """Test extracting IP from X-Real-IP header."""
+    def test_x_real_ip_is_ignored(self):
         request = MagicMock()
         request.headers = {"X-Real-IP": "100.100.1.1"}
         request.client = MagicMock(host="10.0.0.1")
 
-        ip = get_client_ip(request)
-        assert ip == "100.100.1.1"
+        assert get_client_ip(request, TRUSTED) == "10.0.0.1"
 
     def test_get_ip_from_client(self):
         """Test extracting IP directly from client."""
@@ -89,8 +88,7 @@ class TestGetClientIP:
         request.headers = {}
         request.client = MagicMock(host="100.100.1.1")
 
-        ip = get_client_ip(request)
-        assert ip == "100.100.1.1"
+        assert get_client_ip(request, TRUSTED) == "100.100.1.1"
 
     def test_get_ip_no_client(self):
         """Test when no client IP is available."""
@@ -98,20 +96,7 @@ class TestGetClientIP:
         request.headers = {}
         request.client = None
 
-        ip = get_client_ip(request)
-        assert ip == ""
-
-    def test_x_forwarded_for_priority(self):
-        """Test that X-Forwarded-For has priority over X-Real-IP."""
-        request = MagicMock()
-        request.headers = {
-            "X-Forwarded-For": "100.100.1.1",
-            "X-Real-IP": "100.100.2.2",
-        }
-        request.client = MagicMock(host="10.0.0.1")
-
-        ip = get_client_ip(request)
-        assert ip == "100.100.1.1"
+        assert get_client_ip(request, TRUSTED) == ""
 
 
 class TestGetTailscaleUserInfo:

@@ -7,6 +7,7 @@ from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.client_ip import get_client_ip
 from app.models.audit_log import AuditAction, AuditLog
 
 logger = logging.getLogger(__name__)
@@ -89,13 +90,5 @@ class AuditLogService:
 
     @staticmethod
     def _get_client_ip(request: Request) -> str:
-        """Extract client IP from request."""
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip.strip()
-        if request.client:
-            return request.client.host
-        return ""
+        """Client address resolved through the trusted proxy chain only."""
+        return get_client_ip(request)[:45]

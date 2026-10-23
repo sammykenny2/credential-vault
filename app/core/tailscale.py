@@ -5,6 +5,7 @@ originate from the Tailscale network, adding an extra layer of security.
 """
 
 import ipaddress
+import logging
 from collections.abc import Callable
 
 from fastapi import HTTPException, Request, status
@@ -12,6 +13,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from app.config import get_settings
+from app.core.client_ip import get_client_ip
+
+__all__ = ["TailscaleMiddleware", "get_client_ip", "get_tailscale_user_info", "is_tailscale_ip"]
+
+logger = logging.getLogger(__name__)
 
 # Tailscale CGNAT IP range (100.64.0.0/10)
 TAILSCALE_CGNAT_RANGE = ipaddress.ip_network("100.64.0.0/10")
@@ -32,38 +38,6 @@ def is_tailscale_ip(ip: str) -> bool:
         return addr in TAILSCALE_CGNAT_RANGE
     except ValueError:
         return False
-
-
-def get_client_ip(request: Request) -> str:
-    """
-    Extract the real client IP from the request.
-
-    Checks X-Forwarded-For header first (for reverse proxy setups),
-    then falls back to the direct client IP.
-
-    Args:
-        request: FastAPI Request object
-
-    Returns:
-        Client IP address string
-    """
-    # Check X-Forwarded-For header (set by reverse proxies)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # X-Forwarded-For can contain multiple IPs: client, proxy1, proxy2, ...
-        # The first one is the original client
-        return forwarded_for.split(",")[0].strip()
-
-    # Check X-Real-IP header (alternative header)
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
-    # Fall back to direct client IP
-    if request.client:
-        return request.client.host
-
-    return ""
 
 
 class TailscaleMiddleware(BaseHTTPMiddleware):
@@ -93,13 +67,14 @@ class TailscaleMiddleware(BaseHTTPMiddleware):
         if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)  # type: ignore[misc,no-any-return]
 
-        # Get client IP
+        # Resolve the client address through the trusted proxy chain only
         client_ip = get_client_ip(request)
 
         # Verify IP is from Tailscale
         if not is_tailscale_ip(client_ip):
-            # Log the attempt (in production, you might want proper logging)
-            print(f"Blocked non-Tailscale request from {client_ip} to {request.url.path}")
+            logger.warning(
+                "Blocked non-Tailscale request from %r to %s", client_ip, request.url.path
+            )
 
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

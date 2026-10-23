@@ -270,6 +270,7 @@ docker-compose down -v
 | `TS_HOSTNAME` | Tailscale 主機名稱 |
 | `TS_CERT_DOMAIN` | HTTPS 憑證網域 |
 | `REQUIRE_TAILSCALE` | 是否要求 Tailscale 存取 |
+| `TRUSTED_PROXIES` | 信任其 `X-Forwarded-For` 的反向代理網段（預設 loopback 與 Docker bridge `172.16.0.0/12`）；只有從這些網段進來的連線才會採用轉送鏈中的來源位址 |
 
 ### 初始管理員（選用）
 

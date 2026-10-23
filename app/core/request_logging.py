@@ -7,6 +7,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.client_ip import get_client_ip
+
 logger = logging.getLogger("app.request")
 
 # Paths to exclude from logging
@@ -26,7 +28,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         start_time = time.monotonic()
 
         # Log request
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request) or "unknown"
         logger.info(
             "Request: %s %s",
             request.method,
