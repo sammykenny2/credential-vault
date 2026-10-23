@@ -11,7 +11,9 @@ from app.services.user import UserService
 class TestAuthAPI:
     """Test authentication endpoints."""
 
-    async def _create_user_and_get_token(self, db_session, email="test@example.com") -> tuple[str, str]:
+    async def _create_user_and_get_token(
+        self, db_session, email="test@example.com"
+    ) -> tuple[str, str]:
         """Helper to create an OAuth user and get a JWT token directly.
 
         Returns (access_token, user_id).
@@ -68,22 +70,120 @@ class TestAuthAPI:
 
         response = await client.post(
             "/api/v1/auth/refresh",
-            params={"refresh_token": refresh_token},
+            headers={"Cookie": f"refresh_token={refresh_token}"},
         )
 
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
-        assert "refresh_token" in data
+        assert "expires_in" in data
+        # The refresh token is only ever delivered as an HttpOnly cookie
+        assert "refresh_token" not in data
+        set_cookie = response.headers.get("set-cookie", "")
+        assert "refresh_token=" in set_cookie
+        assert "HttpOnly" in set_cookie
+        assert "Path=/api/v1/auth" in set_cookie
+        assert "SameSite=strict" in set_cookie.lower().replace("samesite=strict", "SameSite=strict")
 
     @pytest.mark.asyncio
     async def test_refresh_token_invalid(self, client: AsyncClient):
         """Test refresh with invalid token fails."""
         response = await client.post(
             "/api/v1/auth/refresh",
-            params={"refresh_token": "invalid-token"},
+            headers={"Cookie": "refresh_token=invalid-token"},
         )
 
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_missing_cookie(self, client: AsyncClient):
+        """Refresh tokens are not accepted from the query string or body."""
+        refresh_token = SecurityService.create_refresh_token("some-user")
+
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            params={"refresh_token": refresh_token},
+            json={"refresh_token": refresh_token},
+        )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_revoked_version(self, client: AsyncClient, db_session):
+        """A refresh token issued before logout is rejected."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="revoked@example.com",
+            display_name="Revoked",
+            google_id="google-revoked",
+        )
+        user.token_version = 3
+        await db_session.commit()
+
+        stale = SecurityService.create_refresh_token(user.id, token_version=2)
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Cookie": f"refresh_token={stale}"},
+        )
+        assert response.status_code == 401
+
+        current = SecurityService.create_refresh_token(user.id, token_version=3)
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Cookie": f"refresh_token={current}"},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_access_token_stale_version_rejected(self, client: AsyncClient, db_session):
+        """An access token whose version no longer matches the user is rejected."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="stale@example.com",
+            display_name="Stale",
+            google_id="google-stale",
+        )
+        user.token_version = 1
+        await db_session.commit()
+
+        stale = SecurityService.create_access_token(user.id, token_version=0)
+        response = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {stale}"}
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_logout_revokes_all_tokens(self, client: AsyncClient, db_session):
+        """Logout bumps token_version so every outstanding token stops working."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="logout@example.com",
+            display_name="Logout",
+            google_id="google-logout",
+        )
+        await db_session.commit()
+
+        access_token, refresh_token = SecurityService.create_tokens(user.id, user.token_version)
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        response = await client.get("/api/v1/auth/me", headers=headers)
+        assert response.status_code == 200
+
+        response = await client.post("/api/v1/auth/logout", headers=headers)
+        assert response.status_code == 200
+        set_cookie = response.headers.get("set-cookie", "")
+        assert "refresh_token=" in set_cookie
+        assert "Max-Age=0" in set_cookie or "expires=" in set_cookie.lower()
+
+        # Same access token is now rejected ...
+        response = await client.get("/api/v1/auth/me", headers=headers)
+        assert response.status_code == 401
+
+        # ... and so is the refresh token issued alongside it
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh_token}"},
+        )
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -162,8 +262,13 @@ class TestBreakGlassLogin:
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
-        assert "refresh_token" in data
         assert data["token_type"] == "bearer"
+        assert "expires_in" in data
+        # Refresh token must not be in the body; it is an HttpOnly cookie
+        assert "refresh_token" not in data
+        set_cookie = response.headers.get("set-cookie", "")
+        assert "refresh_token=" in set_cookie
+        assert "HttpOnly" in set_cookie
 
     @pytest.mark.asyncio
     async def test_local_login_wrong_password(self, client: AsyncClient, db_session):

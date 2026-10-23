@@ -22,8 +22,9 @@ export interface UserCreate {
 // Auth types
 export interface TokenResponse {
   access_token: string
-  refresh_token: string
   token_type: string
+  /** Access token lifetime in seconds. The refresh token is an HttpOnly cookie. */
+  expires_in: number
 }
 
 export interface GoogleOAuthCallback {

@@ -9,7 +9,7 @@ import { Shield } from 'lucide-react'
 export default function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { setTokens, setUser, isAuthenticated } = useAuthStore()
+  const { setAccessToken, setUser, isAuthenticated, isBootstrapping } = useAuthStore()
   const [error, setError] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [checkingSetup, setCheckingSetup] = useState(true)
@@ -74,7 +74,7 @@ export default function LoginPage() {
     },
     onSuccess: async (data) => {
       if (!data) return // Link flow already handled
-      setTokens(data.access_token, data.refresh_token)
+      setAccessToken(data.access_token)
       const user = await authService.getMe()
       setUser(user)
       navigate('/dashboard')
@@ -113,7 +113,7 @@ export default function LoginPage() {
 
   const isProcessing = oauthCallbackMutation.isPending || isRedirecting
 
-  if (checkingSetup) {
+  if (checkingSetup || isBootstrapping) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-gray-500">Loading...</div>

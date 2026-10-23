@@ -7,7 +7,7 @@ import { Shield } from 'lucide-react'
 
 export default function AdminLoginPage() {
   const navigate = useNavigate()
-  const { setTokens, setUser, isAuthenticated } = useAuthStore()
+  const { setAccessToken, setUser, isAuthenticated } = useAuthStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -22,7 +22,7 @@ export default function AdminLoginPage() {
   const loginMutation = useMutation({
     mutationFn: () => authService.login(email, password),
     onSuccess: async (data) => {
-      setTokens(data.access_token, data.refresh_token)
+      setAccessToken(data.access_token)
       const user = await authService.getMe()
       setUser(user)
       navigate('/dashboard')

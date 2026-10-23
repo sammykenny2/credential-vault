@@ -1,13 +1,14 @@
 """Authentication endpoints."""
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
-from app.core.security import SecurityService
+from app.core.security import REFRESH_COOKIE_NAME, SecurityService
+from app.core.session import issue_session
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
-from app.schemas.auth import LocalLoginRequest, Token, VerifyPasswordRequest, VaultSetupRequest
+from app.schemas.auth import LocalLoginRequest, Token, VaultSetupRequest, VerifyPasswordRequest
 from app.services.audit_log import AuditLogService
 from app.services.user import UserService
 
@@ -18,6 +19,7 @@ router = APIRouter()
 @limiter.limit(AUTH_RATE_LIMIT)
 async def local_login(
     request: Request,
+    response: Response,
     data: LocalLoginRequest,
     db: DbSession,
 ):
@@ -56,7 +58,7 @@ async def local_login(
     # Update last login
     await user_service.update_last_login(user)
 
-    access_token, refresh_token = SecurityService.create_tokens(user.id)
+    token = issue_session(user, response)
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -66,20 +68,28 @@ async def local_login(
         details={"method": "local_breakglass"},
     )
 
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+    return token
 
 
 @router.post("/refresh", response_model=Token)
 @limiter.limit(AUTH_RATE_LIMIT)
-async def refresh_token(
+async def refresh_session(
     request: Request,
-    refresh_token: str,
+    response: Response,
     db: DbSession,
 ):
-    """Refresh access token using refresh token."""
+    """Rotate the session using the HttpOnly refresh cookie.
+
+    The refresh token is never accepted from the query string or body, so it
+    cannot end up in access logs or be read by page scripts.
+    """
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing refresh token",
+        )
+
     payload = SecurityService.decode_token(refresh_token)
 
     if not payload or payload.get("type") != "refresh":
@@ -103,7 +113,14 @@ async def refresh_token(
             detail="User not found or inactive",
         )
 
-    access_token, new_refresh_token = SecurityService.create_tokens(user.id)
+    if payload.get("ver", 0) != user.token_version:
+        SecurityService.clear_refresh_cookie(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked",
+        )
+
+    token = issue_session(user, response)
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -112,10 +129,33 @@ async def refresh_token(
         user_id=user.id,
     )
 
-    return Token(
-        access_token=access_token,
-        refresh_token=new_refresh_token,
+    return token
+
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Sign out everywhere: revoke every token issued to the user and clear the cookie.
+
+    Bumping `token_version` invalidates all outstanding access and refresh
+    tokens for this account, including those on other devices.
+    """
+    current_user.token_version += 1
+    await db.flush()
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.LOGOUT,
+        user_id=current_user.id,
     )
+
+    SecurityService.clear_refresh_cookie(response)
+    return {"message": "Logged out"}
 
 
 @router.get("/me")

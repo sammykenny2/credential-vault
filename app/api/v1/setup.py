@@ -1,12 +1,13 @@
 """Setup endpoints for initial admin account creation."""
 
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
-from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import SecurityService
+from app.core.session import issue_session
 from app.models.user import User, UserRole
 from app.schemas.auth import Token
 
@@ -39,6 +40,7 @@ async def get_setup_status(db: DbSession):
 @limiter.limit(AUTH_RATE_LIMIT)
 async def create_setup_admin(
     request: Request,
+    response: Response,
     data: SetupAdminRequest,
     db: DbSession,
 ):
@@ -67,10 +69,5 @@ async def create_setup_admin(
     db.add(admin)
     await db.flush()
 
-    # Generate tokens
-    access_token, refresh_token = SecurityService.create_tokens(admin.id)
-
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+    # Access token in the body, refresh token as an HttpOnly cookie
+    return issue_session(admin, response)

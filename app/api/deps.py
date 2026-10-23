@@ -48,6 +48,10 @@ async def get_current_user(
             detail="User account is deactivated",
         )
 
+    # Logout bumps token_version; anything issued before that is revoked.
+    if payload.get("ver", 0) != user.token_version:
+        raise credentials_exception
+
     return user
 
 

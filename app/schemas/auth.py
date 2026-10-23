@@ -4,11 +4,15 @@ from pydantic import BaseModel
 
 
 class Token(BaseModel):
-    """JWT token response."""
+    """Session response body.
+
+    Only the short-lived access token is returned here. The refresh token is
+    delivered as an HttpOnly cookie and never exposed to page scripts.
+    """
 
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
+    expires_in: int
 
 
 class TokenPayload(BaseModel):
@@ -17,6 +21,7 @@ class TokenPayload(BaseModel):
     sub: str  # user_id
     exp: int
     type: str  # "access" or "refresh"
+    ver: int = 0  # users.token_version at issue time
 
 
 class GoogleOAuthCallback(BaseModel):

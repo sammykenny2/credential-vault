@@ -19,6 +19,15 @@ export const authService = {
     return response.data
   },
 
+  /** Revoke every session for this account and clear the refresh cookie. */
+  async logout(): Promise<void> {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Already signed out server-side; local state is cleared by the caller.
+    }
+  },
+
   async getMe(): Promise<User> {
     const response = await api.get<User>('/users/me')
     return response.data

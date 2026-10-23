@@ -4,12 +4,12 @@ import logging
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.api.deps import DbSession
 from app.config import get_settings
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
-from app.core.security import SecurityService
+from app.core.session import issue_session
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
 from app.schemas.auth import GoogleOAuthCallback, Token
@@ -113,6 +113,7 @@ async def exchange_google_code(code: str, redirect_uri: str) -> dict:
 @limiter.limit(AUTH_RATE_LIMIT)
 async def google_callback(
     request: Request,
+    response: Response,
     data: GoogleOAuthCallback,
     db: DbSession,
 ):
@@ -120,6 +121,7 @@ async def google_callback(
 
     Creates a new user account if one doesn't exist for the Google account.
     """
+    settings = get_settings()
     audit_service = AuditLogService(db)
 
     try:
@@ -178,8 +180,8 @@ async def google_callback(
     await user_service.update_last_login(user)
     await db.commit()
 
-    # Create JWT tokens
-    access_token, refresh_token = SecurityService.create_tokens(user.id)
+    # Access token in the body, refresh token as an HttpOnly cookie
+    token = issue_session(user, response)
 
     await audit_service.log_from_request(
         request,
@@ -189,7 +191,4 @@ async def google_callback(
     )
     await db.commit()
 
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+    return token

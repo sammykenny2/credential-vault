@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { authService } from '@/services/authService'
 import {
   LayoutDashboard,
   Key,
@@ -14,7 +15,10 @@ export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Server-side revocation first (invalidates every token for this account),
+    // then clear local state and the in-memory vault keys.
+    await authService.logout()
     logout()
     navigate('/login')
   }
