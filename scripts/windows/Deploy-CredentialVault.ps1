@@ -199,13 +199,16 @@ function Test-Prerequisites {
         throw "SECRET_KEY in .env.production is missing or a placeholder."
     }
 
-    # The auth key is only needed until the sidecar has joined the tailnet;
-    # after that the node identity lives in the tailscale_state volume.
+    # TS_AUTHKEY is optional: left empty, the sidecar asks for a browser login
+    # (Wait-StackHealthy prints the URL), so no key has to be stored anywhere.
+    # Either way the node identity then lives in the tailscale_state volume.
     $authKey = Get-EnvValue "TS_AUTHKEY"
+    if ($authKey -match "^tskey-auth-x+") {
+        throw "TS_AUTHKEY in .env.production is still the example value. Leave it empty (TS_AUTHKEY=) to log in through the browser, or set a real auth key."
+    }
     $null = Invoke-Docker volume inspect $stateVolume
-    $joined = $LASTEXITCODE -eq 0
-    if ((-not $authKey -or $authKey -match "^tskey-auth-x+") -and -not $joined) {
-        throw "TS_AUTHKEY in .env.production is a placeholder. Create an auth key at https://login.tailscale.com/admin/settings/keys"
+    if (-not $authKey -and $LASTEXITCODE -ne 0) {
+        Write-Status "No TS_AUTHKEY: Tailscale will print a login URL to open in your browser" "INFO"
     }
 
     if ((Get-EnvValue "GOOGLE_CLIENT_ID") -like "your-google-client-id*") {
@@ -238,6 +241,7 @@ function Get-TailnetState {
     return [pscustomobject]@{
         BackendState = "$(Get-JsonProperty $state 'BackendState')"
         DnsName      = "$(Get-JsonProperty $self 'DNSName')".TrimEnd(".")
+        AuthUrl      = "$(Get-JsonProperty $state 'AuthURL')"
     }
 }
 
@@ -276,9 +280,15 @@ function Wait-StackHealthy {
     }
 
     # Healthy only means tailscaled is up; wait for it to be on the tailnet.
+    $loginShown = $false
     while ($true) {
         $tailnet = Get-TailnetState
         if ($tailnet -and $tailnet.BackendState -eq "Running" -and $tailnet.DnsName) { break }
+        if ($tailnet -and $tailnet.BackendState -eq "NeedsLogin" -and $tailnet.AuthUrl -and -not $loginShown) {
+            Write-Status "Add the vault to your tailnet: open $($tailnet.AuthUrl) and approve it (waiting up to 10 minutes)" "WARN"
+            $loginShown = $true
+            $deadline = (Get-Date).AddMinutes(10)
+        }
         if ((Get-Date) -gt $deadline) {
             $state = if ($tailnet) { $tailnet.BackendState } else { "unknown" }
             Write-Status "Tailscale did not join the tailnet (state: $state). Check TS_AUTHKEY." "ERROR"

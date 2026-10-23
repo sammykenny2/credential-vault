@@ -163,16 +163,26 @@ Copy-Item .env.production.example .env.production
 
 - `SECRET_KEY`：`openssl rand -hex 32` 產生；用預設值或少於 32 字元後端會拒絕啟動
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：Google Console 的 web client 要加上重新導向 URI `https://<TS_CERT_DOMAIN>/login`
-- `TS_AUTHKEY`：見下一步
+- `TS_AUTHKEY`：可留空，見下一步
 - `TS_HOSTNAME` / `TS_CERT_DOMAIN`：例如 `credential-vault` / `credential-vault.<tailnet>.ts.net`
 
 ### 2. 取得 Tailscale 認證金鑰
 
+`TS_AUTHKEY` 可以留空：部署腳本會印出 Tailscale 的登入網址，在瀏覽器打開核准即可，金鑰不必寫進任何檔案。要用 auth key 的話：
+
 1. 前往 [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)，點「Generate auth key」
 2. Reusable 不需要（節點身分存在 `tailscale_state` volume，之後重啟不用再認證）；Ephemeral 選 No
-3. 填入 `.env.production` 的 `TS_AUTHKEY`
-4. tailnet 需開啟 MagicDNS 與 HTTPS Certificates（Admin Console → DNS）
-5. 若 Machines 清單已有同名的舊機器，先刪掉，否則新節點會變成 `credential-vault-1`，網址和 Google 重新導向 URI 都會對不上
+3. 填入 `.env.production` 的 `TS_AUTHKEY`，第一次部署成功後清空
+
+不論哪種方式：
+
+- tailnet 需開啟 MagicDNS 與 HTTPS Certificates（Admin Console → DNS）
+- 若 Machines 清單已有同名的舊機器，先刪掉，否則新節點會變成 `credential-vault-1`，網址和 Google 重新導向 URI 都會對不上
+- 加入後到 Machines 頁對這台機器選 Disable key expiry，否則約 180 天後節點金鑰過期、服務會離開 tailnet
+
+### 管理員帳號
+
+`.env.production` 不必放任何管理員資料。空資料庫第一次打開網站時會自動進入 `/admin/setup`，在瀏覽器輸入 email 與緊急登入密碼建立管理員（伺服器只存 bcrypt 雜湊），之後用同一個 email 的 Google 帳號登入會自動綁定。部署完請立刻完成這一步：在管理員建立之前，tailnet 上任何人打開網站都能搶先建立。`ADMIN_EMAIL` / `ADMIN_PASSWORD` 只是改由設定檔建立管理員的替代做法。
 
 `config/tailscale/serve.json` 已在 repo 中，`${TS_CERT_DOMAIN}` 由 Tailscale 容器在執行時自動代入，不需要修改。
 
