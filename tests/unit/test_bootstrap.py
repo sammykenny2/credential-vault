@@ -69,9 +69,7 @@ async def test_check_admin_bootstrap_with_admin_password(db_session):
         await bootstrap.check_admin_bootstrap()
 
     # Verify admin was created with hashed password
-    result = await db_session.execute(
-        select(User).where(User.email == "admin@example.com")
-    )
+    result = await db_session.execute(select(User).where(User.email == "admin@example.com"))
     admin = result.scalar_one_or_none()
     assert admin is not None
     assert admin.role == UserRole.ADMIN

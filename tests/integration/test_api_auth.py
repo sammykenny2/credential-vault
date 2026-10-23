@@ -32,9 +32,7 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_get_me_authenticated(self, client: AsyncClient, db_session, test_user_data):
         """Test getting current user info when authenticated."""
-        token, _ = await self._create_user_and_get_token(
-            db_session, email=test_user_data["email"]
-        )
+        token, _ = await self._create_user_and_get_token(db_session, email=test_user_data["email"])
 
         response = await client.get(
             "/api/v1/auth/me",
@@ -147,9 +145,7 @@ class TestAuthAPI:
         await db_session.commit()
 
         stale = SecurityService.create_access_token(user.id, token_version=0)
-        response = await client.get(
-            "/api/v1/auth/me", headers={"Authorization": f"Bearer {stale}"}
-        )
+        response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {stale}"})
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -189,9 +185,7 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_vault_setup(self, client: AsyncClient, db_session, test_user_data):
         """Test setting up E2EE vault keys."""
-        token, _ = await self._create_user_and_get_token(
-            db_session, email=test_user_data["email"]
-        )
+        token, _ = await self._create_user_and_get_token(db_session, email=test_user_data["email"])
 
         response = await client.post(
             "/api/v1/auth/vault/setup",
@@ -210,9 +204,7 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_vault_setup_duplicate(self, client: AsyncClient, db_session, test_user_data):
         """Test that vault setup fails if keys already exist."""
-        token, _ = await self._create_user_and_get_token(
-            db_session, email=test_user_data["email"]
-        )
+        token, _ = await self._create_user_and_get_token(db_session, email=test_user_data["email"])
 
         vault_data = {
             "public_key": "test-public-key-base64",

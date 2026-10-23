@@ -480,17 +480,10 @@ class TestUserDeactivateAPI:
         )
         assert response.status_code == 204
 
-        # Now Admin 2 is the ONLY active admin left.
-        # Let's create a *third* admin to send the request, but wait- if we create a 3rd admin, Admin 2 is no longer the last.
-        # So we create a regular user, elevate them to admin directly in the DB to get a token, 
-        # but keep them inactive? No, inactive tokens fail auth.
-        # Actually, if we just want to test the endpoint logic: 
-        # The endpoint uses `admin_user` from token and `user` from DB.
-        # If Admin X tries to delete Admin Y, and Admin Y is the *last* admin... wait.
-        # If Admin Y is the last admin, there is no Admin X to send the request!
-        # The only way this logic gets hit is if we artificially mock `is_last_admin` or if somehow Admin Y is being deleted by Admin X while Admin X is about to be deleted.
-        # Let's just create a test that calls the `UserService.is_last_admin` directly to prove the logic works, since the API endpoint is mathematically impossible to hit from the outside.
-
+        # Now Admin 2 is the ONLY active admin left. The "cannot delete the last
+        # admin" branch cannot be reached through the API: if Admin Y is the last
+        # admin there is no other admin left to send the request. That branch is
+        # covered by calling UserService.is_last_admin directly in the unit tests.
 
     @pytest.mark.asyncio
     async def test_hard_delete_user(

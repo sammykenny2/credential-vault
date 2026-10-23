@@ -2,8 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import Response
-from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.config import get_settings
@@ -24,12 +24,12 @@ class SecurityService:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt."""
-        return pwd_context.hash(password)
+        return str(pwd_context.hash(password))
 
     @staticmethod
     def verify_password(plain: str, hashed: str) -> bool:
         """Verify a password against its hash."""
-        return pwd_context.verify(plain, hashed)
+        return bool(pwd_context.verify(plain, hashed))
 
     @staticmethod
     def create_access_token(user_id: str, token_version: int = 0) -> str:
@@ -41,7 +41,7 @@ class SecurityService:
             "type": "access",
             "ver": token_version,
         }
-        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)  # type: ignore[no-any-return]
+        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
     @staticmethod
     def create_refresh_token(user_id: str, token_version: int = 0) -> str:
@@ -53,20 +53,20 @@ class SecurityService:
             "type": "refresh",
             "ver": token_version,
         }
-        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)  # type: ignore[no-any-return]
+        return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
     @staticmethod
     def decode_token(token: str) -> dict | None:
-        """Decode and validate a JWT token."""
+        """Decode and validate a JWT token (signature, expiry, algorithm pinned)."""
         try:
             payload = jwt.decode(
                 token,
                 settings.secret_key,
                 algorithms=[settings.jwt_algorithm],
             )
-            return payload  # type: ignore[no-any-return]
-        except JWTError:
+        except jwt.PyJWTError:
             return None
+        return dict(payload)
 
     @staticmethod
     def create_tokens(user_id: str, token_version: int = 0) -> tuple[str, str]:
