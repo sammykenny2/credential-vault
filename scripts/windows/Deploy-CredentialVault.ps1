@@ -304,25 +304,35 @@ function Wait-StackHealthy {
         Write-Status "Remove the stale machine in the Tailscale admin console, or update TS_CERT_DOMAIN and the Google redirect URI." "WARN"
     }
 
-    # End to end through Tailscale Serve -> nginx/backend. /api/v1/setup/status
+    # End to end through Tailscale Serve -> nginx -> backend. /api/v1/setup/status
     # also passes the REQUIRE_TAILSCALE guard, which /health is exempt from.
-    # The first request can take a while: Tailscale issues the TLS certificate.
+    # Both must come back as JSON from the backend; the SPA answers any other
+    # path with index.html, which would hide a broken route. The first request
+    # can take a while: Tailscale issues the TLS certificate on demand.
     $base = "https://$($tailnet.DnsName)"
+    $deadline = (Get-Date).AddSeconds([Math]::Max(90, ($deadline - (Get-Date)).TotalSeconds))
     foreach ($path in @("/health", "/api/v1/setup/status")) {
         $reached = $false
+        $lastError = ""
         while (-not $reached) {
             try {
-                $null = Invoke-WebRequest -Uri "$base$path" -UseBasicParsing -TimeoutSec 30
-                $reached = $true
+                $response = Invoke-WebRequest -Uri "$base$path" -UseBasicParsing -TimeoutSec 30
+                if ("$($response.Headers['Content-Type'])" -like "application/json*") {
+                    $reached = $true
+                } else {
+                    $lastError = "answered with $($response.Headers['Content-Type']), not the backend's JSON"
+                }
             } catch {
-                if ((Get-Date) -gt $deadline) { break }
-                Start-Sleep -Seconds 5
+                $lastError = $_.Exception.Message
             }
+            if ($reached) { break }
+            if ((Get-Date) -gt $deadline) { break }
+            Start-Sleep -Seconds 5
         }
         if ($reached) {
             Write-Status "$base$path answers" "OK"
         } else {
-            Write-Status "$base$path did not answer from this machine (is it on the tailnet?)" "WARN"
+            Write-Status "$base$path failed from this machine: $lastError" "WARN"
         }
     }
     return $true
@@ -416,6 +426,21 @@ function Import-ReleaseImages {
     return $refs
 }
 
+function Sync-ServeConfig {
+    # The sidecar applies serve.json when it starts and compose does not
+    # recreate it for a changed file, so restart it when the file is newer.
+    $id = Get-ServiceContainer "tailscale"
+    if (-not $id) { return }
+    $started = "$(Invoke-Docker inspect --format '{{.State.StartedAt}}' $id)".Trim() -replace '(\.\d{7})\d+', '$1'
+    if (-not $started) { return }
+    $startedAt = [datetime]::Parse($started, $null, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $serveFile = Join-Path $repoRoot "config\tailscale\serve.json"
+    if ((Get-Item $serveFile).LastWriteTimeUtc -gt $startedAt) {
+        Write-Status "serve.json changed since the Tailscale sidecar started; restarting it" "INFO"
+        Invoke-Compose restart tailscale
+    }
+}
+
 function Publish-Stack {
     # Shared tail of every deploy once the :<tag> images are in place.
     # Stop the backend so the backup is a consistent snapshot taken before
@@ -423,6 +448,7 @@ function Publish-Stack {
     Invoke-Compose stop backend
     $null = Backup-VaultDatabase -Label "pre-deploy"
     Invoke-Compose up -d --no-build --remove-orphans
+    Sync-ServeConfig
     if (-not (Wait-StackHealthy)) { Show-Failure; exit 1 }
     Write-Status "Deployed. Docker restarts the stack on boot; no dev servers needed." "OK"
 }
@@ -538,6 +564,7 @@ try {
             $null = Backup-VaultDatabase -Label "pre-restore"
             Restore-VaultDatabase -Source $Restore
             Invoke-Compose up -d
+            Sync-ServeConfig
             if (-not (Wait-StackHealthy)) { Show-Failure; exit 1 }
         }
 
@@ -568,6 +595,7 @@ try {
                 if ($LASTEXITCODE -ne 0) { throw "Could not restore the $service image" }
             }
             Invoke-Compose up -d --no-build
+            Sync-ServeConfig
             if (-not (Wait-StackHealthy)) { Show-Failure; exit 1 }
             Write-Status "Rolled back" "OK"
         }

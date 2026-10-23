@@ -9,12 +9,6 @@
       "Handlers": {
         "/": {
           "Proxy": "http://frontend:80"
-        },
-        "/api": {
-          "Proxy": "http://backend:8000"
-        },
-        "/health": {
-          "Proxy": "http://backend:8000"
         }
       }
     }

@@ -9,8 +9,8 @@
 |--------------|------|----------|-------------|---------------|
 | Backend API | 8000 | TCP | FastAPI via uvicorn. In Docker it is reachable only on the `vault-internal` network; no host port is published. | `uvicorn app.main:app --reload` (local) / `docker compose up backend` |
 | Frontend dev server | 3000 | TCP | Vite dev server; proxies `/api` to `http://localhost:8000` (`frontend/vite.config.ts`). | `cd frontend && npm run dev` |
-| Frontend (nginx) | 80 | TCP | Serves the built SPA and proxies `/api` to `backend:8000` (`frontend/nginx.conf`). Container-internal only. | `docker compose up frontend` |
-| Tailscale Serve | 443 | TCP/HTTPS | Tailnet-only HTTPS entry point. Routes `/` to `frontend:80`, `/api` and `/health` to `backend:8000` (`config/tailscale/serve.json`). | `docker compose up tailscale` |
+| Frontend (nginx) | 80 | TCP | Serves the built SPA and proxies `/api` and `/health` to `backend:8000` (`frontend/nginx.conf`). Container-internal only. | `docker compose up frontend` |
+| Tailscale Serve | 443 | TCP/HTTPS | Tailnet-only HTTPS entry point. Routes everything to `frontend:80` (`config/tailscale/serve.json`); nginx proxies `/api` and `/health` to `backend:8000`. Serve strips mount paths, so a direct `/api` handler would break the API. | `docker compose up tailscale` |
 
 No service publishes a port to the Docker host; the only external entry is the Tailscale sidecar on the tailnet.
 

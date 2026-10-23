@@ -8,19 +8,20 @@ This directory contains Tailscale configuration for the Credential Vault.
 
 1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
 2. Generate a new auth key with the following settings:
-   - **Reusable**: Yes (for container restarts)
+   - **Reusable**: No (the node identity is kept in the tailscale_state volume)
    - **Ephemeral**: No (persistent node)
    - **Tags**: `tag:credential-vault` (optional, for ACL)
-3. Copy the key and add it to your `.env.production` file as `TS_AUTHKEY`
+3. Copy the key and add it to your `.env.production` file as `TS_AUTHKEY`, and clear it after the first deploy.
+   Or leave `TS_AUTHKEY` empty: the deploy script prints a login URL to approve the node in the browser.
 
 ### 2. Configure serve.json
 
 The `serve.json` file configures Tailscale Serve to expose:
-- `/` → Frontend (React app)
-- `/api` → Backend API (FastAPI)
-- `/health` → Health check endpoint
+- `/` → Frontend nginx, which serves the React app and proxies `/api` and `/health` to the backend
 
-**Note**: The `${TS_CERT_DOMAIN}` placeholder should be replaced with your actual Tailscale machine name + tailnet domain, e.g., `credential-vault.tail1234.ts.net`.
+Do not add `/api` or `/health` handlers that proxy straight to the backend: Tailscale Serve strips the mount path, so the backend would receive `/v1/...` and `/` and answer 404.
+
+**Note**: Leave the `${TS_CERT_DOMAIN}` placeholder as it is; the Tailscale container substitutes the node's real HTTPS name at start. After editing `serve.json`, the deploy script restarts the sidecar so the change takes effect.
 
 ### 3. Access Control (ACL) - Recommended
 
