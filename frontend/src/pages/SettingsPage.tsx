@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { User, FileText, ShieldCheck } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
+import VaultPasswordChange from '@/components/VaultPasswordChange'
 import PasswordVerifyModal from '@/components/PasswordVerifyModal'
 import { beginOAuthFlow, clearOAuthFlow } from '@/lib/oauthState'
 
@@ -80,6 +81,13 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {/* Vault password change (only meaningful once the vault exists) */}
+      {user?.has_vault_keys && (
+        <section className="card mb-6">
+          <VaultPasswordChange />
+        </section>
+      )}
 
       {/* Templates Section */}
       <section className="card mb-6">

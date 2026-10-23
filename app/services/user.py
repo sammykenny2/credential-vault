@@ -92,6 +92,21 @@ class UserService:
         logger.info("Vault keys configured for user: %s", user.email)
         return user
 
+    async def rekey_vault(
+        self,
+        user: User,
+        encrypted_private_key: str,
+        key_salt: str,
+        kdf_version: int,
+    ) -> User:
+        """Replace the wrapped private key (vault password change); public key unchanged."""
+        user.encrypted_private_key = encrypted_private_key
+        user.key_salt = key_salt
+        user.kdf_version = kdf_version
+        await self.db.flush()
+        logger.info("Vault key re-wrapped for user: %s", user.email)
+        return user
+
     async def update(self, user: User, data: UserUpdate) -> User:
         """Update user profile."""
         update_data = data.model_dump(exclude_unset=True)

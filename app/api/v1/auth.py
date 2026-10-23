@@ -2,14 +2,20 @@
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, VaultProvenUser
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
-from app.core.security import REFRESH_COOKIE_NAME, SecurityService
+from app.core.security import DUMMY_PASSWORD_HASH, REFRESH_COOKIE_NAME, SecurityService
 from app.core.session import issue_session
 from app.core.vault_proof import PROOF_TTL_SECONDS, create_challenge
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
-from app.schemas.auth import LocalLoginRequest, Token, VaultSetupRequest, VerifyPasswordRequest
+from app.schemas.auth import (
+    LocalLoginRequest,
+    Token,
+    VaultRekeyRequest,
+    VaultSetupRequest,
+    VerifyPasswordRequest,
+)
 from app.services.audit_log import AuditLogService
 from app.services.user import UserService
 
@@ -32,23 +38,19 @@ async def local_login(
     user_service = UserService(db)
     user = await user_service.get_by_email(data.email)
 
-    if not user or not user.hashed_password:
+    # One bcrypt verification on every path and a single error message, so
+    # neither timing nor wording reveals whether the address has an account,
+    # a password, or admin rights.
+    stored_hash = user.hashed_password if user and user.hashed_password else DUMMY_PASSWORD_HASH
+    password_ok = SecurityService.verify_password(data.password, stored_hash)
+    eligible = bool(user and user.hashed_password and user.role == UserRole.ADMIN)
+
+    if not (eligible and password_ok):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Local login is restricted to admin users",
-        )
-
-    if not SecurityService.verify_password(data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
+    assert user is not None  # narrowed by `eligible`
 
     if not user.is_active:
         raise HTTPException(
@@ -208,6 +210,43 @@ async def get_vault_keys(current_user: CurrentUser):
         "key_salt": current_user.key_salt,
         "kdf_version": current_user.kdf_version,
     }
+
+
+@router.put("/vault/keys")
+async def rekey_vault(
+    request: Request,
+    data: VaultRekeyRequest,
+    current_user: VaultProvenUser,
+    db: DbSession,
+):
+    """Store a re-wrapped private key after the vault password changed.
+
+    Requires proof of unlock so that a stolen session token cannot replace the
+    wrapped key and lock the real owner out. The public key never changes
+    here; credentials stay readable.
+    """
+    if not current_user.has_vault_keys:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vault keys not configured",
+        )
+
+    user_service = UserService(db)
+    await user_service.rekey_vault(
+        user=current_user,
+        encrypted_private_key=data.encrypted_private_key,
+        key_salt=data.key_salt,
+        kdf_version=data.kdf_version,
+    )
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.VAULT_REKEY,
+        user_id=current_user.id,
+    )
+
+    return {"message": "Vault password updated"}
 
 
 @router.post("/vault/challenge")

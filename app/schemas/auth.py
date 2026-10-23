@@ -50,6 +50,18 @@ class VaultSetupRequest(BaseModel):
     kdf_version: int = Field(2, ge=1, le=100)
 
 
+class VaultRekeyRequest(BaseModel):
+    """Replace the wrapped private key after a vault password change.
+
+    The public key (and therefore every stored credential) is unchanged;
+    only the wrapping of the private key is replaced.
+    """
+
+    encrypted_private_key: str
+    key_salt: str
+    kdf_version: int = Field(2, ge=1, le=100)
+
+
 class VerifyPasswordRequest(BaseModel):
     """Request to verify user's password."""
 

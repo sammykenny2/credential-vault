@@ -12,6 +12,10 @@ settings = get_settings()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Verified against when no real hash exists, so a login attempt for an unknown
+# address costs the same bcrypt work as one for a real account.
+DUMMY_PASSWORD_HASH = pwd_context.hash("not-a-real-password")
+
 # The refresh token travels only in an HttpOnly cookie scoped to the auth
 # routes, so page scripts (and any XSS payload) cannot read it.
 REFRESH_COOKIE_NAME = "refresh_token"

@@ -1,5 +1,11 @@
 import api from './api'
-import type { TokenResponse, GoogleOAuthCallback, User, VaultSetupRequest } from '@/types'
+import type {
+  TokenResponse,
+  GoogleOAuthCallback,
+  User,
+  VaultSetupRequest,
+  VaultRekeyRequest,
+} from '@/types'
 
 export const authService = {
   /** `state` comes from beginOAuthFlow() and is checked again on the way back. */
@@ -36,6 +42,11 @@ export const authService = {
 
   async setupVault(data: VaultSetupRequest): Promise<void> {
     await api.post('/auth/vault/setup', data)
+  },
+
+  /** Store a re-wrapped private key; `headers` must carry the vault proof. */
+  async rekeyVault(data: VaultRekeyRequest, headers: Record<string, string>): Promise<void> {
+    await api.put('/auth/vault/keys', data, { headers })
   },
 
   async verifyPassword(password: string): Promise<{ verified: boolean }> {

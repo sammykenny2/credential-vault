@@ -117,6 +117,12 @@ export interface VaultSetupRequest {
   kdf_version: number
 }
 
+export interface VaultRekeyRequest {
+  encrypted_private_key: string
+  key_salt: string
+  kdf_version: number
+}
+
 export interface VaultKeyMaterial {
   public_key: string
   encrypted_private_key: string

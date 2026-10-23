@@ -307,7 +307,10 @@ class TestBreakGlassLogin:
             json={"email": "user@example.com", "password": "user-password"},
         )
 
-        assert response.status_code == 403
+        # Same answer as a wrong password: the response must not reveal that
+        # the address exists or lacks admin rights.
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid credentials"
 
     @pytest.mark.asyncio
     async def test_local_login_no_password(self, client: AsyncClient, db_session):

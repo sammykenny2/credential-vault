@@ -161,6 +161,41 @@ class TestDeleteRequiresProof:
         assert response.status_code == 403
 
 
+class TestVaultRekey:
+    @pytest.mark.asyncio
+    async def test_rekey_requires_proof(self, client: AsyncClient, db_session):
+        _, _, headers = await _user_with_vault(db_session)
+        response = await client.put(
+            "/api/v1/auth/vault/keys",
+            headers=headers,
+            json={"encrypted_private_key": "new-blob", "key_salt": "new-salt", "kdf_version": 2},
+        )
+        assert response.status_code == 403
+
+        keys = await client.get("/api/v1/auth/vault/keys", headers=headers)
+        assert keys.json()["encrypted_private_key"] == "client-side-blob"
+
+    @pytest.mark.asyncio
+    async def test_rekey_replaces_wrapping_only(self, client: AsyncClient, db_session):
+        user, private_key, headers = await _user_with_vault(db_session)
+        original_public_key = user.public_key
+        proof = await _obtain_proof(client, headers, private_key)
+
+        response = await client.put(
+            "/api/v1/auth/vault/keys",
+            headers={**headers, VAULT_PROOF_HEADER: proof},
+            json={"encrypted_private_key": "new-blob", "key_salt": "new-salt", "kdf_version": 2},
+        )
+        assert response.status_code == 200
+
+        keys = await client.get("/api/v1/auth/vault/keys", headers=headers)
+        body = keys.json()
+        assert body["encrypted_private_key"] == "new-blob"
+        assert body["key_salt"] == "new-salt"
+        assert body["kdf_version"] == 2
+        assert body["public_key"] == original_public_key
+
+
 class TestUpdateRequiresProofForCiphertext:
     @pytest.mark.asyncio
     async def test_overwriting_ciphertext_requires_proof(self, client: AsyncClient, db_session):
