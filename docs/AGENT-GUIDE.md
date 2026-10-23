@@ -18,9 +18,10 @@ project-specific procedures that are too detailed for always-loaded instructions
 - Invariant: the server never receives, produces, logs, or returns plaintext
   secrets. Features that need plaintext (generation, strength, breach checks)
   belong in `frontend/src/lib/`, not in `app/`.
-- Not implemented despite older docs: TOTP MFA (`/api/v1/totp/*` returns 503),
-  credential sharing, emergency access, server-side backup. WebAuthn registration
-  exists but performs no attestation or signature verification and gates nothing.
+- Not implemented despite older docs: TOTP MFA and WebAuthn/passkeys (both
+  `/api/v1/totp/*` and `/api/v1/webauthn/*` return 503), credential sharing,
+  emergency access, server-side backup. The `webauthn_credentials` table remains
+  for a future verified implementation.
 - Current security findings and fix order:
   `docs/research/2026-10-23-security-review-storage-and-auth-surface.md`.
 

@@ -3,7 +3,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { User, FileText, ShieldCheck } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
-import WebAuthnPanel from '@/components/WebAuthnPanel'
 import PasswordVerifyModal from '@/components/PasswordVerifyModal'
 
 export default function SettingsPage() {
@@ -79,11 +78,6 @@ export default function SettingsPage() {
             </p>
           </div>
         )}
-      </section>
-
-      {/* WebAuthn / Passkeys Section */}
-      <section className="card mb-6">
-        <WebAuthnPanel />
       </section>
 
       {/* Templates Section */}

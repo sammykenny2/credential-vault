@@ -42,6 +42,16 @@ class TestFeatureStubs:
         assert "temporarily offline" in response.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_webauthn_stub(self, client: AsyncClient):
+        """WebAuthn endpoints are stubbed until a verified implementation exists."""
+        response = await client.get("/api/v1/webauthn/credentials")
+        assert response.status_code == 503
+        assert "temporarily offline" in response.json()["detail"]
+
+        response = await client.post("/api/v1/webauthn/register/options", json={})
+        assert response.status_code == 503
+
+    @pytest.mark.asyncio
     async def test_stub_methods(self, client: AsyncClient):
         """Test stubs respond to multiple HTTP methods."""
         for method in ["get", "post", "put", "patch", "delete"]:

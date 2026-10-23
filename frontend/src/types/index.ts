@@ -107,16 +107,6 @@ export interface CredentialHealthSummary {
   issues: string[]
 }
 
-// WebAuthn types
-export interface WebAuthnCredentialInfo {
-  id: string
-  device_name: string
-  credential_type: string
-  is_active: boolean
-  created_at: string
-  last_used_at: string | null
-}
-
 // Vault setup types
 export interface VaultSetupRequest {
   public_key: string

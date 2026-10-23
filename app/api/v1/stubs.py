@@ -25,6 +25,11 @@ OFFLINE_MSG = {
         "TOTP authenticator is temporarily offline. "
         "Integration with E2EE architecture is on the roadmap."
     ),
+    "webauthn": (
+        "WebAuthn/passkeys are temporarily offline. "
+        "The previous implementation stored credentials without verifying attestation "
+        "or signatures; a verified implementation (py_webauthn) is on the roadmap."
+    ),
 }
 
 
@@ -105,3 +110,21 @@ async def totp_stub(path: str = "") -> None:
 )
 async def totp_stub_root() -> None:
     _raise_503("totp")
+
+
+@router.api_route(
+    "/webauthn/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
+async def webauthn_stub(path: str = "") -> None:
+    _raise_503("webauthn")
+
+
+@router.api_route(
+    "/webauthn",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
+async def webauthn_stub_root() -> None:
+    _raise_503("webauthn")
