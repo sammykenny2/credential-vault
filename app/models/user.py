@@ -77,6 +77,14 @@ class User(Base, TimestampMixin):
         server_default="0",
         nullable=False,
     )
+
+    # Proof of unlock: sha256 of the last challenge secret the client must
+    # decrypt with the vault private key before deleting or overwriting data.
+    vault_proof_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vault_proof_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

@@ -2,11 +2,12 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import SecurityService
+from app.core.vault_proof import VAULT_PROOF_HEADER, verify_proof
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.services.user import UserService
@@ -79,7 +80,32 @@ async def get_current_admin_user(
     return current_user
 
 
+def ensure_vault_proof(request: Request, user: User) -> None:
+    """Raise 403 unless the request carries a valid X-Vault-Proof for this user.
+
+    A session token alone must not be enough to destroy ciphertext; the client
+    proves it holds the unlocked private key by answering a challenge from
+    POST /auth/vault/challenge.
+    """
+    proof = request.headers.get(VAULT_PROOF_HEADER)
+    if not verify_proof(proof, user.vault_proof_hash, user.vault_proof_expires_at):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vault proof required: unlock the vault and retry this action",
+        )
+
+
+async def get_vault_proven_user(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
+    """Current user, additionally proven to hold the unlocked vault key."""
+    ensure_vault_proof(request, current_user)
+    return current_user
+
+
 # Type aliases for cleaner dependency injection
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
+VaultProvenUser = Annotated[User, Depends(get_vault_proven_user)]
 DbSession = Annotated[AsyncSession, Depends(get_db)]

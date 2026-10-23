@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, VaultProvenUser, ensure_vault_proof
 from app.models.audit_log import AuditAction
 from app.schemas.credential import (
     CredentialCreate,
@@ -146,7 +146,12 @@ async def update_credential(
     current_user: CurrentUser,
     db: DbSession,
 ):
-    """Update a credential."""
+    """Update a credential.
+
+    Replacing the ciphertext is destructive (the old blob is gone), so it
+    requires proof of vault unlock like a delete. Metadata-only changes such
+    as the expiry date do not.
+    """
     service = CredentialService(db)
     credential = await service.get_by_id(credential_id, owner_id=current_user.id)
 
@@ -155,6 +160,9 @@ async def update_credential(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Credential not found",
         )
+
+    if data.encrypted_data is not None:
+        ensure_vault_proof(request, current_user)
 
     updated = await service.update(credential, data)
 
@@ -211,10 +219,10 @@ async def revoke_credential(
 async def delete_credential(
     request: Request,
     credential_id: str,
-    current_user: CurrentUser,
+    current_user: VaultProvenUser,
     db: DbSession,
 ):
-    """Permanently delete a credential."""
+    """Permanently delete a credential (requires X-Vault-Proof, see /auth/vault/challenge)."""
     service = CredentialService(db)
     credential = await service.get_by_id(credential_id, owner_id=current_user.id)
 

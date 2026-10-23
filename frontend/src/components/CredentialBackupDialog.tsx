@@ -24,6 +24,7 @@ import {
   downloadBackupFile,
 } from '@/lib/credentialBackup'
 import type { CredentialBackupFile, CredentialBackupEntry } from '@/lib/credentialBackup'
+import { recordBackupCompleted } from '@/lib/backupReminder'
 
 interface CredentialBackupDialogProps {
   isOpen: boolean
@@ -120,6 +121,7 @@ export default function CredentialBackupDialog({
 
       const backupFile = await encryptBackup(entries, exportPassword)
       downloadBackupFile(backupFile)
+      recordBackupCompleted()
       setExportSuccess(true)
     } catch (error) {
       setExportError('Failed to create backup.')

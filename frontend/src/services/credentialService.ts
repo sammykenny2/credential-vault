@@ -1,4 +1,5 @@
 import api from './api'
+import { vaultProofHeaders } from '@/lib/vaultProof'
 import type { Credential, CredentialListItem, CredentialCreate } from '@/types'
 
 export const credentialService = {
@@ -21,7 +22,7 @@ export const credentialService = {
     // Independent re-read to verify persistence
     const verification = await api.get<Credential>(`/credentials/${id}`)
     if (verification.data.encrypted_data !== data.encrypted_data) {
-      await api.delete(`/credentials/${id}`)
+      await api.delete(`/credentials/${id}`, { headers: await vaultProofHeaders() })
       throw new Error('Storage integrity check failed: re-read encrypted data does not match. The credential was not saved.')
     }
 
@@ -30,17 +31,20 @@ export const credentialService = {
 
   async update(id: string, data: Partial<CredentialCreate>): Promise<Credential> {
     if (data.encrypted_data) {
+      // Overwriting ciphertext is destructive: prove the vault is unlocked first.
+      const headers = await vaultProofHeaders()
+
       // Fetch current data before update (for rollback on mismatch)
       const previous = await api.get<Credential>(`/credentials/${id}`)
       const previousBlob = previous.data.encrypted_data
 
-      const response = await api.patch<Credential>(`/credentials/${id}`, data)
+      const response = await api.patch<Credential>(`/credentials/${id}`, data, { headers })
 
       // Independent re-read to verify persistence
       const verification = await api.get<Credential>(`/credentials/${id}`)
       if (verification.data.encrypted_data !== data.encrypted_data) {
         // Rollback to previous data
-        await api.patch(`/credentials/${id}`, { encrypted_data: previousBlob })
+        await api.patch(`/credentials/${id}`, { encrypted_data: previousBlob }, { headers })
         throw new Error('Storage integrity check failed: re-read encrypted data does not match after update. Rolled back to previous data.')
       }
 
@@ -57,7 +61,7 @@ export const credentialService = {
   },
 
   async delete(id: string): Promise<void> {
-    await api.delete(`/credentials/${id}`)
+    await api.delete(`/credentials/${id}`, { headers: await vaultProofHeaders() })
   },
 
   async importBatch(
@@ -71,6 +75,7 @@ export const credentialService = {
   },
 
   async deleteAll(ids: string[]): Promise<void> {
-    await Promise.all(ids.map((id) => api.delete(`/credentials/${id}`)))
+    const headers = await vaultProofHeaders()
+    await Promise.all(ids.map((id) => api.delete(`/credentials/${id}`, { headers })))
   },
 }

@@ -6,6 +6,7 @@ from app.api.deps import CurrentUser, DbSession
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import REFRESH_COOKIE_NAME, SecurityService
 from app.core.session import issue_session
+from app.core.vault_proof import PROOF_TTL_SECONDS, create_challenge
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
 from app.schemas.auth import LocalLoginRequest, Token, VaultSetupRequest, VerifyPasswordRequest
@@ -206,6 +207,39 @@ async def get_vault_keys(current_user: CurrentUser):
         "encrypted_private_key": current_user.encrypted_private_key,
         "key_salt": current_user.key_salt,
     }
+
+
+@router.post("/vault/challenge")
+async def vault_challenge(
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Issue a proof-of-unlock challenge.
+
+    The response carries a random secret encrypted with the user's vault
+    public key. Decrypting it with the in-memory private key and sending the
+    result as `X-Vault-Proof` authorizes destructive operations for a short
+    time. Only a hash of the secret is stored server-side.
+    """
+    if not current_user.has_vault_keys or not current_user.public_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vault keys not configured",
+        )
+
+    try:
+        challenge, secret_hash, expires_at = create_challenge(current_user.public_key)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stored vault public key is unusable; set up the vault again",
+        ) from exc
+
+    current_user.vault_proof_hash = secret_hash
+    current_user.vault_proof_expires_at = expires_at
+    await db.flush()
+
+    return {"challenge": challenge, "expires_in": PROOF_TTL_SECONDS}
 
 
 @router.post("/vault/setup")

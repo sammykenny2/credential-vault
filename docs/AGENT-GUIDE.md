@@ -18,6 +18,11 @@ project-specific procedures that are too detailed for always-loaded instructions
 - Invariant: the server never receives, produces, logs, or returns plaintext
   secrets. Features that need plaintext (generation, strength, breach checks)
   belong in `frontend/src/lib/`, not in `app/`.
+- Destructive operations (`DELETE /credentials/{id}`, `PATCH` with
+  `encrypted_data`) require an `X-Vault-Proof` header: the client decrypts a
+  challenge from `POST /auth/vault/challenge` with the in-memory private key
+  (`frontend/src/lib/vaultProof.ts`). A stolen session token alone cannot
+  destroy data. Keep new destructive endpoints behind `VaultProvenUser`.
 - Not implemented despite older docs: TOTP MFA and WebAuthn/passkeys (both
   `/api/v1/totp/*` and `/api/v1/webauthn/*` return 503), credential sharing,
   emergency access, server-side backup. The `webauthn_credentials` table remains

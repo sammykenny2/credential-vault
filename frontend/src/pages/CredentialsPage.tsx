@@ -8,12 +8,14 @@ import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialForm from '@/components/CredentialForm'
 import CredentialDetail from '@/components/CredentialDetail'
 import TemplateSelector from '@/components/TemplateSelector'
-import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive } from 'lucide-react'
+import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import type { Credential, CredentialListItem, CredentialTemplate } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
 import { recordTemplateUsage } from '@/lib/templateStorage'
 import CredentialBackupDialog from '@/components/CredentialBackupDialog'
+import { BACKUP_REMINDER_DAYS, daysSinceBackup, isBackupDue } from '@/lib/backupReminder'
+import { VaultLockedError } from '@/lib/vaultProof'
 
 // Decrypted credential cache entry
 interface DecryptedCredentialEntry {
@@ -42,6 +44,8 @@ export default function CredentialsPage() {
   const [decryptedCache, setDecryptedCache] = useState<DecryptedCredentialEntry[]>([])
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
+  const [backupDue, setBackupDue] = useState(() => isBackupDue())
+  const [actionError, setActionError] = useState('')
 
   // Auto-open modal only for first-time vault setup
   useEffect(() => {
@@ -142,10 +146,22 @@ export default function CredentialsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to permanently delete this credential? This cannot be undone.')) {
-      await deleteMutation.mutateAsync(id)
-    }
     setActiveMenu(null)
+    if (!confirm('Are you sure you want to permanently delete this credential? This cannot be undone.')) {
+      return
+    }
+    setActionError('')
+    try {
+      // The server demands proof that the vault is unlocked before deleting.
+      await deleteMutation.mutateAsync(id)
+    } catch (err) {
+      if (err instanceof VaultLockedError) {
+        setActionError(err.message)
+        setShowMasterPasswordModal(true)
+      } else {
+        setActionError('Delete failed. Please try again.')
+      }
+    }
   }
 
   // Handle "Add Credential" button - show template selector first
@@ -216,6 +232,28 @@ export default function CredentialsPage() {
           </button>
         </div>
       </div>
+
+      {/* Backup reminder: the server keeps no copy of the vault */}
+      {backupDue && decryptedCache.length > 0 && (
+        <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-sm text-amber-800">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <span className="flex-1">
+            {daysSinceBackup() === null
+              ? 'No encrypted backup has been made from this browser yet.'
+              : `Your last encrypted backup was ${daysSinceBackup()} days ago.`}{' '}
+            The server keeps no copy of your vault; export a .cvault file at least every {BACKUP_REMINDER_DAYS} days.
+          </span>
+          <button onClick={() => setShowBackupDialog(true)} className="btn btn-secondary text-sm">
+            Back up now
+          </button>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          {actionError}
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6">
@@ -385,7 +423,10 @@ export default function CredentialsPage() {
 
       <CredentialBackupDialog
         isOpen={showBackupDialog}
-        onClose={() => setShowBackupDialog(false)}
+        onClose={() => {
+          setShowBackupDialog(false)
+          setBackupDue(isBackupDue())
+        }}
         onImportComplete={() => {
           queryClient.invalidateQueries({ queryKey: ['credentials'] })
         }}

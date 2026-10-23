@@ -19,6 +19,12 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
+// Destructive calls attach a proof of vault unlock; stub it with a fixed value
+const PROOF_HEADERS = { 'X-Vault-Proof': 'test-proof' }
+vi.mock('@/lib/vaultProof', () => ({
+  vaultProofHeaders: vi.fn(async () => ({ 'X-Vault-Proof': 'test-proof' })),
+}))
+
 import api from '@/services/api'
 import { credentialService } from '@/services/credentialService'
 
@@ -78,8 +84,10 @@ describe('credentialService storage integrity', () => {
         credentialService.create({ encrypted_data: BLOB })
       ).rejects.toThrow('Storage integrity check failed')
 
-      // Should have deleted the corrupted credential
-      expect(mockedApi.delete).toHaveBeenCalledWith(`/credentials/${CREDENTIAL_ID}`)
+      // Should have deleted the corrupted credential, proving vault unlock
+      expect(mockedApi.delete).toHaveBeenCalledWith(`/credentials/${CREDENTIAL_ID}`, {
+        headers: PROOF_HEADERS,
+      })
     })
 
     it('should perform re-read against the created credential ID', async () => {
@@ -107,6 +115,12 @@ describe('credentialService storage integrity', () => {
       expect(result.encrypted_data).toBe(BLOB)
       // Should have called GET twice (previous + verification)
       expect(mockedApi.get).toHaveBeenCalledTimes(2)
+      // Ciphertext overwrite carries the proof header
+      expect(mockedApi.patch).toHaveBeenCalledWith(
+        `/credentials/${CREDENTIAL_ID}`,
+        { encrypted_data: BLOB },
+        { headers: PROOF_HEADERS }
+      )
     })
 
     it('should rollback and throw when re-read blob differs after update', async () => {
@@ -125,10 +139,11 @@ describe('credentialService storage integrity', () => {
 
       // Should have called patch twice: update + rollback
       expect(mockedApi.patch).toHaveBeenCalledTimes(2)
-      // Rollback should restore previous blob
+      // Rollback should restore previous blob, still carrying the proof
       expect(mockedApi.patch).toHaveBeenLastCalledWith(
         `/credentials/${CREDENTIAL_ID}`,
-        { encrypted_data: OLD_BLOB }
+        { encrypted_data: OLD_BLOB },
+        { headers: PROOF_HEADERS }
       )
     })
 
@@ -158,8 +173,11 @@ describe('credentialService storage integrity', () => {
       expect(result.encrypted_data).toBe(BLOB)
       // No GET calls — no blob verification needed
       expect(mockedApi.get).not.toHaveBeenCalled()
-      // Only one PATCH — no rollback
+      // Only one PATCH — no rollback, and no proof needed for metadata
       expect(mockedApi.patch).toHaveBeenCalledTimes(1)
+      expect(mockedApi.patch).toHaveBeenCalledWith(`/credentials/${CREDENTIAL_ID}`, {
+        expires_at: '2025-12-31',
+      })
     })
   })
 })

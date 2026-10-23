@@ -151,7 +151,10 @@ class TestCredentialsAPI:
         test_user_data,
         test_credential_data,
     ):
-        """Test deleting a credential."""
+        """A session token alone cannot delete; proof of vault unlock is required.
+
+        The successful path is covered in test_api_vault_proof.py.
+        """
         token = await self._create_user_and_get_token(db_session, test_user_data)
 
         create_response = await client.post(
@@ -163,20 +166,20 @@ class TestCredentialsAPI:
         )
         credential_id = create_response.json()["id"]
 
-        # Delete
+        # Delete without X-Vault-Proof is refused
         response = await client.delete(
             f"/api/v1/credentials/{credential_id}",
             headers={"Authorization": f"Bearer {token}"},
         )
 
-        assert response.status_code == 204
+        assert response.status_code == 403
 
-        # Verify deleted
+        # Still present
         get_response = await client.get(
             f"/api/v1/credentials/{credential_id}",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert get_response.status_code == 404
+        assert get_response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_credential_isolation(
