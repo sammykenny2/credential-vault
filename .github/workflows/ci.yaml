@@ -2,11 +2,14 @@
 
 name: CI
 
+# CI paused: the account's Actions quota for this month is exhausted, so
+# pushes and pull requests do not trigger runs. Run manually from the Actions
+# tab (workflow_dispatch) when needed. To re-enable automatic runs, restore:
+#   push:
+#     branches: [main, master]
+#   pull_request:
+#     branches: [main, master]
 on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
 
 jobs:
