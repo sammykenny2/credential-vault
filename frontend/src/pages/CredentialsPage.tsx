@@ -236,7 +236,7 @@ export default function CredentialsPage() {
       {/* Backup reminder: the server keeps no copy of the vault */}
       {backupDue && decryptedCache.length > 0 && (
         <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-sm text-amber-800">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <span className="flex-1">
             {daysSinceBackup() === null
               ? 'No encrypted backup has been made from this browser yet.'

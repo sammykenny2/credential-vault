@@ -54,7 +54,8 @@ project-specific procedures that are too detailed for always-loaded instructions
   FastAPI dependency injection (`app/api/deps.py`). Ruff line length 100.
 - TypeScript: strict mode, `@/` alias for `frontend/src`, hooks in
   `frontend/src/hooks/`, API clients in `frontend/src/services/`, Vitest tests in
-  `frontend/src/__tests__/`.
+  `frontend/src/__tests__/`. Tailwind 4 with CSS-first configuration: the theme
+  and the `btn`/`input`/`card` utilities live in `frontend/src/index.css`.
 - Every credential query must be scoped by `owner_id`; admin endpoints return
   user metadata and counts only.
 

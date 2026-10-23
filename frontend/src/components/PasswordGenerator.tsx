@@ -67,7 +67,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
           <button
             onClick={() => setMode('password')}
             className={`px-3 py-1 text-sm rounded-md transition-colors ${
-              mode === 'password' ? 'bg-white shadow text-gray-900' : 'text-gray-500'
+              mode === 'password' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
             }`}
           >
             Password
@@ -75,7 +75,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
           <button
             onClick={() => setMode('passphrase')}
             className={`px-3 py-1 text-sm rounded-md transition-colors ${
-              mode === 'passphrase' ? 'bg-white shadow text-gray-900' : 'text-gray-500'
+              mode === 'passphrase' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
             }`}
           >
             Passphrase
@@ -142,7 +142,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
                   type="checkbox"
                   checked={value}
                   onChange={(e) => setter(e.target.checked)}
-                  className="rounded"
+                  className="rounded-sm"
                 />
                 {label}
               </label>
@@ -169,7 +169,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
                 type="text"
                 value={separator}
                 onChange={(e) => setSeparator(e.target.value)}
-                className="w-full mt-1 px-2 py-1 border rounded text-sm"
+                className="w-full mt-1 px-2 py-1 border rounded-sm text-sm"
                 maxLength={3}
               />
             </div>
@@ -179,7 +179,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
                   type="checkbox"
                   checked={capitalize}
                   onChange={(e) => setCapitalize(e.target.checked)}
-                  className="rounded"
+                  className="rounded-sm"
                 />
                 Capitalize
               </label>
@@ -188,7 +188,7 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
                   type="checkbox"
                   checked={includeNumber}
                   onChange={(e) => setIncludeNumber(e.target.checked)}
-                  className="rounded"
+                  className="rounded-sm"
                 />
                 Include number
               </label>

@@ -149,4 +149,5 @@
 - 第 13 項已修復：`TemplateField` 加驗證，`isSecret` 欄位帶 `defaultValue` 一律 422（建立、更新、sync 共用 schema）；範本編輯器加上「範本未加密、只定義欄位名稱」提示。
 - 第 15 項已修復：`SPEC-003` Open Questions 改為實際狀態（Argon2id、全加密 metadata、v2 blob、X-Vault-Proof、離線功能清單）；`ROADMAP.md`、`PROGRESS.md` 移除 MFA 已實作的描述；compose 的 `ENCRYPTION_KEY` 與多餘 caps 已在第 6 項移除。
 - 第 16 項已修復：`Dockerfile` 改為 builder 建 `/opt/venv` 再複製到 runtime，`appuser` 可讀；啟動時先 `alembic upgrade head` 再起 uvicorn。實際 build 與 smoke test 又抓到兩個部署會壞的問題並修掉：`pyproject.toml` 的 `sqlalchemy` 缺 `[asyncio]` extra（映像裡沒有 greenlet，本機 venv 有所以沒發現）；`frontend/` 沒有 `.dockerignore`，`COPY . .` 把 Windows 的 `node_modules` 蓋掉容器內剛裝好的套件導致 `npm run build` 失敗。根目錄與 `frontend/` 都加了 `.dockerignore`。`arrayBufferToBase64` 的 RangeError 已在第 11 項修掉。
-- 16 項全部處理完畢（2026-10-23）。殘餘：admin 硬刪使用者只需 admin token；dev 工具鏈的 7 個 npm advisory 需 breaking 升級；密文回滾偵測未做；compose 全套未在 NAS 實測。
+- 第 4 項補完：剩餘 7 個 dev 工具鏈 advisory 全部來自 Tailwind 3 的相依樹（`braces`、`postcss-selector-parser`），已用官方 `@tailwindcss/upgrade` 升到 Tailwind 4.3（CSS-first 設定寫在 `src/index.css` 的 `@theme`，`tailwind.config.js` 與 `autoprefixer` 移除，PostCSS 改用 `@tailwindcss/postcss`）。`npm audit` 含 dev 依賴歸零。注意：升級工具會把一般字串裡長得像 class 的字（`blur`、`ring`、`shadow`）改寫，`src/lib/passwordTools.ts` 的字典被誤改已還原；日後跑任何 class 遷移工具都要逐檔看 diff。
+- 16 項全部處理完畢（2026-10-23）。殘餘：admin 硬刪使用者只需 admin token；密文回滾偵測未做；compose 全套未在 NAS 實測。

@@ -86,7 +86,7 @@ export default function MigrationDialog({
           {state !== 'migrating' && (
             <button
               onClick={handleClose}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="p-1 hover:bg-gray-100 rounded-sm"
             >
               <X className="w-5 h-5" />
             </button>

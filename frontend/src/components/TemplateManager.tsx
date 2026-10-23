@@ -219,7 +219,7 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
                     type="checkbox"
                     checked={field.isSecret}
                     onChange={(e) => handleFieldChange(index, { isSecret: e.target.checked })}
-                    className="rounded border-gray-300"
+                    className="rounded-sm border-gray-300"
                     disabled={isReadOnly}
                   />
                   Secret

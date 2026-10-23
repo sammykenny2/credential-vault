@@ -305,7 +305,7 @@ export default function CredentialBackupDialog({
               {/* Warning */}
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex gap-2">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0" />
                   <div className="text-sm text-yellow-800">
                     <p className="font-medium">Remember this password!</p>
                     <p>You will need it to restore your credentials. There is no way to recover the backup without it.</p>
@@ -322,7 +322,7 @@ export default function CredentialBackupDialog({
               {exportSuccess && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                     <div className="text-sm text-green-800">
                       <p className="font-medium">Backup created!</p>
                       <p>Your encrypted backup file has been downloaded.</p>
@@ -415,7 +415,7 @@ export default function CredentialBackupDialog({
                   {/* Restore warning */}
                   <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex gap-2">
-                      <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                      <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0" />
                       <div className="text-sm text-yellow-800">
                         <p className="font-medium">Restore adds credentials</p>
                         <p>The {parsedFile.credentialCount} credential(s) from this backup will be added to your vault. Existing credentials are not affected.</p>
@@ -428,7 +428,7 @@ export default function CredentialBackupDialog({
               {/* Progress */}
               {importProgress && !importError && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
-                  {isImporting && <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />}
+                  {isImporting && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
                   {importProgress}
                 </div>
               )}
@@ -444,7 +444,7 @@ export default function CredentialBackupDialog({
               {importSuccess && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                     <div className="text-sm text-green-800">
                       <p className="font-medium">Restore complete!</p>
                       <p>{importProgress}</p>

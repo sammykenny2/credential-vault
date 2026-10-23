@@ -40,7 +40,7 @@ export default function ConflictDialog({
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-amber-100 rounded text-amber-700"
+            className="p-1 hover:bg-amber-100 rounded-sm text-amber-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -58,7 +58,7 @@ export default function ConflictDialog({
             <div className="flex items-center gap-2 text-gray-700 mb-2">
               <Server className="w-4 h-4" />
               <span className="font-medium">Server Version</span>
-              <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">v{serverVersion}</span>
+              <span className="text-xs bg-gray-200 px-2 py-0.5 rounded-sm">v{serverVersion}</span>
             </div>
             <div className="space-y-1 text-sm">
               <p>

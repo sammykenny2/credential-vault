@@ -242,7 +242,7 @@ export default function ExportImportDialog({
                     type="checkbox"
                     checked={useMasterPw}
                     onChange={(e) => setUseMasterPw(e.target.checked)}
-                    className="rounded border-gray-300 text-primary-600"
+                    className="rounded-sm border-gray-300 text-primary-600"
                   />
                   <span className="text-sm font-medium text-gray-700">
                     Use Master Password
@@ -283,7 +283,7 @@ export default function ExportImportDialog({
               {useMasterPw && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex gap-2">
-                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0" />
                     <div className="text-sm text-yellow-800">
                       <p className="font-medium">Remember:</p>
                       <p>If you change your Master Password later, you'll need to re-export your templates.</p>
@@ -302,7 +302,7 @@ export default function ExportImportDialog({
               {exportSuccess && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                     <div className="text-sm text-green-800">
                       <p className="font-medium">Export successful!</p>
                       <p>Your templates have been downloaded.</p>
@@ -324,7 +324,7 @@ export default function ExportImportDialog({
               {/* Google Drive Hint */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex gap-2">
-                  <Upload className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  <Upload className="w-5 h-5 text-blue-600 shrink-0" />
                   <div className="text-sm text-blue-800">
                     <p className="font-medium">Tip: Back up to Google Drive</p>
                     <p>After downloading, upload the .cvault file to Google Drive or another cloud storage for safekeeping.</p>
@@ -461,7 +461,7 @@ export default function ExportImportDialog({
                 >
                   {importResult.success ? (
                     <div className="flex gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                       <div className="text-sm text-green-800">
                         <p className="font-medium">Import successful!</p>
                         <ul className="mt-1 space-y-0.5">
