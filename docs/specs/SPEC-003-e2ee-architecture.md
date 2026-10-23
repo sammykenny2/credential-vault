@@ -75,9 +75,11 @@ This specification defines the complete overhaul of the Credential Vault's crypt
 
 - [x] **Hybrid encryption**: Yes — each credential gets a random AES-256 key, data is encrypted with AES-256-GCM, and the AES key is wrapped with RSA-OAEP. This handles arbitrary-length credential data.
 - [x] **Migration strategy**: Wipe existing data and start fresh. No migration script for SSE→E2EE.
-- [x] **Key derivation**: PBKDF2 (600K iterations, SHA-256) used instead of Argon2id for native Web Crypto API compatibility. Argon2id upgrade deferred to future.
-- [x] **Metadata visibility**: `name`, `description`, `website_url`, `category` remain plaintext for server-side search. Only `encrypted_data` is E2EE.
-- [x] **Removed features**: Sharing, Emergency Access, Backup, TOTP MFA permanently removed (incompatible with E2EE or redundant with Google OAuth 2FA).
+- [x] **Key derivation**: Argon2id via `hash-wasm` (64 MiB, 3 iterations, parallelism 1), recorded per user as `kdf_version = 2`. An earlier PBKDF2 draft (`kdf_version = 1`) never shipped and is not supported.
+- [x] **Metadata visibility**: Nothing is plaintext. `name`, `description`, `website_url`, `category`, fields and notes all live inside `encrypted_data`; search happens client-side after decryption. The server keeps only `expires_at`, status flags and timestamps.
+- [x] **Ciphertext binding (2026-10-23)**: v2 blobs carry a `0xFF 0x02` prefix and use the credential id as AES-GCM additional data; the client generates the id. Legacy v1 blobs remain readable.
+- [x] **Destructive operations (2026-10-23)**: delete and ciphertext overwrite require `X-Vault-Proof`, a challenge encrypted with the user's public key and decrypted with the in-memory private key.
+- [x] **Removed features**: Sharing, Emergency Access, server-side Backup, TOTP MFA and WebAuthn are offline (`503` stubs). Client-side encrypted `.cvault` export/import is the backup path.
 
 ## References
 

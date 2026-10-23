@@ -6,7 +6,7 @@
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| Backend Core | Completed | FastAPI + SQLAlchemy + JWT + MFA |
+| Backend Core | Completed | FastAPI + SQLAlchemy + JWT（TOTP MFA 已停用，改用 Google OAuth） |
 | Backend API | Completed | Auth, Users, Credentials endpoints |
 | Frontend Core | Completed | React + TypeScript + Vite + TailwindCSS |
 | Frontend Crypto | Completed | Web Crypto API + Master Password |

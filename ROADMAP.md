@@ -4,7 +4,7 @@
 
 ## Vision
 
-Credential Vault 是一個自託管的憑證管理系統，讓使用者安全地儲存和管理個人/團隊的帳密與憑證。透過 Tailscale 零信任存取、MFA 認證、端對端加密，提供企業級的安全性。
+Credential Vault 是一個自託管的憑證管理系統，讓使用者安全地儲存和管理個人/團隊的帳密與憑證。透過 Tailscale 零信任存取、Google OAuth 身分驗證、零知識端對端加密，提供企業級的安全性。
 
 ---
 
@@ -14,7 +14,7 @@ Credential Vault 是一個自託管的憑證管理系統，讓使用者安全地
 
 - [x] 專案初始化與架構設計
 - [x] Backend API 結構 (FastAPI + SQLAlchemy)
-- [x] 使用者認證系統 (JWT + MFA)
+- [x] 使用者認證系統 (Google OAuth + JWT；TOTP MFA 已停用)
 - [x] 憑證 CRUD API
 - [x] 後端加密模組
 - [x] Tailscale VPN 整合

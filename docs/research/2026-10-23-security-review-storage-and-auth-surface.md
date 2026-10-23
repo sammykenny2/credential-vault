@@ -145,3 +145,5 @@
 - 第 11 項已修復：憑證密文改為 v2 格式（`0xFF 0x02` 前綴），以 credential id 作為 AES-GCM additional data，id 由客戶端產生並隨 `POST /credentials` 送出（伺服器拒絕重複 id）；被入侵的伺服器把 blob 搬到別筆憑證會解密失敗。舊 v1 blob 仍可讀。`users.kdf_version`（migration `6d8f2b0c3e55`）隨金鑰儲存，`/auth/vault/keys` 回傳給前端選參數。setup 後存於記憶體的私鑰改為 non-extractable。`arrayBufferToBase64` 改分塊，解掉大 blob 的 RangeError（第 16 項前半）。回滾偵測未處理（需客戶端狀態）。
 - 第 12 項已修復：`PUT /auth/vault/keys`（需 `X-Vault-Proof`）只替換包裹後的私鑰、salt 與 `kdf_version`，公鑰與憑證不變；前端 Settings 新增「Change Vault Password」區塊，用 `rewrapPrivateKey` 以舊密碼解開 PKCS8 再以新密碼與新 salt 包回，舊密碼錯誤時 GCM 驗證失敗不會送出任何東西。
 - 第 14 項已修復：`POST /auth/login` 所有失敗情況（帳號不存在、沒有密碼、非 admin、密碼錯誤）一律回 401「Invalid credentials」，且每次都做一次 bcrypt 驗證（不存在時比對 `DUMMY_PASSWORD_HASH`），消除帳號列舉與 timing 差異；只有密碼正確但帳號停用才回 403。
+- 第 13 項已修復：`TemplateField` 加驗證，`isSecret` 欄位帶 `defaultValue` 一律 422（建立、更新、sync 共用 schema）；範本編輯器加上「範本未加密、只定義欄位名稱」提示。
+- 第 15 項已修復：`SPEC-003` Open Questions 改為實際狀態（Argon2id、全加密 metadata、v2 blob、X-Vault-Proof、離線功能清單）；`ROADMAP.md`、`PROGRESS.md` 移除 MFA 已實作的描述；compose 的 `ENCRYPTION_KEY` 與多餘 caps 已在第 6 項移除。
