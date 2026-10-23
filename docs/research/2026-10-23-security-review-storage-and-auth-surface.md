@@ -125,10 +125,11 @@
 
 ## 未驗證事項與限制
 
-- 沒有對執行中的服務做動態測試；XFF、CSP、SW 快取的行為是從程式碼與設定推論。
-- Tailscale Serve 對 `X-Forwarded-For` 是覆寫還是附加，沒有在 tailnet 上實測。即使是覆寫，第 5 項在 port 被誤暴露時仍成立。
-- Docker 映像沒有 build，`appuser` 讀不到 `/root/.local` 的推論待驗證。
+- 沒有對執行中的服務做動態測試；XFF、CSP、SW 快取的行為是從程式碼、設定與單元測試推論。nginx 設定已用 `nginx -t` 驗證語法。
+- Tailscale Serve 對 `X-Forwarded-For` 是覆寫還是附加，沒有在 tailnet 上實測。修復後的信任代理鏈解析對兩種情況都正確，但整套 compose 堆疊在 NAS 上尚未實際啟動驗證。
+- Docker 映像已於 2026-10-23 本機 build 並 smoke test（後端：以 `appuser` 執行 `alembic upgrade head` 與 `import app.main`；前端：`nginx -t`）。尚未測試 compose 三個容器一起啟動與 Tailscale Serve 路由。
 - `pip-audit` 與 `npm audit` 的 advisory 編號來自 2026-10-23 的工具輸出，升級前請重跑。
+- 沒有獨立的第二位審查者看過這些修改；所有測試都是作者自跑。
 
 ## 處理狀態
 
@@ -147,3 +148,5 @@
 - 第 14 項已修復：`POST /auth/login` 所有失敗情況（帳號不存在、沒有密碼、非 admin、密碼錯誤）一律回 401「Invalid credentials」，且每次都做一次 bcrypt 驗證（不存在時比對 `DUMMY_PASSWORD_HASH`），消除帳號列舉與 timing 差異；只有密碼正確但帳號停用才回 403。
 - 第 13 項已修復：`TemplateField` 加驗證，`isSecret` 欄位帶 `defaultValue` 一律 422（建立、更新、sync 共用 schema）；範本編輯器加上「範本未加密、只定義欄位名稱」提示。
 - 第 15 項已修復：`SPEC-003` Open Questions 改為實際狀態（Argon2id、全加密 metadata、v2 blob、X-Vault-Proof、離線功能清單）；`ROADMAP.md`、`PROGRESS.md` 移除 MFA 已實作的描述；compose 的 `ENCRYPTION_KEY` 與多餘 caps 已在第 6 項移除。
+- 第 16 項已修復：`Dockerfile` 改為 builder 建 `/opt/venv` 再複製到 runtime，`appuser` 可讀；啟動時先 `alembic upgrade head` 再起 uvicorn。實際 build 與 smoke test 又抓到兩個部署會壞的問題並修掉：`pyproject.toml` 的 `sqlalchemy` 缺 `[asyncio]` extra（映像裡沒有 greenlet，本機 venv 有所以沒發現）；`frontend/` 沒有 `.dockerignore`，`COPY . .` 把 Windows 的 `node_modules` 蓋掉容器內剛裝好的套件導致 `npm run build` 失敗。根目錄與 `frontend/` 都加了 `.dockerignore`。`arrayBufferToBase64` 的 RangeError 已在第 11 項修掉。
+- 16 項全部處理完畢（2026-10-23）。殘餘：admin 硬刪使用者只需 admin token；dev 工具鏈的 7 個 npm advisory 需 breaking 升級；密文回滾偵測未做；compose 全套未在 NAS 實測。

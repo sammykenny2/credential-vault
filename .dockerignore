@@ -1,0 +1,19 @@
+# Keep the backend build context small and free of local state.
+.git
+.venv
+.pytest_cache
+.ruff_cache
+.coverage
+__pycache__
+*.pyc
+*.egg-info
+data
+frontend/node_modules
+frontend/dist
+.env
+.env.*
+!.env.example
+!.env.production.example
+docs
+*.md
+!README.md

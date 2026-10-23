@@ -41,8 +41,11 @@ project-specific procedures that are too detailed for always-loaded instructions
   `cd frontend && npm run test:run`.
 - Lint/type: `ruff check . && ruff format --check .`, `mypy app/`,
   `cd frontend && npm run lint`.
-- Deployment: `docker-compose.yaml` (tailscale sidecar, backend, frontend/nginx).
-  Docker deployment is not yet verified end to end.
+- Deployment: `docker-compose.yaml` (tailscale sidecar, backend, frontend/nginx),
+  started with `docker compose --env-file .env.production up -d`. Both images
+  build; the backend image runs `alembic upgrade head` and imports the app as
+  `appuser` (checked 2026-10-23). The full stack on a NAS behind Tailscale has
+  not been exercised yet.
 
 ### Coding conventions
 

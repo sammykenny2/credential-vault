@@ -1,0 +1,9 @@
+# Never copy host-installed modules or build output into the image:
+# npm ci inside the builder produces the Linux-native set.
+node_modules
+dist
+coverage
+.env
+.env.*
+*.log
+.DS_Store
