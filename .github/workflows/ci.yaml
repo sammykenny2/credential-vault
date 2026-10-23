@@ -2,14 +2,11 @@
 
 name: CI
 
-# CI paused on 2026-10-23: pushes and pull requests no longer trigger runs.
-# Run manually from the Actions tab (workflow_dispatch) when needed.
-# To re-enable automatic runs, restore:
-#   push:
-#     branches: [main, master]
-#   pull_request:
-#     branches: [main, master]
 on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
