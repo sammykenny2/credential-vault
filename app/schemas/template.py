@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TemplateField(BaseModel):
@@ -16,6 +16,15 @@ class TemplateField(BaseModel):
     isSecret: bool = False
     required: bool | None = None
     defaultValue: str | None = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _no_default_for_secret_fields(self) -> "TemplateField":
+        """Templates are stored unencrypted; a secret default would be plaintext on the server."""
+        if self.isSecret and self.defaultValue:
+            raise ValueError(
+                "Secret fields cannot have a default value: templates are stored unencrypted"
+            )
+        return self
 
 
 class TemplateBase(BaseModel):

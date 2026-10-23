@@ -49,6 +49,38 @@ class TestTemplatesAPI:
         assert len(data["fields"]) == 3
 
     @pytest.mark.asyncio
+    async def test_secret_field_cannot_carry_default_value(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user_data,
+        test_template_data,
+    ):
+        """Templates live unencrypted on the server, so secret defaults are refused."""
+        token = await self._create_user_and_get_token(db_session, test_user_data)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        leaking = {
+            **test_template_data,
+            "name": "Leaky",
+            "fields": [{"key": "API Key", "isSecret": True, "defaultValue": "sk-live-123"}],
+        }
+        response = await client.post("/api/v1/templates", headers=headers, json=leaking)
+        assert response.status_code == 422
+        assert "unencrypted" in response.text
+
+        harmless = {
+            **test_template_data,
+            "name": "Harmless",
+            "fields": [
+                {"key": "Region", "isSecret": False, "defaultValue": "us-east-1"},
+                {"key": "API Key", "isSecret": True},
+            ],
+        }
+        response = await client.post("/api/v1/templates", headers=headers, json=harmless)
+        assert response.status_code == 201
+
+    @pytest.mark.asyncio
     async def test_create_template_duplicate_name(
         self,
         client: AsyncClient,

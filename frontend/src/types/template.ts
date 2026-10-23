@@ -28,7 +28,10 @@ export interface TemplateField {
   isSecret: boolean
   /** Whether this field is required */
   required?: boolean
-  /** Default value (usually empty) */
+  /**
+   * Default value (usually empty). Templates are stored unencrypted, so the
+   * server rejects a default on a secret field.
+   */
   defaultValue?: string
   /** Basic validation type hint */
   validation?: FieldValidation

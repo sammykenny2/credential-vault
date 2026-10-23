@@ -120,6 +120,14 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
             </div>
           )}
 
+          {!isReadOnly && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+              Templates define field names only and are stored on the server without
+              encryption. Never type a real password, key or token into a template; the
+              server refuses default values on secret fields.
+            </div>
+          )}
+
           {/* Basic Info */}
           <div className="grid grid-cols-[auto_1fr] gap-4">
             <div>
