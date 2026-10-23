@@ -50,7 +50,8 @@ COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 COPY --chown=appuser:appuser alembic/ ./alembic/
 
-# SQLite lives here; docker-compose bind-mounts ./data over it
+# SQLite lives here; docker-compose mounts the vault_data volume over it, and a
+# new named volume copies this directory's appuser ownership on first use
 RUN mkdir -p /app/data && chown appuser:appuser /app/data
 
 USER appuser

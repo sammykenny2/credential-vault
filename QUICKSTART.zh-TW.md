@@ -143,91 +143,94 @@ npm run lint
 
 ## Docker 部署
 
-Docker 部署適用於 NAS 或伺服器環境，整合 Tailscale 實現零信任存取。
+正式環境一律跑 Docker（`docker-compose.yaml`：Tailscale sidecar、後端、前端 nginx），不要拿 `npm run dev` / `uvicorn --reload` 當常駐服務。三個容器都設了 `restart: unless-stopped`，部署一次之後，Docker 一啟動它們就會自己回來，重開機不用再手動執行任何東西。
+
+同一份 compose 檔可以跑在 Docker Desktop for Windows、NAS 或其他 Docker 主機上：
+
+- 資料庫放在 named volume `credential-vault_vault_data`，不是 `./data`（那是開發用資料庫）。這也避開了 Windows 掛載 NTFS 時 SQLite 鎖定不可靠、以及 NAS 上主機資料夾權限不符（容器以 uid 1000 執行）的問題。
+- 映像檔名稱固定為 `credential-vault-backend:local` / `credential-vault-frontend:local`，可用 `docker save` / `docker load` 搬到別台主機，不必在那台重新 build。
+- 備份與還原由後端映像檔內的 `python -m app.maintenance` 執行，任何主機做法都一樣。
+- Tailnet 上的機器名稱由 `TS_HOSTNAME` 決定，第二台主機要用不同名稱。
 
 ### 1. 準備設定檔
 
-```bash
-# 複製正式環境變數範本（與本機開發用的 .env 分開）
-cp .env.production.example .env.production
-
-# 編輯 .env.production，確保以下值已正確設定：
-# - SECRET_KEY（使用 openssl rand -hex 32 產生；用預設值或少於 32 字元後端會拒絕啟動）
-# - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
-# - TS_AUTHKEY（Tailscale 認證金鑰）
-# - TS_CERT_DOMAIN（你的 tailnet HTTPS 網域）
+```powershell
+# 複製正式環境變數範本（與本機開發用的 .env 分開，兩者都不進 git）
+Copy-Item .env.production.example .env.production
 ```
+
+編輯 `.env.production`：
+
+- `SECRET_KEY`：`openssl rand -hex 32` 產生；用預設值或少於 32 字元後端會拒絕啟動
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：Google Console 的 web client 要加上重新導向 URI `https://<TS_CERT_DOMAIN>/login`
+- `TS_AUTHKEY`：見下一步
+- `TS_HOSTNAME` / `TS_CERT_DOMAIN`：例如 `credential-vault` / `credential-vault.<tailnet>.ts.net`
 
 ### 2. 取得 Tailscale 認證金鑰
 
-1. 前往 [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
-2. 點選「Generate auth key」
-3. 設定：
-   - Reusable: Yes
-   - Ephemeral: No
-4. 複製產生的金鑰到 `.env.production` 的 `TS_AUTHKEY`
+1. 前往 [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)，點「Generate auth key」
+2. Reusable 不需要（節點身分存在 `tailscale_state` volume，之後重啟不用再認證）；Ephemeral 選 No
+3. 填入 `.env.production` 的 `TS_AUTHKEY`
+4. tailnet 需開啟 MagicDNS 與 HTTPS Certificates（Admin Console → DNS）
+5. 若 Machines 清單已有同名的舊機器，先刪掉，否則新節點會變成 `credential-vault-1`，網址和 Google 重新導向 URI 都會對不上
 
-### 3. 建立 Tailscale 設定（選用）
+`config/tailscale/serve.json` 已在 repo 中，`${TS_CERT_DOMAIN}` 由 Tailscale 容器在執行時自動代入，不需要修改。
 
-```bash
-# 建立設定目錄
-mkdir -p config/tailscale
+### 3. 部署（Windows）
 
-# 建立 serve.json（可選，用於 HTTPS）
-cat > config/tailscale/serve.json << 'EOF'
-{
-  "TCP": {
-    "443": {
-      "HTTPS": true
-    }
-  },
-  "Web": {
-    "credential-vault.your-tailnet.ts.net:443": {
-      "Handlers": {
-        "/": {
-          "Proxy": "http://frontend:80"
-        },
-        "/api/": {
-          "Proxy": "http://backend:8000"
-        }
-      }
-    }
-  }
-}
-EOF
+```powershell
+# 建置映像檔 → 停後端 → 備份資料庫 → 啟動 → 等健康檢查與 tailnet HTTPS 驗證
+# 之後每次改版也是同一個指令
+.\scripts\windows\Deploy-CredentialVault.ps1
 ```
 
-### 4. 啟動服務
+其他動作：
+
+```powershell
+.\scripts\windows\Deploy-CredentialVault.ps1 -Status    # 容器健康、tailnet 網址、最近的備份
+.\scripts\windows\Deploy-CredentialVault.ps1 -Backup    # 備份到 backups\backup-<時間>.db
+.\scripts\windows\Deploy-CredentialVault.ps1 -Restore .\backups\<檔名>.db  # 以備份取代資料庫（會先備份現況）
+.\scripts\windows\Deploy-CredentialVault.ps1 -Rollback  # 回到上一次部署前的映像檔與資料庫
+.\scripts\windows\Deploy-CredentialVault.ps1 -Stop      # 停止服務，直到下次部署前重開機也不會自己起來
+```
+
+`backups\` 不進 git。備份內容是密文與包裝過的金鑰，仍建議另外複製一份到別的磁碟。
+
+Docker Desktop 必須在登入 Windows 時自動啟動（設定 → General → Start Docker Desktop when you sign in，或在「啟動」資料夾放捷徑）。Docker Desktop 要等使用者登入才會啟動；需要「開機即上線、不必登入」的話，改放 NAS。
+
+### 4. 其他 Docker 主機（NAS 等）
+
+腳本的每個步驟都是 `docker compose` 指令，在沒有 PowerShell 的主機上可以照順序手動執行：
 
 ```bash
-# 建置並啟動所有服務（--env-file 同時提供 compose 插值與後端的環境變數）
+docker compose --env-file .env.production build --pull
+docker compose --env-file .env.production stop backend
+docker compose --env-file .env.production run --rm --no-deps -T \
+  -v "$PWD/backups:/backups" backend python -m app.maintenance backup /backups/pre-deploy.db
 docker compose --env-file .env.production up -d
-
-# 查看服務狀態
-docker compose --env-file .env.production ps
-
-# 查看日誌
-docker compose --env-file .env.production logs -f
 ```
+
+還原：`docker compose --env-file .env.production run --rm --no-deps -T --user root -v "<資料夾>:/restore:ro" backend python -m app.maintenance restore /restore/<檔名>`。
+
+注意事項：ARM 的 NAS 需另外 build `linux/arm64` 映像檔；部分 Synology kernel 不支援 compose 裡的 `cpus:` 限制，遇到錯誤時拿掉該行即可；`backups` 資料夾要讓 uid 1000 可寫入。
 
 ### 5. 驗證部署
 
 ```bash
-# 檢查 Tailscale 連線狀態
-docker-compose exec tailscale tailscale status
+# Tailscale 是否已加入 tailnet、取得的網址
+docker compose --env-file .env.production exec tailscale tailscale status
 
-# 檢查後端健康狀態
-docker-compose exec backend curl http://localhost:8000/health
+# 從同一個 tailnet 上的電腦
+curl https://<TS_CERT_DOMAIN>/health
 ```
 
 ### 停止服務
 
 ```bash
-# 停止所有服務
-docker-compose down
+# 停止所有服務（資料保留）
+docker compose --env-file .env.production down
 
-# 停止並移除資料（注意：會刪除所有資料！）
-docker-compose down -v
+# 千萬不要加 -v：會連同 credential-vault_vault_data 一起刪掉，也就是整個保險庫
 ```
 
 ---

@@ -1,9 +1,15 @@
 # Credential Vault - Docker Compose Configuration
-# Deploy to NAS via Tailscale (no exposed ports to LAN)
+# Self-hosted behind Tailscale (no exposed ports to LAN). Runs the same way on
+# Docker Desktop for Windows and on a NAS container host.
 #
-# Start with:  docker compose --env-file .env.production up -d
+# Deploy with:  .\scripts\windows\Deploy-CredentialVault.ps1
+# or by hand:   docker compose --env-file .env.production up -d --build
 # `--env-file` supplies the ${...} values below AND is passed to the backend
 # through env_file. Keep .env for local development only.
+
+# Fixed project name: volumes are credential-vault_vault_data and
+# credential-vault_tailscale_state whatever the checkout folder is called.
+name: credential-vault
 
 services:
   # ============================================
@@ -11,9 +17,11 @@ services:
   # ============================================
   tailscale:
     image: tailscale/tailscale:latest
-    hostname: credential-vault
+    # Tailnet machine name; the HTTPS address becomes <TS_HOSTNAME>.<tailnet>.ts.net
+    hostname: ${TS_HOSTNAME:-credential-vault}
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_HOSTNAME=${TS_HOSTNAME:-credential-vault}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_CONFIG=/config/serve.json
       - TS_USERSPACE=true
@@ -44,6 +52,9 @@ services:
   # Backend API (FastAPI)
   # ============================================
   backend:
+    # Fixed image name so a build can be moved to another host with
+    # `docker save` / `docker load` and started there without rebuilding.
+    image: credential-vault-backend:${VAULT_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -56,7 +67,10 @@ services:
       - DATABASE_URL=sqlite+aiosqlite:///data/credential_vault.db
       - REQUIRE_TAILSCALE=${REQUIRE_TAILSCALE:-true}
     volumes:
-      - ./data:/app/data
+      # Named volume, not ./data: ./data is the development database, a bind
+      # mount from NTFS is unreliable for SQLite locking on Docker Desktop, and
+      # on a NAS the host folder would not be writable by appuser (uid 1000).
+      - vault_data:/app/data
     restart: unless-stopped
     networks:
       - vault-internal
@@ -78,6 +92,7 @@ services:
   # Frontend (React + Nginx)
   # ============================================
   frontend:
+    image: credential-vault-frontend:${VAULT_IMAGE_TAG:-local}
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -104,6 +119,10 @@ services:
 # ============================================
 volumes:
   tailscale_state:
+    driver: local
+  # The vault database. Back up / restore / move it with
+  # scripts/windows/Deploy-CredentialVault.ps1 -Backup / -Restore.
+  vault_data:
     driver: local
 
 # ============================================

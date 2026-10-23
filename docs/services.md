@@ -14,6 +14,8 @@
 
 No service publishes a port to the Docker host; the only external entry is the Tailscale sidecar on the tailnet.
 
+The Docker services are deployed together with `scripts/windows/Deploy-CredentialVault.ps1` (or `docker compose --env-file .env.production up -d --build` on other hosts); the per-service commands above are for debugging.
+
 ## Environment Variables
 
 Port numbers should be configurable via environment variables so developers can override defaults when needed.
@@ -22,7 +24,7 @@ Port numbers should be configurable via environment variables so developers can 
 |----------|---------|---------|-------|
 | (none yet) | | | Ports are currently fixed in `Dockerfile` (uvicorn `--port 8000`), `frontend/vite.config.ts` (`server.port: 3000`), `frontend/nginx.conf` (`listen 80`) and `config/tailscale/serve.json` (`443`). Introduce `API_PORT` / `WEB_PORT` when a conflict appears. |
 
-Related non-port variables live in `.env.example` (`TS_HOSTNAME`, `TS_CERT_DOMAIN`, `REQUIRE_TAILSCALE`).
+Related non-port variables live in `.env.production.example` (`TS_HOSTNAME`, `TS_CERT_DOMAIN`, `REQUIRE_TAILSCALE`).
 
 ## Cross-Project Port Coordination
 

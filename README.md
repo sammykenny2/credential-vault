@@ -41,11 +41,17 @@ pip install -e ".[dev]"
 alembic upgrade head
 uvicorn app.main:app --reload
 
-# Production (Docker, reached through Tailscale)
+# Production (Docker, reached through Tailscale; restarts with Docker on boot)
 cp .env.production.example .env.production
-# Edit .env.production: SECRET_KEY, Google OAuth, TS_AUTHKEY, TS_CERT_DOMAIN
-docker compose --env-file .env.production up -d
+# Edit .env.production: SECRET_KEY, Google OAuth, TS_AUTHKEY, TS_HOSTNAME, TS_CERT_DOMAIN
+.\scripts\windows\Deploy-CredentialVault.ps1          # build, back up, start, health-check
+# Other hosts: docker compose --env-file .env.production up -d --build
 ```
+
+The vault database lives in the `credential-vault_vault_data` Docker volume,
+not `./data` (development only). Backups, restores, rollback and moving to
+another Docker host (NAS, another Windows machine) are covered in
+[QUICKSTART.zh-TW.md](./QUICKSTART.zh-TW.md#docker-部署).
 
 ## Documentation
 

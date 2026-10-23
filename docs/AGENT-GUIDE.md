@@ -37,15 +37,17 @@ project-specific procedures that are too detailed for always-loaded instructions
   (`app/cli.py`).
 - Frontend: `frontend/` (Vite 8 + React 19 + TypeScript 6, Node 22+). `npm install`,
   `npm run dev` (port 3000, proxies `/api` to 8000), `npm run build`.
-- Tests: `pytest` at the root (188 tests, coverage configured in `pyproject.toml`);
+- Tests: `pytest` at the root (210 tests, coverage configured in `pyproject.toml`);
   `cd frontend && npm run test:run`.
 - Lint/type: `ruff check . && ruff format --check .`, `mypy app/`,
   `cd frontend && npm run lint`.
 - Deployment: `docker-compose.yaml` (tailscale sidecar, backend, frontend/nginx),
-  started with `docker compose --env-file .env.production up -d`. Both images
-  build; the backend image runs `alembic upgrade head` and imports the app as
-  `appuser` (checked 2026-10-23). The full stack on a NAS behind Tailscale has
-  not been exercised yet.
+  deployed with `scripts/windows/Deploy-CredentialVault.ps1` (build, pre-deploy
+  backup, `up -d`, health and tailnet checks; `-Backup`, `-Restore`, `-Rollback`,
+  `-Status`, `-Stop`). The database is the `credential-vault_vault_data` named
+  volume, never `./data` (the dev database). Backup/restore run
+  `python -m app.maintenance` inside the backend image so other hosts can repeat
+  the same `docker compose` steps. The stack on a NAS has not been exercised yet.
 
 ### Coding conventions
 

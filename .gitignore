@@ -50,6 +50,8 @@ logs/
 
 # === Database ===
 data/*.db
+# Production database backups written by Deploy-CredentialVault.ps1
+backups/
 
 # === Temporary ===
 tmp/

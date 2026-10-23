@@ -6,6 +6,10 @@
     Automates starting, installing (auto-start on Windows boot), and removing
     the Credential Vault backend (FastAPI/Uvicorn) and frontend (React/Vite).
 
+    Development only: these are the dev servers (APP_ENV=development, Vite,
+    the .\data database). To run the vault as an always-on service use
+    Deploy-CredentialVault.ps1, which deploys the Docker stack.
+
     Without parameters, starts both services interactively for development.
     Use -Install to configure auto-start on Windows boot.
     Use -Remove to remove auto-start and stop running services.
