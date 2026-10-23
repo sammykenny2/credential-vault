@@ -148,13 +148,14 @@ Docker 部署適用於 NAS 或伺服器環境，整合 Tailscale 實現零信任
 ### 1. 準備設定檔
 
 ```bash
-# 複製環境變數範本
-cp .env.example .env
+# 複製正式環境變數範本（與本機開發用的 .env 分開）
+cp .env.production.example .env.production
 
-# 編輯 .env，確保以下值已正確設定：
-# - SECRET_KEY（使用 openssl rand -hex 32 產生）
-# - ENCRYPTION_KEY（使用 openssl rand -hex 32 產生）
+# 編輯 .env.production，確保以下值已正確設定：
+# - SECRET_KEY（使用 openssl rand -hex 32 產生；用預設值或少於 32 字元後端會拒絕啟動）
+# - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 # - TS_AUTHKEY（Tailscale 認證金鑰）
+# - TS_CERT_DOMAIN（你的 tailnet HTTPS 網域）
 ```
 
 ### 2. 取得 Tailscale 認證金鑰
@@ -164,7 +165,7 @@ cp .env.example .env
 3. 設定：
    - Reusable: Yes
    - Ephemeral: No
-4. 複製產生的金鑰到 `.env` 的 `TS_AUTHKEY`
+4. 複製產生的金鑰到 `.env.production` 的 `TS_AUTHKEY`
 
 ### 3. 建立 Tailscale 設定（選用）
 
@@ -199,14 +200,14 @@ EOF
 ### 4. 啟動服務
 
 ```bash
-# 建置並啟動所有服務
-docker-compose up -d
+# 建置並啟動所有服務（--env-file 同時提供 compose 插值與後端的環境變數）
+docker compose --env-file .env.production up -d
 
 # 查看服務狀態
-docker-compose ps
+docker compose --env-file .env.production ps
 
 # 查看日誌
-docker-compose logs -f
+docker compose --env-file .env.production logs -f
 ```
 
 ### 5. 驗證部署
@@ -237,27 +238,22 @@ docker-compose down -v
 
 | 變數 | 說明 | 範例 |
 |------|------|------|
-| `SECRET_KEY` | JWT 簽章金鑰（至少 32 字元） | `openssl rand -hex 32` |
-| `ENCRYPTION_KEY` | 憑證加密金鑰 | `openssl rand -hex 32` |
+| `SECRET_KEY` | JWT 簽章金鑰（至少 32 字元；`APP_ENV=production` 時使用預設值會拒絕啟動） | `openssl rand -hex 32` |
+
+憑證加密完全在瀏覽器端完成（E2EE），伺服器沒有加密金鑰可設定。
 
 ### 應用程式設定
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
-| `APP_ENV` | `development` | 環境：`development` / `production` |
-| `APP_DEBUG` | `true` | 除錯模式 |
+| `APP_ENV` | `development` | 環境：`development` / `production`（docker-compose 固定為 `production`） |
+| `APP_DEBUG` | `true` | 除錯模式（`production` 必須為 `false`） |
 
 ### 資料庫設定
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/credential_vault.db` | 資料庫連線 URL（預設使用 SQLite，免設定） |
-
-### MFA 設定
-
-| 變數 | 預設值 | 說明 |
-|------|--------|------|
-| `MFA_ISSUER` | `CredentialVault` | TOTP 發行者名稱 |
 
 ### Session 設定
 

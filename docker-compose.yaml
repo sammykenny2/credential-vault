@@ -1,7 +1,9 @@
 # Credential Vault - Docker Compose Configuration
 # Deploy to NAS via Tailscale (no exposed ports to LAN)
-
-version: '3.8'
+#
+# Start with:  docker compose --env-file .env.production up -d
+# `--env-file` supplies the ${...} values below AND is passed to the backend
+# through env_file. Keep .env for local development only.
 
 services:
   # ============================================
@@ -18,9 +20,7 @@ services:
     volumes:
       - tailscale_state:/var/lib/tailscale
       - ./config/tailscale:/config:ro
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
+    # Userspace networking needs no NET_ADMIN/SYS_MODULE capabilities.
     restart: unless-stopped
     networks:
       - vault-internal
@@ -47,15 +47,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    environment:
-      - APP_ENV=${APP_ENV:-production}
-      - DATABASE_URL=sqlite+aiosqlite:///data/credential_vault.db
-      - SECRET_KEY=${SECRET_KEY}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - TS_HOSTNAME=${TS_HOSTNAME:-credential-vault}
-      - REQUIRE_TAILSCALE=${REQUIRE_TAILSCALE:-true}
     env_file:
-      - .env
+      - .env.production
+    environment:
+      # Pinned here so a stray APP_ENV in the env file cannot downgrade a
+      # deployment to development mode (open CORS, public /docs, SQL echo).
+      - APP_ENV=production
+      - DATABASE_URL=sqlite+aiosqlite:///data/credential_vault.db
+      - REQUIRE_TAILSCALE=${REQUIRE_TAILSCALE:-true}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

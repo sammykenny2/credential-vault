@@ -2,7 +2,12 @@
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Placeholder shipped in .env.example; production refuses to start with it.
+DEFAULT_SECRET_KEY = "change-this-secret-key-in-production"
+MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -25,7 +30,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///data/credential_vault.db"
 
     # Security
-    secret_key: str = "change-this-secret-key-in-production"
+    secret_key: str = DEFAULT_SECRET_KEY
 
     # JWT
     jwt_algorithm: str = "HS256"
@@ -59,6 +64,21 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @model_validator(mode="after")
+    def _refuse_unsafe_production_config(self) -> "Settings":
+        """Fail fast instead of signing sessions with a well-known key."""
+        if not self.is_production:
+            return self
+        if self.secret_key == DEFAULT_SECRET_KEY or len(self.secret_key) < MIN_SECRET_KEY_LENGTH:
+            raise ValueError(
+                "SECRET_KEY must be a random value of at least "
+                f"{MIN_SECRET_KEY_LENGTH} characters when APP_ENV=production "
+                "(generate one with: openssl rand -hex 32)"
+            )
+        if self.app_debug:
+            raise ValueError("APP_DEBUG must be false when APP_ENV=production")
+        return self
 
 
 @lru_cache

@@ -11,7 +11,7 @@ This directory contains Tailscale configuration for the Credential Vault.
    - **Reusable**: Yes (for container restarts)
    - **Ephemeral**: No (persistent node)
    - **Tags**: `tag:credential-vault` (optional, for ACL)
-3. Copy the key and add it to your `.env` file as `TS_AUTHKEY`
+3. Copy the key and add it to your `.env.production` file as `TS_AUTHKEY`
 
 ### 2. Configure serve.json
 

@@ -41,8 +41,10 @@ pip install -e ".[dev]"
 alembic upgrade head
 uvicorn app.main:app --reload
 
-# Production (Docker)
-docker-compose up -d
+# Production (Docker, reached through Tailscale)
+cp .env.production.example .env.production
+# Edit .env.production: SECRET_KEY, Google OAuth, TS_AUTHKEY, TS_CERT_DOMAIN
+docker compose --env-file .env.production up -d
 ```
 
 ## Documentation
