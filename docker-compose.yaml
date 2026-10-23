@@ -58,6 +58,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      labels:
+        # Set by the deploy script (-Build) so -Status can show the commit.
+        org.opencontainers.image.revision: ${VAULT_REVISION:-unknown}
     env_file:
       - .env.production
     environment:
@@ -96,6 +99,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      labels:
+        org.opencontainers.image.revision: ${VAULT_REVISION:-unknown}
     depends_on:
       - backend
     restart: unless-stopped

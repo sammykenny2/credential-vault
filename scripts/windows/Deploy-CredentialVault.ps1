@@ -16,8 +16,20 @@
     "python -m app.maintenance" inside the backend image, so the same steps
     work by hand, or from a shell script, on any other Docker host.
 
-    Without parameters, deploys: build the images, stop the backend, back up
-    the database, start the stack and wait for the health checks.
+    Without parameters, deploys the latest CI release: the images the CI
+    publish job pushed to GHCR for the newest main commit. Their digests are
+    read from that commit's release/* statuses through the GitHub API, the
+    images are pulled by digest and must carry the matching revision label.
+    Then: stop the backend, back up the database, start the stack and wait for
+    the health checks. -Build does the same with images built from this
+    checkout instead.
+
+.PARAMETER Tag
+    Which CI release to deploy: "latest" (default) or a commit SHA. Needs the
+    GitHub CLI (gh auth login) and a one-time "docker login ghcr.io".
+
+.PARAMETER Build
+    Build the images from this checkout instead of pulling a CI release.
 
 .PARAMETER Backup
     Copy the vault database out of the volume into -BackupDir.
@@ -45,7 +57,15 @@
 
 .EXAMPLE
     .\Deploy-CredentialVault.ps1
-    Build and deploy (or update) the stack.
+    Deploy (or update to) the latest CI release.
+
+.EXAMPLE
+    .\Deploy-CredentialVault.ps1 -Tag 0e255ed
+    Deploy the CI release built from that commit.
+
+.EXAMPLE
+    .\Deploy-CredentialVault.ps1 -Build
+    Build from this checkout and deploy.
 
 .EXAMPLE
     .\Deploy-CredentialVault.ps1 -Backup
@@ -61,6 +81,12 @@
 #>
 [CmdletBinding(DefaultParameterSetName = 'Deploy', SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
+    [Parameter(ParameterSetName = 'Deploy')]
+    [string]$Tag = "latest",
+
+    [Parameter(ParameterSetName = 'Build', Mandatory = $true)]
+    [switch]$Build,
+
     [Parameter(ParameterSetName = 'Backup')]
     [switch]$Backup,
 
@@ -124,6 +150,17 @@ function Invoke-Docker {
     $ErrorActionPreference = "Continue"
     try {
         & docker @args 2>$null
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+function Invoke-Gh {
+    # gh without throwing; stderr is dropped. Returns stdout lines.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & gh @args 2>$null
     } finally {
         $ErrorActionPreference = $previous
     }
@@ -281,6 +318,105 @@ function Wait-StackHealthy {
     return $true
 }
 
+function Get-ImageRevision {
+    # The org.opencontainers.image.revision label (commit SHA), or "".
+    param([string]$Image)
+    $json = Invoke-Docker image inspect --format "{{json .Config.Labels}}" $Image
+    if (-not $json) { return "" }
+    $labels = ($json -join "") | ConvertFrom-Json
+    return "$(Get-JsonProperty $labels 'org.opencontainers.image.revision')"
+}
+
+function Get-CheckoutRevision {
+    # Commit of this checkout for the label on -Build images; -dirty marks
+    # uncommitted changes.
+    $sha = "$(& git -C $repoRoot rev-parse HEAD 2>$null)".Trim()
+    if (-not $sha) { return "unknown" }
+    if (& git -C $repoRoot status --porcelain 2>$null) { return "$sha-dirty" }
+    return $sha
+}
+
+function Get-ReleaseDigests {
+    # Image digests the CI publish job recorded as commit statuses, or $null.
+    param([string]$Repo, [string]$Sha)
+    $json = Invoke-Gh api "repos/$Repo/commits/$Sha/status"
+    if ($LASTEXITCODE -ne 0 -or -not $json) { return $null }
+    $combined = ($json -join "`n") | ConvertFrom-Json
+    $digests = @{}
+    foreach ($status in @(Get-JsonProperty $combined "statuses")) {
+        if ($null -eq $status -or $status.state -ne "success") { continue }
+        if ("$($status.context)" -notmatch '^release/(backend|frontend)$') { continue }
+        $service = $Matches[1]
+        if ("$($status.description)" -match '^sha256:[0-9a-f]{64}$') { $digests[$service] = "$($status.description)" }
+    }
+    if ($digests.Count -eq 2) { return $digests }
+    return $null
+}
+
+function Resolve-Release {
+    # Find the CI release for -Tag ("latest" or a commit SHA) on GitHub.
+    param([string]$Tag)
+    $useBuild = "Or build from this checkout: .\scripts\windows\Deploy-CredentialVault.ps1 -Build"
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        throw "The GitHub CLI (gh) is needed to look up CI releases. $useBuild"
+    }
+    $null = Invoke-Gh auth status
+    if ($LASTEXITCODE -ne 0) { throw "The GitHub CLI is not logged in. Run: gh auth login. $useBuild" }
+    $repo = "$(Invoke-Gh repo view --json nameWithOwner --jq .nameWithOwner)".Trim()
+    if (-not $repo) { throw "Could not determine the GitHub repository of this checkout. $useBuild" }
+
+    if ($Tag -eq "latest") {
+        $shas = Invoke-Gh api "repos/$repo/commits?sha=main&per_page=30" --jq ".[].sha"
+        foreach ($sha in @($shas)) {
+            $sha = "$sha".Trim()
+            if (-not $sha) { continue }
+            $digests = Get-ReleaseDigests -Repo $repo -Sha $sha
+            if ($digests) { return [pscustomobject]@{ Repo = $repo; Sha = $sha; Digests = $digests } }
+        }
+        throw "No CI release found on the last 30 commits of main (the CI publish job has not run yet). $useBuild"
+    }
+
+    if ($Tag -notmatch '^[0-9a-fA-F]{7,40}$') { throw "-Tag must be 'latest' or a commit SHA, got '$Tag'." }
+    $sha = "$(Invoke-Gh api "repos/$repo/commits/$Tag" --jq .sha)".Trim()
+    if (-not $sha) { throw "Commit $Tag was not found in $repo." }
+    $digests = Get-ReleaseDigests -Repo $repo -Sha $sha
+    if (-not $digests) { throw "Commit $Tag has no CI release (the publish job did not run or failed for it). $useBuild" }
+    return [pscustomobject]@{ Repo = $repo; Sha = $sha; Digests = $digests }
+}
+
+function Import-ReleaseImages {
+    # Pull a release by digest and refuse images not built from its commit.
+    # Returns the pulled references; nothing is retagged yet.
+    param($Release)
+    $owner = $Release.Repo.Split("/")[0].ToLowerInvariant()
+    $refs = @{}
+    foreach ($service in $builtImages.Keys) {
+        $ref = "ghcr.io/$owner/$($builtImages[$service])@$($Release.Digests[$service])"
+        Write-Status "Pulling $ref" "INFO"
+        & docker pull $ref | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "docker pull failed for $ref. First pull on this machine? Log in once with a classic personal access token that has only read:packages: docker login ghcr.io -u <github user>"
+        }
+        $revision = Get-ImageRevision $ref
+        if ($revision -ne $Release.Sha) {
+            throw "$ref was built from '$revision', expected $($Release.Sha). Refusing to deploy it."
+        }
+        $refs[$service] = $ref
+    }
+    return $refs
+}
+
+function Publish-Stack {
+    # Shared tail of every deploy once the :<tag> images are in place.
+    # Stop the backend so the backup is a consistent snapshot taken before
+    # the new image runs its migrations.
+    Invoke-Compose stop backend
+    $null = Backup-VaultDatabase -Label "pre-deploy"
+    Invoke-Compose up -d --no-build --remove-orphans
+    if (-not (Wait-StackHealthy)) { Show-Failure; exit 1 }
+    Write-Status "Deployed. Docker restarts the stack on boot; no dev servers needed." "OK"
+}
+
 function Save-PreviousImages {
     # Tag the images of a healthy running stack as :previous for -Rollback.
     foreach ($service in $builtImages.Keys) {
@@ -341,7 +477,13 @@ function Show-StackStatus {
         $id = Get-ServiceContainer $service
         $health = if ($id) { Get-ContainerHealth $id } else { "not created" }
         $type = if ($health -eq "healthy") { "OK" } else { "WARN" }
-        Write-Status "$service`: $health" $type
+        $revision = ""
+        if ($id -and $builtImages.ContainsKey($service)) {
+            $image = "$(Invoke-Docker inspect --format '{{.Image}}' $id)".Trim()
+            if ($image) { $revision = Get-ImageRevision $image }
+            if ($revision) { $revision = " (commit $revision)" }
+        }
+        Write-Status "$service`: $health$revision" $type
     }
     $tailnet = Get-TailnetState
     if ($tailnet -and $tailnet.DnsName) {
@@ -420,18 +562,27 @@ try {
             Write-Status "Rolled back" "OK"
         }
 
-        default {
+        'Build' {
             Test-Prerequisites -Start
             Save-PreviousImages
-            Write-Status "Building images..." "INFO"
+            $env:VAULT_REVISION = Get-CheckoutRevision
+            Write-Status "Building images from this checkout ($env:VAULT_REVISION)..." "INFO"
             Invoke-Compose build --pull
-            # Stop the backend so the backup is a consistent snapshot taken
-            # before the new image runs its migrations.
-            Invoke-Compose stop backend
-            $null = Backup-VaultDatabase -Label "pre-deploy"
-            Invoke-Compose up -d --no-build --remove-orphans
-            if (-not (Wait-StackHealthy)) { Show-Failure; exit 1 }
-            Write-Status "Deployed. Docker restarts the stack on boot; no dev servers needed." "OK"
+            Publish-Stack
+        }
+
+        default {
+            Test-Prerequisites -Start
+            $release = Resolve-Release -Tag $Tag
+            Write-Status "CI release: commit $($release.Sha) of $($release.Repo)" "INFO"
+            $refs = Import-ReleaseImages $release
+            Save-PreviousImages
+            $imageTag = Get-ImageTag
+            foreach ($service in $builtImages.Keys) {
+                & docker tag $refs[$service] "$($builtImages[$service]):$imageTag"
+                if ($LASTEXITCODE -ne 0) { throw "Could not tag the pulled $service image" }
+            }
+            Publish-Stack
         }
     }
 } finally {

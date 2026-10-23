@@ -44,7 +44,8 @@ uvicorn app.main:app --reload
 # Production (Docker, reached through Tailscale; restarts with Docker on boot)
 cp .env.production.example .env.production
 # Edit .env.production: SECRET_KEY, Google OAuth, TS_AUTHKEY, TS_HOSTNAME, TS_CERT_DOMAIN
-.\scripts\windows\Deploy-CredentialVault.ps1          # build, back up, start, health-check
+.\scripts\windows\Deploy-CredentialVault.ps1          # latest CI release from GHCR: verify, back up, start, health-check
+.\scripts\windows\Deploy-CredentialVault.ps1 -Build   # same, with images built from this checkout
 # Other hosts: docker compose --env-file .env.production up -d --build
 ```
 

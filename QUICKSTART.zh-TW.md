@@ -178,16 +178,31 @@ Copy-Item .env.production.example .env.production
 
 ### 3. 部署（Windows）
 
+映像檔有兩種來源：
+
+- **CI release（預設）**：main 上的 CI 通過後，`publish` job 把映像檔推到私有的 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為 commit SHA 與 `latest`，只保留最新 5 版），並把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
+- **本機 build（`-Build`）**：從目前的 checkout 建置。CI 不能跑的時候用這個。
+
+CI release 模式的一次性準備：
+
+- `gh auth login`（GitHub CLI，用來查 release）
+- `docker login ghcr.io -u <GitHub 帳號>`，密碼用一把只有 `read:packages` 權限的 classic personal access token
+
 ```powershell
-# 建置映像檔 → 停後端 → 備份資料庫 → 啟動 → 等健康檢查與 tailnet HTTPS 驗證
-# 之後每次改版也是同一個指令
+# 部署最新的 CI release：查 release → 依 digest 拉映像檔並驗證 → 停後端 → 備份 → 啟動 → 健康檢查
 .\scripts\windows\Deploy-CredentialVault.ps1
+
+# 部署指定 commit 的 CI release
+.\scripts\windows\Deploy-CredentialVault.ps1 -Tag <commit sha>
+
+# 從目前的 checkout 建置並部署
+.\scripts\windows\Deploy-CredentialVault.ps1 -Build
 ```
 
 其他動作：
 
 ```powershell
-.\scripts\windows\Deploy-CredentialVault.ps1 -Status    # 容器健康、tailnet 網址、最近的備份
+.\scripts\windows\Deploy-CredentialVault.ps1 -Status    # 容器健康與執行中的 commit、tailnet 網址、最近的備份
 .\scripts\windows\Deploy-CredentialVault.ps1 -Backup    # 備份到 backups\backup-<時間>.db
 .\scripts\windows\Deploy-CredentialVault.ps1 -Restore .\backups\<檔名>.db  # 以備份取代資料庫（會先備份現況）
 .\scripts\windows\Deploy-CredentialVault.ps1 -Rollback  # 回到上一次部署前的映像檔與資料庫
@@ -209,6 +224,8 @@ docker compose --env-file .env.production run --rm --no-deps -T \
   -v "$PWD/backups:/backups" backend python -m app.maintenance backup /backups/pre-deploy.db
 docker compose --env-file .env.production up -d
 ```
+
+改用 CI release 時，把第一行換成：從 GitHub 上該 commit 的 `release/*` status 取得 digest，`docker pull ghcr.io/<owner>/credential-vault-backend@<digest>`（frontend 同理），確認 `org.opencontainers.image.revision` 標籤等於該 commit，再 `docker tag` 成 `credential-vault-backend:local` / `credential-vault-frontend:local`。
 
 還原：`docker compose --env-file .env.production run --rm --no-deps -T --user root -v "<資料夾>:/restore:ro" backend python -m app.maintenance restore /restore/<檔名>`。
 

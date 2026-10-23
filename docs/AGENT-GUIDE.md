@@ -42,9 +42,14 @@ project-specific procedures that are too detailed for always-loaded instructions
 - Lint/type: `ruff check . && ruff format --check .`, `mypy app/`,
   `cd frontend && npm run lint`.
 - Deployment: `docker-compose.yaml` (tailscale sidecar, backend, frontend/nginx),
-  deployed with `scripts/windows/Deploy-CredentialVault.ps1` (build, pre-deploy
-  backup, `up -d`, health and tailnet checks; `-Backup`, `-Restore`, `-Rollback`,
-  `-Status`, `-Stop`). The database is the `credential-vault_vault_data` named
+  deployed with `scripts/windows/Deploy-CredentialVault.ps1`: by default the latest
+  CI release (the `publish` job pushes to GHCR and records digests as
+  `release/backend` / `release/frontend` commit statuses; the script pulls by
+  digest and checks the revision label), or `-Build` from the checkout; then
+  pre-deploy backup, `up -d`, health and tailnet checks. Also `-Tag <sha>`,
+  `-Backup`, `-Restore`, `-Rollback`, `-Status`, `-Stop`. Keep the publish job's
+  `provenance: false` / `sbom: false`: attestation manifests would be counted
+  and deleted by the keep-5 retention step. The database is the `credential-vault_vault_data` named
   volume, never `./data` (the dev database). Backup/restore run
   `python -m app.maintenance` inside the backend image so other hosts can repeat
   the same `docker compose` steps. The stack on a NAS has not been exercised yet.
