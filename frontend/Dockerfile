@@ -24,11 +24,9 @@ FROM nginx:alpine
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config
+# Copy nginx config and the shared security-header snippet it includes
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Add security headers config
-RUN rm -f /etc/nginx/conf.d/default.conf.bak
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 # Expose port
 EXPOSE 80

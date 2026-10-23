@@ -13,6 +13,12 @@ import { authService } from '@/services/authService'
 import api from '@/services/api'
 import { setupVault, unlockVault } from '@/lib/crypto'
 
+/**
+ * The encrypted private key is downloadable by anyone holding a session token,
+ * so the vault password must resist offline guessing. 12 characters minimum.
+ */
+export const MIN_VAULT_PASSWORD_LENGTH = 12
+
 interface MasterPasswordModalProps {
   isOpen: boolean
   onUnlock: () => void
@@ -44,8 +50,8 @@ export default function MasterPasswordModal({
     try {
       if (needsSetup) {
         // Setting up new vault
-        if (password.length < 8) {
-          setError('Vault password must be at least 8 characters')
+        if (password.length < MIN_VAULT_PASSWORD_LENGTH) {
+          setError(`Vault password must be at least ${MIN_VAULT_PASSWORD_LENGTH} characters`)
           return
         }
         if (password !== confirmPassword) {
@@ -146,7 +152,7 @@ export default function MasterPasswordModal({
           </h2>
           <p className="text-gray-500 mt-2 text-sm">
             {needsSetup
-              ? 'Create a vault password to encrypt your credentials. This password is never sent to the server.'
+              ? `Create a vault password (at least ${MIN_VAULT_PASSWORD_LENGTH} characters) to encrypt your credentials. This password is never sent to the server.`
               : 'Enter your vault password to decrypt your credentials.'}
           </p>
         </div>

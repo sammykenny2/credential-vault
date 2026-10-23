@@ -1,10 +1,9 @@
 // Credential Vault - Service Worker
-// Provides offline support with cache-first strategy for static assets
-// and network-first strategy for API calls
+// Cache-first for hashed static assets, network-first for HTML navigation.
+// API responses are never cached: they carry encrypted vault material and
+// key blobs that must not persist in Cache Storage on the device.
 
-const CACHE_NAME = 'credential-vault-v1'
-const STATIC_CACHE = 'static-v1'
-const API_CACHE = 'api-v1'
+const STATIC_CACHE = 'static-v2'
 
 // Static assets to precache
 const PRECACHE_URLS = [
@@ -23,14 +22,13 @@ self.addEventListener('install', (event) => {
   )
 })
 
-// Activate event - clean up old caches
+// Activate event - drop every other cache, including the old api-v1 cache
 self.addEventListener('activate', (event) => {
-  const currentCaches = [STATIC_CACHE, API_CACHE]
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => !currentCaches.includes(name))
+          .filter((name) => name !== STATIC_CACHE)
           .map((name) => caches.delete(name))
       )
     }).then(() => self.clients.claim())
@@ -45,9 +43,9 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return
 
-  // API requests - network first, fall back to cache
+  // API requests - network only, never stored
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API_CACHE))
+    event.respondWith(networkOnly(request))
     return
   }
 
@@ -66,6 +64,21 @@ self.addEventListener('fetch', (event) => {
   // Default - network first
   event.respondWith(networkFirst(request, STATIC_CACHE))
 })
+
+// Network-only strategy (for API): no cache read, no cache write
+async function networkOnly(request) {
+  try {
+    return await fetch(request)
+  } catch {
+    return new Response(
+      JSON.stringify({ error: 'You are offline' }),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
+  }
+}
 
 // Cache-first strategy (for static assets with hashes)
 async function cacheFirst(request, cacheName) {
@@ -88,7 +101,7 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-// Network-first strategy (for API and HTML)
+// Network-first strategy (for HTML and other same-origin assets)
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request)
@@ -106,13 +119,7 @@ async function networkFirst(request, cacheName) {
       return caches.match('/index.html')
     }
 
-    return new Response(
-      JSON.stringify({ error: 'You are offline' }),
-      {
-        status: 503,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    )
+    return new Response('Offline', { status: 503 })
   }
 }
 
