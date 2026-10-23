@@ -132,4 +132,5 @@
 
 ## 處理狀態
 
-- 2026-10-23：審查完成，尚未修復任何項目。`AGENTS.md`、`CLAUDE.md`、`docs/AGENT-GUIDE.md` 已更新以反映 TOTP/WebAuthn 的實際狀態與零知識不變量。
+- 2026-10-23：審查完成，修復進度如下。`AGENTS.md`、`CLAUDE.md`、`docs/AGENT-GUIDE.md` 已更新以反映 TOTP/WebAuthn 的實際狀態與零知識不變量。
+- 第 1 項（密碼產生器）已修復：產生、強度分析、HIBP 查詢移到 `frontend/src/lib/passwordTools.ts`，使用 `getRandomValues` 與 rejection sampling；刪除 `app/api/v1/tools.py`、`app/core/password_generator.py`、`password_strength.py`、`hibp.py` 與對應測試。

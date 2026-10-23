@@ -16,6 +16,7 @@
  */
 
 import { argon2id } from 'hash-wasm'
+import { randomInt } from './passwordTools'
 
 // === Constants ===
 const AES_ALGORITHM = 'AES-GCM'
@@ -386,10 +387,7 @@ export function generatePassword(
 
   if (!charset) charset = 'abcdefghijklmnopqrstuvwxyz'
 
-  const randomValues = crypto.getRandomValues(new Uint8Array(length))
-  return Array.from(randomValues)
-    .map(v => charset[v % charset.length])
-    .join('')
+  return Array.from({ length }, () => charset[randomInt(charset.length)]).join('')
 }
 
 /**

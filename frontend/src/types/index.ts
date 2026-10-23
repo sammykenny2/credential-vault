@@ -57,34 +57,6 @@ export interface CredentialCreate {
 }
 
 // Password tools types
-export interface PasswordGenerateRequest {
-  length: number
-  uppercase: boolean
-  lowercase: boolean
-  digits: boolean
-  symbols: boolean
-  exclude_ambiguous: boolean
-}
-
-export interface PasswordGenerateResponse {
-  password: string
-  length: number
-  strength: PasswordStrengthResult
-}
-
-export interface PassphraseGenerateRequest {
-  word_count: number
-  separator: string
-  capitalize: boolean
-  include_number: boolean
-}
-
-export interface PassphraseGenerateResponse {
-  passphrase: string
-  word_count: number
-  strength: PasswordStrengthResult
-}
-
 export interface PasswordStrengthResult {
   score: number
   level: 'very_weak' | 'weak' | 'fair' | 'strong' | 'very_strong'

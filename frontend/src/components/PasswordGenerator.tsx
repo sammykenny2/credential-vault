@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Copy, RefreshCw, Check } from 'lucide-react'
-import { toolsService } from '@/services/toolsService'
+import { analyzePassword, generatePassphrase, generatePassword } from '@/lib/passwordTools'
 import type { PasswordStrengthResult } from '@/types'
 
 interface PasswordGeneratorProps {
@@ -28,7 +28,6 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
   const [password, setPassword] = useState('')
   const [strength, setStrength] = useState<PasswordStrengthResult | null>(null)
   const [copied, setCopied] = useState(false)
-  const [loading, setLoading] = useState(false)
 
   // Password options
   const [length, setLength] = useState(20)
@@ -44,34 +43,14 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
   const [capitalize, setCapitalize] = useState(false)
   const [includeNumber, setIncludeNumber] = useState(false)
 
-  const generate = useCallback(async () => {
-    setLoading(true)
-    try {
-      if (mode === 'password') {
-        const result = await toolsService.generatePassword({
-          length, uppercase, lowercase, digits, symbols,
-          exclude_ambiguous: excludeAmbiguous,
-        })
-        setPassword(result.password)
-        setStrength(result.strength)
-      } else {
-        const result = await toolsService.generatePassphrase({
-          word_count: wordCount, separator, capitalize,
-          include_number: includeNumber,
-        })
-        setPassword(result.passphrase)
-        setStrength(result.strength)
-      }
-    } catch {
-      // Fallback to client-side generation
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()'
-      let result = ''
-      for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length))
-      }
-      setPassword(result)
-    }
-    setLoading(false)
+  const generate = useCallback(() => {
+    // Generated entirely in the browser; the server never sees this value.
+    const value =
+      mode === 'password'
+        ? generatePassword({ length, uppercase, lowercase, digits, symbols, excludeAmbiguous })
+        : generatePassphrase({ wordCount, separator, capitalize, includeNumber })
+    setPassword(value)
+    setStrength(analyzePassword(value))
   }, [mode, length, uppercase, lowercase, digits, symbols, excludeAmbiguous, wordCount, separator, capitalize, includeNumber])
 
   const copyToClipboard = async () => {
@@ -222,10 +201,9 @@ export default function PasswordGenerator({ onSelect }: PasswordGeneratorProps) 
       <div className="flex gap-2">
         <button
           onClick={generate}
-          disabled={loading}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 text-sm"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className="w-4 h-4" />
           Generate
         </button>
         {password && onSelect && (
