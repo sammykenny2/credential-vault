@@ -23,6 +23,9 @@ import {
   unlockVault,
   encryptCredential,
   decryptCredential,
+  encryptCredentialLegacy,
+  credentialBlobVersion,
+  rewrapPrivateKey,
   generatePassword,
   sha256,
   KDF_VERSION,
@@ -30,6 +33,8 @@ import {
 import type { CredentialData } from '@/lib/crypto'
 
 // ── Test Data ───────────────────────────────────────────────────────────
+
+const CRED_ID = '1e3a5c7b-9d2f-4e6a-8b0c-2d4f6a8c0e1b'
 
 const SAMPLE_CREDENTIAL: CredentialData = {
   name: 'Test Account',
@@ -437,8 +442,8 @@ describe('Vault Setup & Unlock', () => {
     )
 
     // Encrypt with unlocked public key, decrypt with unlocked private key
-    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, unlocked.publicKey)
-    const decrypted = await decryptCredential(encrypted, unlocked.privateKey)
+    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, unlocked.publicKey, CRED_ID)
+    const decrypted = await decryptCredential(encrypted, unlocked.privateKey, CRED_ID)
     expect(decrypted).toEqual(SAMPLE_CREDENTIAL)
   }, 30000)
 })
@@ -457,15 +462,15 @@ describe('Hybrid Credential Encryption', () => {
   })
 
   it('should encrypt to a base64 string', async () => {
-    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey)
+    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
     expect(typeof encrypted).toBe('string')
     expect(encrypted.length).toBeGreaterThan(0)
     expect(encrypted).toMatch(/^[A-Za-z0-9+/=]+$/)
   })
 
   it('should round-trip full credential data', async () => {
-    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey)
-    const decrypted = await decryptCredential(encrypted, privateKey)
+    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
+    const decrypted = await decryptCredential(encrypted, privateKey, CRED_ID)
 
     expect(decrypted.name).toBe(SAMPLE_CREDENTIAL.name)
     expect(decrypted.description).toBe(SAMPLE_CREDENTIAL.description)
@@ -476,8 +481,8 @@ describe('Hybrid Credential Encryption', () => {
   })
 
   it('should round-trip minimal credential (name + empty fields)', async () => {
-    const encrypted = await encryptCredential(MINIMAL_CREDENTIAL, publicKey)
-    const decrypted = await decryptCredential(encrypted, privateKey)
+    const encrypted = await encryptCredential(MINIMAL_CREDENTIAL, publicKey, CRED_ID)
+    const decrypted = await decryptCredential(encrypted, privateKey, CRED_ID)
     expect(decrypted.name).toBe('Minimal')
     expect(decrypted.fields).toEqual({})
   })
@@ -490,8 +495,8 @@ describe('Hybrid Credential Encryption', () => {
         note: 'Ñoño café résumé',
       },
     }
-    const encrypted = await encryptCredential(credential, publicKey)
-    const decrypted = await decryptCredential(encrypted, privateKey)
+    const encrypted = await encryptCredential(credential, publicKey, CRED_ID)
+    const decrypted = await decryptCredential(encrypted, privateKey, CRED_ID)
     expect(decrypted).toEqual(credential)
   })
 
@@ -503,33 +508,33 @@ describe('Hybrid Credential Encryption', () => {
       },
       notes: 'B'.repeat(50000),
     }
-    const encrypted = await encryptCredential(credential, publicKey)
-    const decrypted = await decryptCredential(encrypted, privateKey)
+    const encrypted = await encryptCredential(credential, publicKey, CRED_ID)
+    const decrypted = await decryptCredential(encrypted, privateKey, CRED_ID)
     expect(decrypted).toEqual(credential)
   })
 
   it('should produce different ciphertexts for same data (randomized)', async () => {
-    const enc1 = await encryptCredential(SAMPLE_CREDENTIAL, publicKey)
-    const enc2 = await encryptCredential(SAMPLE_CREDENTIAL, publicKey)
+    const enc1 = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
+    const enc2 = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
     expect(enc1).not.toBe(enc2)
 
     // Both should decrypt to the same data
-    const dec1 = await decryptCredential(enc1, privateKey)
-    const dec2 = await decryptCredential(enc2, privateKey)
+    const dec1 = await decryptCredential(enc1, privateKey, CRED_ID)
+    const dec2 = await decryptCredential(enc2, privateKey, CRED_ID)
     expect(dec1).toEqual(dec2)
   })
 
   it('should fail to decrypt with wrong private key', async () => {
     const otherKeyPair = await generateKeyPair()
-    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey)
+    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
 
     await expect(
-      decryptCredential(encrypted, otherKeyPair.privateKey)
+      decryptCredential(encrypted, otherKeyPair.privateKey, CRED_ID)
     ).rejects.toThrow('Decryption failed')
   })
 
   it('should fail to decrypt corrupted data', async () => {
-    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey)
+    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
 
     // Flip some bytes in the middle of the base64 string
     const corrupted =
@@ -538,17 +543,17 @@ describe('Hybrid Credential Encryption', () => {
       encrypted.slice(54)
 
     await expect(
-      decryptCredential(corrupted, privateKey)
+      decryptCredential(corrupted, privateKey, CRED_ID)
     ).rejects.toThrow('Decryption failed')
   })
 
   it('should fail to decrypt empty string', async () => {
-    await expect(decryptCredential('', privateKey)).rejects.toThrow()
+    await expect(decryptCredential('', privateKey, CRED_ID)).rejects.toThrow()
   })
 
   it('should fail to decrypt invalid base64', async () => {
     await expect(
-      decryptCredential('not-valid-base64!!!', privateKey)
+      decryptCredential('not-valid-base64!!!', privateKey, CRED_ID)
     ).rejects.toThrow()
   })
 })
@@ -568,7 +573,7 @@ describe('End-to-End: Setup → Unlock → Encrypt → Decrypt', () => {
     }
 
     // 3. User encrypts a credential (using in-memory keys from setup)
-    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, vault.publicKey)
+    const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, vault.publicKey, CRED_ID)
 
     // 4. Simulate: server stores encrypted credential blob
     const storedBlob = encrypted
@@ -582,7 +587,7 @@ describe('End-to-End: Setup → Unlock → Encrypt → Decrypt', () => {
     )
 
     // 6. User decrypts credential from server
-    const decrypted = await decryptCredential(storedBlob, unlocked.privateKey)
+    const decrypted = await decryptCredential(storedBlob, unlocked.privateKey, CRED_ID)
     expect(decrypted).toEqual(SAMPLE_CREDENTIAL)
 
     // 7. User creates another credential in this session
@@ -590,8 +595,8 @@ describe('End-to-End: Setup → Unlock → Encrypt → Decrypt', () => {
       name: 'Second Account',
       fields: { api_key: 'sk-abc123' },
     }
-    const encrypted2 = await encryptCredential(newCred, unlocked.publicKey)
-    const decrypted2 = await decryptCredential(encrypted2, unlocked.privateKey)
+    const encrypted2 = await encryptCredential(newCred, unlocked.publicKey, CRED_ID)
+    const decrypted2 = await decryptCredential(encrypted2, unlocked.privateKey, CRED_ID)
     expect(decrypted2).toEqual(newCred)
   }, 60000)
 
@@ -606,7 +611,7 @@ describe('End-to-End: Setup → Unlock → Encrypt → Decrypt', () => {
 
     // Encrypt all
     const encryptedBlobs = await Promise.all(
-      credentials.map(c => encryptCredential(c, vault.publicKey))
+      credentials.map(c => encryptCredential(c, vault.publicKey, CRED_ID))
     )
 
     // Unlock in a new "session"
@@ -619,9 +624,110 @@ describe('End-to-End: Setup → Unlock → Encrypt → Decrypt', () => {
 
     // Decrypt all and verify
     const decrypted = await Promise.all(
-      encryptedBlobs.map(blob => decryptCredential(blob, unlocked.privateKey))
+      encryptedBlobs.map(blob => decryptCredential(blob, unlocked.privateKey, CRED_ID))
     )
 
     expect(decrypted).toEqual(credentials)
   }, 60000)
+})
+
+// ── Blob format v2: id binding, legacy compatibility, key handling ─────────
+
+describe('Credential blob format', () => {
+  let publicKey: CryptoKey
+  let privateKey: CryptoKey
+
+  beforeAll(async () => {
+    const keyPair = await generateKeyPair()
+    publicKey = keyPair.publicKey
+    privateKey = keyPair.privateKey
+  })
+
+  it('produces v2 blobs and recognises legacy v1 blobs', async () => {
+    const v2 = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
+    const v1 = await encryptCredentialLegacy(SAMPLE_CREDENTIAL, publicKey)
+    expect(credentialBlobVersion(v2)).toBe(2)
+    expect(credentialBlobVersion(v1)).toBe(1)
+  })
+
+  it('refuses to decrypt a v2 blob under a different credential id', async () => {
+    const blob = await encryptCredential(SAMPLE_CREDENTIAL, publicKey, CRED_ID)
+    await expect(decryptCredential(blob, privateKey, 'other-id')).rejects.toThrow('Decryption failed')
+    await expect(decryptCredential(blob, privateKey)).rejects.toThrow('Decryption failed')
+    const ok = await decryptCredential(blob, privateKey, CRED_ID)
+    expect(ok).toEqual(SAMPLE_CREDENTIAL)
+  })
+
+  it('still decrypts legacy v1 blobs, with or without an id', async () => {
+    const blob = await encryptCredentialLegacy(SAMPLE_CREDENTIAL, publicKey)
+    expect(await decryptCredential(blob, privateKey)).toEqual(SAMPLE_CREDENTIAL)
+    expect(await decryptCredential(blob, privateKey, CRED_ID)).toEqual(SAMPLE_CREDENTIAL)
+  })
+
+  it('requires a credential id to encrypt', async () => {
+    await expect(encryptCredential(SAMPLE_CREDENTIAL, publicKey, '')).rejects.toThrow('credential id')
+  })
+
+  it('keeps the session private key non-extractable after setup and unlock', async () => {
+    const vault = await setupVault(VAULT_PASSWORD)
+    expect(vault.privateKey.extractable).toBe(false)
+    expect(vault.kdfVersion).toBe(KDF_VERSION)
+    const unlocked = await unlockVault(
+      VAULT_PASSWORD,
+      vault.saltBase64,
+      vault.encryptedPrivateKeyBase64,
+      vault.publicKeyBase64,
+      vault.kdfVersion
+    )
+    expect(unlocked.privateKey.extractable).toBe(false)
+  })
+
+  it('rejects an unknown KDF version', async () => {
+    const vault = await setupVault(VAULT_PASSWORD)
+    await expect(
+      unlockVault(VAULT_PASSWORD, vault.saltBase64, vault.encryptedPrivateKeyBase64, vault.publicKeyBase64, 99)
+    ).rejects.toThrow('Unsupported vault key derivation version')
+  })
+
+  it('re-wraps the private key for a new password without changing the key pair', async () => {
+    const vault = await setupVault(VAULT_PASSWORD)
+    const blob = await encryptCredential(SAMPLE_CREDENTIAL, vault.publicKey, CRED_ID)
+
+    const rewrapped = await rewrapPrivateKey(
+      VAULT_PASSWORD,
+      'brand-new-vault-password',
+      vault.saltBase64,
+      vault.encryptedPrivateKeyBase64,
+      vault.kdfVersion
+    )
+    expect(rewrapped.saltBase64).not.toBe(vault.saltBase64)
+    expect(rewrapped.kdfVersion).toBe(KDF_VERSION)
+
+    const unlocked = await unlockVault(
+      'brand-new-vault-password',
+      rewrapped.saltBase64,
+      rewrapped.encryptedPrivateKeyBase64,
+      vault.publicKeyBase64,
+      rewrapped.kdfVersion
+    )
+    expect(await decryptCredential(blob, unlocked.privateKey, CRED_ID)).toEqual(SAMPLE_CREDENTIAL)
+
+    await expect(
+      unlockVault(VAULT_PASSWORD, rewrapped.saltBase64, rewrapped.encryptedPrivateKeyBase64, vault.publicKeyBase64)
+    ).rejects.toThrow()
+  })
+
+  it('refuses to re-wrap with the wrong current password', async () => {
+    const vault = await setupVault(VAULT_PASSWORD)
+    await expect(
+      rewrapPrivateKey('wrong-password', 'new-password', vault.saltBase64, vault.encryptedPrivateKeyBase64)
+    ).rejects.toThrow()
+  })
+
+  it('base64-encodes buffers larger than one chunk', () => {
+    const big = new Uint8Array(200_000)
+    for (let i = 0; i < big.length; i++) big[i] = i % 251
+    const roundTrip = new Uint8Array(base64ToArrayBuffer(arrayBufferToBase64(big)))
+    expect(roundTrip).toEqual(big)
+  })
 })

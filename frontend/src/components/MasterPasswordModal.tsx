@@ -11,7 +11,8 @@ import { useVaultKey } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import api from '@/services/api'
-import { setupVault, unlockVault } from '@/lib/crypto'
+import { setupVault, unlockVault, KDF_VERSION } from '@/lib/crypto'
+import type { VaultKeyMaterial } from '@/types'
 
 /**
  * The encrypted private key is downloadable by anyone holding a session token,
@@ -67,6 +68,7 @@ export default function MasterPasswordModal({
           public_key: vaultKeys.publicKeyBase64,
           encrypted_private_key: vaultKeys.encryptedPrivateKeyBase64,
           key_salt: vaultKeys.saltBase64,
+          kdf_version: vaultKeys.kdfVersion,
         })
 
         // Store keys in memory (with server-registered public key for verification)
@@ -85,14 +87,15 @@ export default function MasterPasswordModal({
         }
 
         // Fetch vault key material (uses axios with auto token refresh)
-        const { data: keyData } = await api.get('/auth/vault/keys')
+        const { data: keyData } = await api.get<VaultKeyMaterial>('/auth/vault/keys')
 
-        // Try to decrypt the private key
+        // Try to decrypt the private key with the KDF parameters it was wrapped with
         const keys = await unlockVault(
           password,
           keyData.key_salt,
           keyData.encrypted_private_key,
           keyData.public_key,
+          keyData.kdf_version ?? KDF_VERSION,
         )
 
         // Store decrypted keys in memory (with server-registered public key for verification)

@@ -47,8 +47,17 @@ async def create_credential(
     current_user: CurrentUser,
     db: DbSession,
 ):
-    """Create a new credential."""
+    """Create a new credential.
+
+    Clients generate the id themselves and bind the ciphertext to it, so a
+    reused id is refused rather than silently replaced.
+    """
     service = CredentialService(db)
+    if data.id is not None and await service.exists(str(data.id)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A credential with this id already exists",
+        )
     credential = await service.create(owner_id=current_user.id, data=data)
 
     audit_service = AuditLogService(db)

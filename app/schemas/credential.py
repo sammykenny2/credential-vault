@@ -5,21 +5,27 @@ The server only sees opaque encrypted data.
 """
 
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CredentialCreate(BaseModel):
-    """Credential creation schema."""
+    """Credential creation schema.
 
-    encrypted_data: str
+    The client may choose the id so it can bind the ciphertext to it (AES-GCM
+    additional data). A server-chosen id is used when none is supplied.
+    """
+
+    id: UUID | None = None
+    encrypted_data: str = Field(min_length=1, max_length=1_000_000)
     expires_at: datetime | None = None
 
 
 class CredentialUpdate(BaseModel):
     """Credential update schema."""
 
-    encrypted_data: str | None = None
+    encrypted_data: str | None = Field(None, min_length=1, max_length=1_000_000)
     expires_at: datetime | None = None
 
 
@@ -52,9 +58,10 @@ class CredentialListItem(BaseModel):
 
 
 class CredentialExport(BaseModel):
-    """Schema for credential export."""
+    """Schema for credential export/import (id keeps v2 blobs decryptable)."""
 
-    encrypted_data: str
+    id: UUID | None = None
+    encrypted_data: str = Field(min_length=1, max_length=1_000_000)
     expires_at: datetime | None = None
 
 

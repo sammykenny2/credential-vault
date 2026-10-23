@@ -58,6 +58,14 @@ class User(Base, TimestampMixin):
     public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_salt: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Which client-side KDF parameters wrapped the private key (2 = Argon2id
+    # 64 MiB / 3 iterations). Lets the parameters change without guessing.
+    kdf_version: Mapped[int] = mapped_column(
+        Integer,
+        default=2,
+        server_default="2",
+        nullable=False,
+    )
 
     # Role
     role: Mapped[UserRole] = mapped_column(

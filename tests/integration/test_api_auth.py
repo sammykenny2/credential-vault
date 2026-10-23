@@ -201,6 +201,13 @@ class TestAuthAPI:
         data = response.json()
         assert data["message"] == "Vault keys configured successfully"
 
+        keys = await client.get(
+            "/api/v1/auth/vault/keys", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert keys.status_code == 200
+        assert keys.json()["kdf_version"] == 2
+        assert keys.json()["public_key"] == "test-public-key-base64"
+
     @pytest.mark.asyncio
     async def test_vault_setup_duplicate(self, client: AsyncClient, db_session, test_user_data):
         """Test that vault setup fails if keys already exist."""

@@ -206,6 +206,7 @@ async def get_vault_keys(current_user: CurrentUser):
         "public_key": current_user.public_key,
         "encrypted_private_key": current_user.encrypted_private_key,
         "key_salt": current_user.key_salt,
+        "kdf_version": current_user.kdf_version,
     }
 
 
@@ -266,6 +267,7 @@ async def setup_vault(
         public_key=data.public_key,
         encrypted_private_key=data.encrypted_private_key,
         key_salt=data.key_salt,
+        kdf_version=data.kdf_version,
     )
 
     audit_service = AuditLogService(db)

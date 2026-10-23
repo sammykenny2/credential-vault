@@ -65,7 +65,7 @@ export const credentialService = {
   },
 
   async importBatch(
-    credentials: Array<{ encrypted_data: string; expires_at?: string | null }>
+    credentials: Array<{ id?: string; encrypted_data: string; expires_at?: string | null }>
   ): Promise<{ imported: number; skipped: number; errors: string[] }> {
     const response = await api.post<{ imported: number; skipped: number; errors: string[] }>(
       '/credentials/import',

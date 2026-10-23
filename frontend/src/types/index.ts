@@ -53,6 +53,8 @@ export interface CredentialListItem {
 }
 
 export interface CredentialCreate {
+  /** Client-generated UUID; the ciphertext is bound to it. */
+  id?: string
   encrypted_data: string
   expires_at?: string
 }
@@ -112,6 +114,14 @@ export interface VaultSetupRequest {
   public_key: string
   encrypted_private_key: string
   key_salt: string
+  kdf_version: number
+}
+
+export interface VaultKeyMaterial {
+  public_key: string
+  encrypted_private_key: string
+  key_salt: string
+  kdf_version?: number
 }
 
 // API Response types

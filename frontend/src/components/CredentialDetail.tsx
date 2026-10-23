@@ -36,7 +36,7 @@ export default function CredentialDetail({
 
   const decryptCredential = useCallback(async () => {
     if (!credential) return
-    const data = await decrypt(credential.encrypted_data)
+    const data = await decrypt(credential.encrypted_data, credential.id)
     setDecryptedData(data)
   }, [credential, decrypt])
 

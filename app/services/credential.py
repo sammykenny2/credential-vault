@@ -67,11 +67,17 @@ class CredentialService:
         )
         return list(result.scalars().all())
 
+    async def exists(self, credential_id: str) -> bool:
+        """True when a credential with this id exists (any owner)."""
+        result = await self.db.execute(select(Credential.id).where(Credential.id == credential_id))
+        return result.scalar_one_or_none() is not None
+
     async def export_all(self, owner_id: str) -> list[dict]:
         """Export all active credentials for a user."""
         credentials = await self.list_by_owner(owner_id, limit=10000)
         return [
             {
+                "id": c.id,
                 "encrypted_data": c.encrypted_data,
                 "expires_at": c.expires_at.isoformat() if c.expires_at else None,
             }
@@ -86,16 +92,24 @@ class CredentialService:
 
         for cred_data in credentials_data:
             try:
-                expires_at = None
-                if cred_data.get("expires_at"):
-                    expires_at = datetime.fromisoformat(cred_data["expires_at"])
+                expires_at = cred_data.get("expires_at")
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at)
 
-                credential = Credential(
-                    owner_id=owner_id,
-                    encrypted_data=cred_data["encrypted_data"],
-                    expires_at=expires_at,
-                )
-                self.db.add(credential)
+                kwargs: dict = {
+                    "owner_id": owner_id,
+                    "encrypted_data": cred_data["encrypted_data"],
+                    "expires_at": expires_at,
+                }
+                client_id = cred_data.get("id")
+                if client_id:
+                    client_id = str(client_id)
+                    if await self.exists(client_id):
+                        skipped += 1
+                        continue
+                    kwargs["id"] = client_id
+
+                self.db.add(Credential(**kwargs))
                 imported += 1
             except Exception as e:
                 errors.append(f"Failed to import credential: {str(e)}")
@@ -112,12 +126,15 @@ class CredentialService:
         return {"imported": imported, "skipped": skipped, "errors": errors}
 
     async def create(self, owner_id: str, data: CredentialCreate) -> Credential:
-        """Create a new credential."""
-        credential = Credential(
-            owner_id=owner_id,
-            encrypted_data=data.encrypted_data,
-            expires_at=data.expires_at,
-        )
+        """Create a new credential, honouring a client-chosen id when given."""
+        kwargs: dict = {
+            "owner_id": owner_id,
+            "encrypted_data": data.encrypted_data,
+            "expires_at": data.expires_at,
+        }
+        if data.id is not None:
+            kwargs["id"] = str(data.id)
+        credential = Credential(**kwargs)
         self.db.add(credential)
         await self.db.flush()
         await self.db.refresh(credential)

@@ -177,14 +177,20 @@ export default function CredentialBackupDialog({
 
       // 2. Re-encrypt each credential with user's RSA public key
       setImportProgress(`Re-encrypting ${payload.credentials.length} credentials...`)
-      const encryptedCredentials: Array<{ encrypted_data: string; expires_at?: string | null }> = []
+      const encryptedCredentials: Array<{
+        id: string
+        encrypted_data: string
+        expires_at?: string | null
+      }> = []
 
       for (const entry of payload.credentials) {
-        const encryptedData = await encrypt(entry.data)
+        const id = crypto.randomUUID()
+        const encryptedData = await encrypt(entry.data, id)
         if (!encryptedData) {
           throw new Error('Vault is locked. Please unlock your vault and try again.')
         }
         encryptedCredentials.push({
+          id,
           encrypted_data: encryptedData,
           expires_at: entry.expires_at,
         })

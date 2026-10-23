@@ -11,6 +11,8 @@ export {
   generateSalt,
   setupVault,
   unlockVault,
+  rewrapPrivateKey,
+  credentialBlobVersion,
   KDF_VERSION,
   type CredentialData,
 } from './crypto'

@@ -81,11 +81,13 @@ class UserService:
         public_key: str,
         encrypted_private_key: str,
         key_salt: str,
+        kdf_version: int = 2,
     ) -> User:
         """Set up E2EE vault keys for user."""
         user.public_key = public_key
         user.encrypted_private_key = encrypted_private_key
         user.key_salt = key_salt
+        user.kdf_version = kdf_version
         await self.db.flush()
         logger.info("Vault keys configured for user: %s", user.email)
         return user

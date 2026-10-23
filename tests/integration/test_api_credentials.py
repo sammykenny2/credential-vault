@@ -50,6 +50,74 @@ class TestCredentialsAPI:
         assert "description" not in data
 
     @pytest.mark.asyncio
+    async def test_create_credential_with_client_id(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user_data,
+        test_credential_data,
+    ):
+        """The client may choose the id (it binds the ciphertext to it); reuse is refused."""
+        token = await self._create_user_and_get_token(db_session, test_user_data)
+        client_id = "2f9c1b7e-4a5d-4c3e-9b8a-1d2e3f4a5b6c"
+
+        response = await client.post(
+            "/api/v1/credentials",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"id": client_id, "encrypted_data": test_credential_data["encrypted_data"]},
+        )
+        assert response.status_code == 201
+        assert response.json()["id"] == client_id
+
+        duplicate = await client.post(
+            "/api/v1/credentials",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"id": client_id, "encrypted_data": "b3RoZXI="},
+        )
+        assert duplicate.status_code == 409
+
+        invalid = await client.post(
+            "/api/v1/credentials",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"id": "not-a-uuid", "encrypted_data": "b3RoZXI="},
+        )
+        assert invalid.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_import_and_export_keep_client_ids(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user_data,
+    ):
+        """Export carries ids and import keeps them, skipping ids that already exist."""
+        token = await self._create_user_and_get_token(db_session, test_user_data)
+        headers = {"Authorization": f"Bearer {token}"}
+        client_id = "7a1d2c3b-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+
+        response = await client.post(
+            "/api/v1/credentials/import",
+            headers=headers,
+            json={
+                "credentials": [
+                    {"id": client_id, "encrypted_data": "Zmlyc3Q="},
+                    {"id": client_id, "encrypted_data": "ZHVwbGljYXRl"},
+                    {"encrypted_data": "bm8taWQ="},
+                ]
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["imported"] == 2
+        assert response.json()["skipped"] == 1
+
+        export = await client.get("/api/v1/credentials/export", headers=headers)
+        assert export.status_code == 200
+        exported = export.json()["credentials"]
+        assert export.json()["count"] == 2
+        assert {c["id"] for c in exported} >= {client_id}
+        assert all("encrypted_data" in c and "id" in c for c in exported)
+
+    @pytest.mark.asyncio
     async def test_list_credentials(
         self,
         client: AsyncClient,

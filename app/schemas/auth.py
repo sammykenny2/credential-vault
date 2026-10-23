@@ -1,6 +1,6 @@
 """Authentication schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Token(BaseModel):
@@ -46,6 +46,8 @@ class VaultSetupRequest(BaseModel):
     public_key: str
     encrypted_private_key: str
     key_salt: str
+    # Client-side KDF parameter set used to wrap the private key.
+    kdf_version: int = Field(2, ge=1, le=100)
 
 
 class VerifyPasswordRequest(BaseModel):

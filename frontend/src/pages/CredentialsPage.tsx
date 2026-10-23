@@ -67,7 +67,7 @@ export default function CredentialsPage() {
     const entries: DecryptedCredentialEntry[] = []
     for (const cred of creds) {
       try {
-        const data = await decrypt(cred.encrypted_data)
+        const data = await decrypt(cred.encrypted_data, cred.id)
         if (data) {
           entries.push({
             id: cred.id,

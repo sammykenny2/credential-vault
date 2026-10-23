@@ -21,7 +21,10 @@ interface FieldEntry {
 interface CredentialFormProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: { encrypted_data: string; expires_at?: string }, templateId?: string) => Promise<void>
+  onSave: (
+    data: { id: string; encrypted_data: string; expires_at?: string },
+    templateId?: string
+  ) => Promise<void>
   initialData?: {
     name: string
     description?: string
@@ -220,7 +223,9 @@ export default function CredentialForm({
         credentialData.notes = notes.trim()
       }
 
-      const encryptedData = await encrypt(credentialData)
+      // The id is chosen here so the ciphertext can be bound to it.
+      const credentialId = crypto.randomUUID()
+      const encryptedData = await encrypt(credentialData, credentialId)
 
       if (!encryptedData) {
         setFormError(error || 'Encryption failed')
@@ -229,6 +234,7 @@ export default function CredentialForm({
 
       // Save to server — only encrypted_data (all metadata is inside)
       await onSave({
+        id: credentialId,
         encrypted_data: encryptedData,
       }, template?.id)
 
