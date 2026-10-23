@@ -2,9 +2,10 @@ import api from './api'
 import type { TokenResponse, GoogleOAuthCallback, User, VaultSetupRequest } from '@/types'
 
 export const authService = {
-  async getGoogleAuthUrl(redirectUri: string): Promise<string> {
+  /** `state` comes from beginOAuthFlow() and is checked again on the way back. */
+  async getGoogleAuthUrl(redirectUri: string, state: string): Promise<string> {
     const response = await api.get<{ authorization_url: string }>('/oauth/google/authorize', {
-      params: { redirect_uri: redirectUri },
+      params: { redirect_uri: redirectUri, state },
     })
     return response.data.authorization_url
   },

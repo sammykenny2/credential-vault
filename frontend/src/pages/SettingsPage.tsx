@@ -4,6 +4,7 @@ import { authService } from '@/services/authService'
 import { User, FileText, ShieldCheck } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
 import PasswordVerifyModal from '@/components/PasswordVerifyModal'
+import { beginOAuthFlow, clearOAuthFlow } from '@/lib/oauthState'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
@@ -94,14 +95,14 @@ export default function SettingsPage() {
           onClose={() => setShowPasswordModal(false)}
           onVerified={async () => {
             setShowPasswordModal(false)
-            localStorage.setItem('oauth_action', 'link')
+            const state = beginOAuthFlow('link')
             try {
               const redirectUri = `${window.location.origin}/login`
-              const authUrl = await authService.getGoogleAuthUrl(redirectUri)
+              const authUrl = await authService.getGoogleAuthUrl(redirectUri, state)
               window.location.href = authUrl
             } catch {
               // If Google auth URL fails, clean up
-              localStorage.removeItem('oauth_action')
+              clearOAuthFlow()
             }
           }}
         />

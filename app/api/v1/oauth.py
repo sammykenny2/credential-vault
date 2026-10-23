@@ -4,7 +4,7 @@ import logging
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from app.api.deps import DbSession
 from app.config import get_settings
@@ -26,10 +26,20 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 
 @router.get("/google/authorize")
-async def google_authorize(redirect_uri: str):
+async def google_authorize(
+    redirect_uri: str,
+    state: str = Query(
+        ...,
+        min_length=16,
+        max_length=256,
+        description="Random value generated and remembered by the browser; it must come "
+        "back unchanged in the callback (login CSRF protection).",
+    ),
+):
     """Get Google OAuth authorization URL.
 
-    The frontend calls this to get the URL to redirect the user to Google.
+    The frontend generates `state`, stores it for the current tab and verifies
+    it when Google redirects back before calling the callback endpoint.
     """
     settings = get_settings()
 
@@ -44,8 +54,9 @@ async def google_authorize(redirect_uri: str):
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": "openid email profile",
-        "access_type": "offline",
-        "prompt": "consent",
+        "state": state,
+        # Only an identity assertion is needed: no offline access, no Google refresh token.
+        "prompt": "select_account",
     }
 
     return {"authorization_url": f"{GOOGLE_AUTH_URL}?{urlencode(params)}"}
@@ -104,6 +115,14 @@ async def exchange_google_code(code: str, redirect_uri: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Google user info",
+        )
+
+    # Accounts are matched and auto-linked by email, so an unverified address
+    # must never be trusted as proof of ownership.
+    if google_user.get("verified_email") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google account email is not verified",
         )
 
     return {"google_id": google_id, "email": email, "display_name": display_name}

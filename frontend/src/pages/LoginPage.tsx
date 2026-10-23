@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { setupService } from '@/services/setupService'
 import { Shield } from 'lucide-react'
+import { beginOAuthFlow, clearOAuthFlow, consumeOAuthFlow, peekOAuthFlow } from '@/lib/oauthState'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -17,8 +18,8 @@ export default function LoginPage() {
   // If already authenticated, redirect to dashboard (unless handling link callback)
   useEffect(() => {
     const code = searchParams.get('code')
-    const oauthAction = localStorage.getItem('oauth_action')
-    if (isAuthenticated && !(code && oauthAction === 'link')) {
+    const pending = peekOAuthFlow()
+    if (isAuthenticated && !(code && pending?.action === 'link')) {
       navigate('/dashboard')
     }
   }, [isAuthenticated, navigate, searchParams])
@@ -52,11 +53,13 @@ export default function LoginPage() {
       const code = searchParams.get('code')
       if (!code) throw new Error('No OAuth code')
 
-      const oauthAction = localStorage.getItem('oauth_action')
+      // The state must match the one this tab generated before redirecting to
+      // Google; otherwise this callback was not started by us (login CSRF).
+      const flow = consumeOAuthFlow(searchParams.get('state'))
+      if (!flow) throw new Error('OAuth state mismatch')
 
-      if (oauthAction === 'link') {
+      if (flow.action === 'link') {
         // Link Google account flow — user is already authenticated
-        localStorage.removeItem('oauth_action')
         const updatedUser = await authService.linkGoogleAccount({
           code,
           redirect_uri: `${window.location.origin}/login`,
@@ -79,9 +82,14 @@ export default function LoginPage() {
       setUser(user)
       navigate('/dashboard')
     },
-    onError: () => {
-      localStorage.removeItem('oauth_action')
-      setError('Authentication failed. Please try again.')
+    onError: (err: unknown) => {
+      clearOAuthFlow()
+      const mismatch = err instanceof Error && err.message === 'OAuth state mismatch'
+      setError(
+        mismatch
+          ? 'Sign-in could not be verified (state mismatch). Please start again from this page.'
+          : 'Authentication failed. Please try again.'
+      )
       // Clear the OAuth code from URL
       window.history.replaceState({}, '', '/login')
     },
@@ -91,6 +99,15 @@ export default function LoginPage() {
   const oauthProcessed = useRef(false)
   useEffect(() => {
     const code = searchParams.get('code')
+    const oauthError = searchParams.get('error')
+    if (oauthError && !oauthProcessed.current) {
+      // Google reported an error (for example access_denied); drop the pending flow.
+      oauthProcessed.current = true
+      clearOAuthFlow()
+      window.history.replaceState({}, '', '/login')
+      setError('Google sign-in was cancelled or denied.')
+      return
+    }
     if (code && !oauthProcessed.current) {
       oauthProcessed.current = true
       window.history.replaceState({}, '', '/login')
@@ -101,11 +118,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setError('')
     setIsRedirecting(true)
+    const state = beginOAuthFlow('login')
     try {
       const redirectUri = `${window.location.origin}/login`
-      const authUrl = await authService.getGoogleAuthUrl(redirectUri)
+      const authUrl = await authService.getGoogleAuthUrl(redirectUri, state)
       window.location.href = authUrl
     } catch {
+      clearOAuthFlow()
       setError('Failed to connect to Google. Please try again.')
       setIsRedirecting(false)
     }
