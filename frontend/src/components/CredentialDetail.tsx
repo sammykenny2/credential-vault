@@ -3,7 +3,8 @@
  * All metadata (name, description, website_url, category) is read from decrypted data.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Eye, EyeOff, Copy, ExternalLink, X, Check } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { Credential } from '@/types'
@@ -30,24 +31,19 @@ export default function CredentialDetail({
   onClose,
 }: CredentialDetailProps) {
   const { decrypt, isProcessing, error } = useCredentialCrypto()
-  const [decryptedData, setDecryptedData] = useState<CredentialData | null>(null)
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
-  const decryptCredential = useCallback(async () => {
-    if (!credential) return
-    const data = await decrypt(credential.encrypted_data, credential.id)
-    setDecryptedData(data)
-  }, [credential, decrypt])
-
-  useEffect(() => {
-    if (credential && isOpen) {
-      decryptCredential()
-    } else {
-      setDecryptedData(null)
-      setVisibleFields(new Set())
-    }
-  }, [credential, isOpen, decryptCredential])
+  // Decrypt through a query so the plaintext is dropped (gcTime 0) as soon as
+  // the dialog unmounts; the parent remounts it via `key` per credential.
+  const current = credential
+  const { data: decryptedData = null } = useQuery<CredentialData | null>({
+    queryKey: ['credential-plaintext', current?.id, current?.updated_at],
+    queryFn: () => (current ? decrypt(current.encrypted_data, current.id) : Promise.resolve(null)),
+    enabled: current !== null && isOpen,
+    gcTime: 0,
+    staleTime: Infinity,
+  })
 
   const toggleFieldVisibility = (fieldKey: string) => {
     setVisibleFields(prev => {

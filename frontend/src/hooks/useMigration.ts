@@ -5,7 +5,7 @@
  * Used to detect when migration is needed and track completion.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { hasLocalTemplates, isMigrationCompleted } from '@/lib/templateStorage'
 import { useHasBackendTemplates } from './useTemplates'
 
@@ -22,34 +22,31 @@ interface MigrationState {
   error: string | null
 }
 
+const CHECKING: MigrationState = {
+  isChecking: true,
+  needsMigration: false,
+  hasBackendTemplates: false,
+  hasLocalTemplates: false,
+  error: null,
+}
+
 /**
  * Hook to manage template migration from localStorage to backend.
  *
  * Returns migration state and a function to recheck migration status.
+ * The state is derived from the backend query instead of mirrored into
+ * local state, so there is nothing to keep in sync.
  */
 export function useMigration() {
-  const [state, setState] = useState<MigrationState>({
-    isChecking: true,
-    needsMigration: false,
-    hasBackendTemplates: false,
-    hasLocalTemplates: false,
-    error: null,
-  })
-
   const backendQuery = useHasBackendTemplates()
 
-  useEffect(() => {
-    if (backendQuery.isLoading) {
-      return
+  const state = useMemo<MigrationState>(() => {
+    if (backendQuery.isLoading || backendQuery.isFetching) {
+      return CHECKING
     }
 
     if (backendQuery.isError) {
-      setState(prev => ({
-        ...prev,
-        isChecking: false,
-        error: 'Failed to check backend templates',
-      }))
-      return
+      return { ...CHECKING, isChecking: false, error: 'Failed to check backend templates' }
     }
 
     const localHasTemplates = hasLocalTemplates()
@@ -60,19 +57,16 @@ export function useMigration() {
     // - localStorage has custom templates
     // - Migration hasn't been completed
     // - Backend doesn't have templates yet
-    const shouldMigrate = localHasTemplates && !migrationCompleted && !backendHasTemplates
-
-    setState({
+    return {
       isChecking: false,
-      needsMigration: shouldMigrate,
+      needsMigration: localHasTemplates && !migrationCompleted && !backendHasTemplates,
       hasBackendTemplates: backendHasTemplates,
       hasLocalTemplates: localHasTemplates,
       error: null,
-    })
-  }, [backendQuery.isLoading, backendQuery.isError, backendQuery.data])
+    }
+  }, [backendQuery.isLoading, backendQuery.isFetching, backendQuery.isError, backendQuery.data])
 
   const recheck = useCallback(() => {
-    setState(prev => ({ ...prev, isChecking: true }))
     backendQuery.refetch()
   }, [backendQuery])
 

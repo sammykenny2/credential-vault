@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - [x] Python 3.11+
-- [x] Node.js 18+
+- [x] Node.js 22+ (vitest 5 and jsdom 30 need 22.22 or newer)
 - [x] Docker & Docker Compose (for production deployment)
 
 ## Installation

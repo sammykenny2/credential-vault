@@ -4,7 +4,7 @@
  * Supports template-based field pre-population.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Eye, EyeOff, RefreshCw, X, Plus, Trash2 } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import type { CredentialData } from '@/lib/crypto'
@@ -71,6 +71,50 @@ const templateToFields = (template: CredentialTemplate): FieldEntry[] => {
   }))
 }
 
+interface InitialFormState {
+  name: string
+  description: string
+  websiteUrl: string
+  category: string
+  fields: FieldEntry[]
+  notes: string
+}
+
+// Starting values for a fresh form: existing credential, template, or blank.
+function buildInitialFormState(
+  initialData: CredentialFormProps['initialData'],
+  template?: CredentialTemplate | null
+): InitialFormState {
+  if (initialData) {
+    return {
+      name: initialData.name,
+      description: initialData.description || '',
+      websiteUrl: initialData.website_url || '',
+      category: initialData.category || '',
+      fields: dataToFields(initialData.credentialData),
+      notes: initialData.credentialData?.notes || '',
+    }
+  }
+  if (template) {
+    return {
+      name: '',
+      description: template.description || '',
+      websiteUrl: '',
+      category: template.category ? CATEGORY_LABELS[template.category] : '',
+      fields: templateToFields(template),
+      notes: '',
+    }
+  }
+  return {
+    name: '',
+    description: '',
+    websiteUrl: '',
+    category: '',
+    fields: getDefaultFields(),
+    notes: '',
+  }
+}
+
 export default function CredentialForm({
   isOpen,
   onClose,
@@ -80,46 +124,20 @@ export default function CredentialForm({
 }: CredentialFormProps) {
   const { encrypt, generatePassword, isProcessing, error, clearError } = useCredentialCrypto()
 
+  // Initial values come from the props at mount time. The parent remounts this
+  // component (via `key`) whenever it is opened with a different template or
+  // credential, so no effect is needed to resynchronise state with props.
+  const [initial] = useState(() => buildInitialFormState(initialData, template))
+
   // Metadata (not encrypted)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [websiteUrl, setWebsiteUrl] = useState('')
-  const [category, setCategory] = useState('')
+  const [name, setName] = useState(initial.name)
+  const [description, setDescription] = useState(initial.description)
+  const [websiteUrl, setWebsiteUrl] = useState(initial.websiteUrl)
+  const [category, setCategory] = useState(initial.category)
 
   // Credential fields (will be encrypted)
-  const [fields, setFields] = useState<FieldEntry[]>(getDefaultFields)
-  const [notes, setNotes] = useState('')
-
-  // Initialize form when opened with template or initialData
-  useEffect(() => {
-    if (!isOpen) return
-
-    if (initialData) {
-      // Editing existing credential
-      setName(initialData.name)
-      setDescription(initialData.description || '')
-      setWebsiteUrl(initialData.website_url || '')
-      setCategory(initialData.category || '')
-      setFields(dataToFields(initialData.credentialData))
-      setNotes(initialData.credentialData?.notes || '')
-    } else if (template) {
-      // Creating from template
-      setName(template.name !== 'Login (Basic)' && template.name !== 'Login (Email)' ? '' : '')
-      setDescription(template.description || '')
-      setWebsiteUrl('')
-      setCategory(template.category ? CATEGORY_LABELS[template.category] : '')
-      setFields(templateToFields(template))
-      setNotes('')
-    } else {
-      // Creating from scratch
-      setName('')
-      setDescription('')
-      setWebsiteUrl('')
-      setCategory('')
-      setFields(getDefaultFields())
-      setNotes('')
-    }
-  }, [isOpen, template, initialData])
+  const [fields, setFields] = useState<FieldEntry[]>(initial.fields)
+  const [notes, setNotes] = useState(initial.notes)
 
   // UI state
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())

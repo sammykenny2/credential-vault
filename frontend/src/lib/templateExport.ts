@@ -35,14 +35,14 @@ const PBKDF2_ITERATIONS = 100000
 /**
  * Generate a random salt for key derivation.
  */
-function generateSalt(): Uint8Array {
+function generateSalt(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(SALT_LENGTH))
 }
 
 /**
  * Generate a random IV for encryption.
  */
-function generateIV(): Uint8Array {
+function generateIV(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(IV_LENGTH))
 }
 
@@ -56,14 +56,14 @@ function uint8ArrayToBase64(array: Uint8Array): string {
 /**
  * Convert base64 string to Uint8Array.
  */
-function base64ToUint8Array(base64: string): Uint8Array {
+function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), c => c.charCodeAt(0))
 }
 
 /**
  * Derive an encryption key from password using PBKDF2.
  */
-async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKey(password: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const passwordKey = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(password),
@@ -245,7 +245,7 @@ export async function readExportFile(file: File): Promise<ExportFile> {
     return parsed
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error('Invalid file format. Expected a .cvault file.')
+      throw new Error('Invalid file format. Expected a .cvault file.', { cause: error })
     }
     throw error
   }

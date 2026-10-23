@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Shield, AlertTriangle, Clock, Copy, TrendingUp } from 'lucide-react'
 import { healthService } from '@/services/healthService'
 import type { CredentialHealthSummary } from '@/types'
@@ -45,24 +45,15 @@ function StrengthBar({ label, count, total, color }: {
 }
 
 export default function HealthDashboard() {
-  const [health, setHealth] = useState<CredentialHealthSummary | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    loadHealth()
-  }, [])
-
-  const loadHealth = async () => {
-    setLoading(true)
-    try {
-      const data = await healthService.getHealthSummary()
-      setHealth(data)
-    } catch {
-      setError('Failed to load health data')
-    }
-    setLoading(false)
-  }
+  const {
+    data: health,
+    isLoading: loading,
+    isError,
+  } = useQuery<CredentialHealthSummary>({
+    queryKey: ['credential-health'],
+    queryFn: () => healthService.getHealthSummary(),
+  })
+  const error = isError ? 'Failed to load health data' : ''
 
   if (loading) {
     return (

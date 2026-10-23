@@ -41,18 +41,18 @@ export default function CredentialsPage() {
   const [selectedCredential, setSelectedCredential] = useState<Credential | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
-  const [decryptedCache, setDecryptedCache] = useState<DecryptedCredentialEntry[]>([])
-  const [isDecrypting, setIsDecrypting] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
   const [backupDue, setBackupDue] = useState(() => isBackupDue())
   const [actionError, setActionError] = useState('')
 
-  // Auto-open modal only for first-time vault setup
-  useEffect(() => {
-    if (!isUnlocked && !user?.has_vault_keys) {
-      setShowMasterPasswordModal(true)
-    }
-  }, [isUnlocked, user?.has_vault_keys])
+  // First-time vault setup: the modal is open until the user dismisses it.
+  const [setupDismissed, setSetupDismissed] = useState(false)
+  const needsVaultSetup = !isUnlocked && !user?.has_vault_keys
+  const masterPasswordModalOpen = showMasterPasswordModal || (needsVaultSetup && !setupDismissed)
+  const closeMasterPasswordModal = () => {
+    setShowMasterPasswordModal(false)
+    setSetupDismissed(true)
+  }
 
   // Fetch all credentials (including encrypted_data for client-side search)
   const { data: credentials, isLoading } = useQuery({
@@ -61,9 +61,8 @@ export default function CredentialsPage() {
     enabled: isUnlocked,
   })
 
-  // Decrypt all credentials when the list changes
+  // Decrypt every credential; failures are skipped so one bad blob does not hide the rest
   const decryptAll = useCallback(async (creds: CredentialListItem[]) => {
-    setIsDecrypting(true)
     const entries: DecryptedCredentialEntry[] = []
     for (const cred of creds) {
       try {
@@ -82,17 +81,33 @@ export default function CredentialsPage() {
         // Skip credentials that fail to decrypt
       }
     }
-    setDecryptedCache(entries)
-    setIsDecrypting(false)
+    return entries
   }, [decrypt])
 
+  // Plaintext lives in a query with gcTime 0: it is recomputed when the list
+  // changes and dropped as soon as it is no longer observed.
+  const decryptKey = useMemo(
+    () => (credentials ?? []).map((c) => `${c.id}:${c.updated_at}:${c.is_active}`),
+    [credentials]
+  )
+  const { data: decryptedData, isFetching: isDecrypting } = useQuery({
+    queryKey: ['credentials-decrypted', decryptKey],
+    queryFn: () => decryptAll(credentials ?? []),
+    enabled: isUnlocked && credentials !== undefined,
+    gcTime: 0,
+    staleTime: Infinity,
+  })
+  const decryptedCache = useMemo<DecryptedCredentialEntry[]>(
+    () => (isUnlocked ? (decryptedData ?? []) : []),
+    [isUnlocked, decryptedData]
+  )
+
+  // Drop decrypted plaintext from the query cache the moment the vault locks
   useEffect(() => {
-    if (credentials && credentials.length > 0 && isUnlocked) {
-      decryptAll(credentials)
-    } else {
-      setDecryptedCache([])
+    if (!isUnlocked) {
+      queryClient.removeQueries({ queryKey: ['credentials-decrypted'] })
     }
-  }, [credentials, isUnlocked, decryptAll])
+  }, [isUnlocked, queryClient])
 
   // Client-side search filtering
   const filteredCredentials = useMemo(() => {
@@ -198,9 +213,9 @@ export default function CredentialsPage() {
           </button>
         </div>
         <MasterPasswordModal
-          isOpen={showMasterPasswordModal}
-          onUnlock={() => setShowMasterPasswordModal(false)}
-          onClose={() => setShowMasterPasswordModal(false)}
+          isOpen={masterPasswordModalOpen}
+          onUnlock={closeMasterPasswordModal}
+          onClose={closeMasterPasswordModal}
           isFirstTime={!user?.has_vault_keys}
         />
       </>
@@ -387,9 +402,9 @@ export default function CredentialsPage() {
 
       {/* Modals */}
       <MasterPasswordModal
-        isOpen={showMasterPasswordModal}
-        onUnlock={() => setShowMasterPasswordModal(false)}
-        onClose={() => setShowMasterPasswordModal(false)}
+        isOpen={masterPasswordModalOpen}
+        onUnlock={closeMasterPasswordModal}
+        onClose={closeMasterPasswordModal}
         isFirstTime={!user?.has_vault_keys}
       />
 
@@ -400,6 +415,7 @@ export default function CredentialsPage() {
       />
 
       <CredentialForm
+        key={showCredentialForm ? (selectedTemplate?.id ?? 'blank') : 'closed'}
         isOpen={showCredentialForm}
         onClose={handleCredentialFormClose}
         onSave={async (data, templateId) => {
@@ -413,6 +429,7 @@ export default function CredentialsPage() {
       />
 
       <CredentialDetail
+        key={selectedCredential?.id ?? 'none'}
         credential={selectedCredential}
         isOpen={showDetail}
         onClose={() => {

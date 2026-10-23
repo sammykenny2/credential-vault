@@ -26,12 +26,12 @@ const mockedPost = (api as unknown as { post: ReturnType<typeof vi.fn> }).post
 
 let keyPair: CryptoKeyPair
 
-async function challengeFor(publicKey: CryptoKey, secret: Uint8Array): Promise<string> {
+async function challengeFor(publicKey: CryptoKey, secret: Uint8Array<ArrayBuffer>): Promise<string> {
   const ciphertext = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, secret)
   return arrayBufferToBase64(ciphertext)
 }
 
-function randomSecret(): Uint8Array {
+function randomSecret(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(32))
 }
 

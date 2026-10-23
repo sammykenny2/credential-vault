@@ -42,7 +42,7 @@ const IV_LENGTH = 12
 
 // === Core Functions ===
 
-function generateIV(): Uint8Array {
+function generateIV(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(IV_LENGTH))
 }
 
@@ -71,8 +71,8 @@ export async function encryptBackup(
     version: 1,
     exportedAt: new Date().toISOString(),
     credentialCount: credentials.length,
-    salt: arrayBufferToBase64(salt.buffer),
-    iv: arrayBufferToBase64(iv.buffer),
+    salt: arrayBufferToBase64(salt),
+    iv: arrayBufferToBase64(iv),
     encryptedData: arrayBufferToBase64(ciphertext),
   }
 }
@@ -150,7 +150,7 @@ export async function readBackupFile(file: File): Promise<CredentialBackupFile> 
     return parsed as CredentialBackupFile
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error('Invalid file format. Expected a .cvault file.')
+      throw new Error('Invalid file format. Expected a .cvault file.', { cause: error })
     }
     throw error
   }

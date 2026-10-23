@@ -67,12 +67,26 @@ export function kdfParamsFor(version: number): Argon2Params {
 
 // === Utility Functions ===
 
-function generateIV(): Uint8Array {
+// Web Crypto wants views over a plain ArrayBuffer (BufferSource), so the
+// helpers below are typed as Uint8Array<ArrayBuffer> rather than ArrayBufferLike.
+type Bytes = Uint8Array<ArrayBuffer>
+
+function generateIV(): Bytes {
   return crypto.getRandomValues(new Uint8Array(IV_LENGTH))
 }
 
-export function generateSalt(): Uint8Array {
+export function generateSalt(): Bytes {
   return crypto.getRandomValues(new Uint8Array(SALT_LENGTH))
+}
+
+/** Copy any byte view into a fresh Uint8Array backed by a plain ArrayBuffer. */
+function toBytes(view: ArrayBufferView | ArrayBufferLike): Bytes {
+  const source = ArrayBuffer.isView(view)
+    ? new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
+    : new Uint8Array(view)
+  const copy = new Uint8Array(source.byteLength)
+  copy.set(source)
+  return copy
 }
 
 const BASE64_CHUNK = 0x8000
@@ -81,7 +95,7 @@ const BASE64_CHUNK = 0x8000
  * Base64-encode bytes in chunks. Spreading a whole buffer into
  * String.fromCharCode overflows the argument list for large blobs.
  */
-export function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+export function arrayBufferToBase64(buffer: ArrayBufferLike | Uint8Array): string {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
   let binary = ''
   for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
@@ -124,7 +138,7 @@ export async function deriveKEK(
 
   return crypto.subtle.importKey(
     'raw',
-    hash,
+    toBytes(hash),
     { name: AES_ALGORITHM, length: AES_KEY_LENGTH },
     false,
     ['encrypt', 'decrypt']
@@ -345,8 +359,8 @@ export interface CredentialData {
 async function encryptBody(
   credential: CredentialData,
   publicKey: CryptoKey,
-  additionalData?: Uint8Array
-): Promise<Uint8Array> {
+  additionalData?: Bytes
+): Promise<Bytes> {
   // Generate random AES key
   const aesKey = await crypto.subtle.generateKey(
     { name: AES_ALGORITHM, length: AES_KEY_LENGTH },
@@ -380,9 +394,9 @@ async function encryptBody(
 }
 
 async function decryptBody(
-  body: Uint8Array,
+  body: Bytes,
   privateKey: CryptoKey,
-  additionalData?: Uint8Array
+  additionalData?: Bytes
 ): Promise<CredentialData> {
   // Unpack
   const wrappedKeyLen = (body[0] << 8) | body[1]

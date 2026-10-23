@@ -24,8 +24,9 @@
   (`vault-cli` admin management), `frontend/src/main.tsx` (Vite + React SPA),
   `docker-compose.yaml` (tailscale sidecar + backend + frontend/nginx).
 - Stack and versions: Python 3.11+, FastAPI, SQLAlchemy 2 (async) + aiosqlite,
-  Alembic, python-jose, passlib[bcrypt]; frontend React 18, TypeScript 5,
-  Vite 6, Tailwind, Zustand, TanStack Query, hash-wasm (Argon2id), Web Crypto API.
+  Alembic, PyJWT, passlib[bcrypt], cryptography; frontend React 19, TypeScript 6,
+  Vite 8, Vitest 5, Tailwind 4, Zustand 5, TanStack Query, hash-wasm (Argon2id),
+  Web Crypto API. Node 22+ for the frontend toolchain.
 - Test command: `pytest` at the repository root (backend, coverage enabled via
   `pyproject.toml`); `cd frontend && npm run test:run` (Vitest). Lint with
   `ruff check . && ruff format --check .`, `mypy app/`, and `npm run lint`.

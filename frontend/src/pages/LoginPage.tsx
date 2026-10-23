@@ -13,7 +13,8 @@ export default function LoginPage() {
   const { setAccessToken, setUser, isAuthenticated, isBootstrapping } = useAuthStore()
   const [error, setError] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
-  const [checkingSetup, setCheckingSetup] = useState(true)
+  // No setup check while an OAuth callback is being processed
+  const [checkingSetup, setCheckingSetup] = useState(() => !searchParams.get('code'))
 
   // If already authenticated, redirect to dashboard (unless handling link callback)
   useEffect(() => {
@@ -28,7 +29,6 @@ export default function LoginPage() {
   useEffect(() => {
     // Don't check setup if we're processing an OAuth callback
     if (searchParams.get('code')) {
-      setCheckingSetup(false)
       return
     }
 

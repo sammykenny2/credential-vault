@@ -35,8 +35,8 @@ project-specific procedures that are too detailed for always-loaded instructions
 - Backend: `app/main.py` (FastAPI). Run `uvicorn app.main:app --reload` after
   `pip install -e ".[dev]"` and `alembic upgrade head`. Admin CLI: `vault-cli`
   (`app/cli.py`).
-- Frontend: `frontend/` (Vite + React + TypeScript). `npm install`, `npm run dev`
-  (port 3000, proxies `/api` to 8000), `npm run build`.
+- Frontend: `frontend/` (Vite 8 + React 19 + TypeScript 6, Node 22+). `npm install`,
+  `npm run dev` (port 3000, proxies `/api` to 8000), `npm run build`.
 - Tests: `pytest` at the root (188 tests, coverage configured in `pyproject.toml`);
   `cd frontend && npm run test:run`.
 - Lint/type: `ruff check . && ruff format --check .`, `mypy app/`,
@@ -56,6 +56,11 @@ project-specific procedures that are too detailed for always-loaded instructions
   `frontend/src/hooks/`, API clients in `frontend/src/services/`, Vitest tests in
   `frontend/src/__tests__/`. Tailwind 4 with CSS-first configuration: the theme
   and the `btn`/`input`/`card` utilities live in `frontend/src/index.css`.
+- ESLint 10 with eslint-plugin-react-hooks 7 (React Compiler rules) is an
+  error-free gate: do not call setState synchronously inside effects. Derive
+  state, use a `key` to remount, or move async work into react-query hooks.
+  Decrypted plaintext belongs in queries with `gcTime: 0` so it disappears
+  when no longer observed.
 - Every credential query must be scoped by `owner_id`; admin endpoints return
   user metadata and counts only.
 
