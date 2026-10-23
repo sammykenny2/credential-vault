@@ -1,5 +1,6 @@
 # === Agent Local Configs ===
 .claude/
+.agents/
 .gemini/
 .cursor/
 
@@ -30,7 +31,9 @@ dist/
 
 # === IDE ===
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 *.swp
 *.swo
 *~

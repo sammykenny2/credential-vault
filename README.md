@@ -53,6 +53,8 @@ See [docs/](./docs/) for detailed documentation:
 - [Setup Guide](./docs/setup-guide.md)
 - [Architecture](./docs/architecture.md)
 - [Contributing](./CONTRIBUTING.md)
+- [Script Standards](./docs/SCRIPT-STANDARDS.md)
+- [Research Log](./docs/research/)
 
 ## Project Structure
 
@@ -64,7 +66,7 @@ credential-vault/
 │   ├── models/        # Database models
 │   ├── services/      # Business services
 │   └── main.py        # Application entry point
-├── frontend/          # React frontend (TBD)
+├── frontend/          # React frontend (Vite + TypeScript)
 ├── tests/             # Test files
 ├── docs/              # Documentation
 ├── scripts/           # Build/deployment scripts
@@ -77,16 +79,19 @@ credential-vault/
 
 ### Updating Agent Rules & Templates
 
-This project follows AAIF standards. You can update the core infrastructure files (Agent rules, documentation templates) using the built-in update scripts:
+This project uses shared coding-agent guidance. From a separate project-bootstrap
+checkout, update this child's infrastructure files using the bootstrap updater.
+The updater is not copied into this child. Existing originals and pending review
+copies are preserved; resolve each proposed change intentionally.
 
 **Windows**
 ```powershell
-.\scripts\windows\Update-Project.ps1
+.\scripts\windows\Update-Project.ps1 -TargetPath "C:/Users/sammy/Source/sammykenny2/credential-vault"
 ```
 
 **Linux / macOS**
 ```bash
-./scripts/linux/update-project.sh
+bash scripts/linux/update-project.sh --target-path /path/to/credential-vault
 ```
 
 ## License

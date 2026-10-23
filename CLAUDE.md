@@ -14,10 +14,20 @@ Check the **Project Roles** table in `AGENTS.md`.
 
 ## Command Aliases
 
-| Alias | Action |
-|-------|--------|
-| `dyu` | **MUST** confirm you have read `AGENTS.md` and this file. **MUST** respond with exactly: "I am Claude, and I understand." |
-| `mbf` | **Merge Bootstrap Files** - Execute the following steps in order: (1) Find all `*.bootstrap` files in the project, (2) For each `.bootstrap` file, compare with its corresponding file and merge appropriate content (preserve user customizations, incorporate new template additions), (3) Delete each `.bootstrap` file after successful merge, (4) Find all `.gitkeep` files and check if their parent directory contains other files not ignored by `.gitignore` - if so, delete the `.gitkeep` file. Report summary of changes when complete. |
+- `dyu` - **MUST** confirm you have read `AGENTS.md` and this file. **MUST** respond with exactly: "I am Claude, and I understand."
+- `mbf` - **Merge Bootstrap Files**:
+  1. Find all `*.bootstrap` files in the project
+  2. For each `.bootstrap` file, compare with its corresponding file and merge appropriate content (preserve user customizations, incorporate new template additions)
+  3. Delete each `.bootstrap` file after successful merge
+  4. Find all `.gitkeep` files and check if their parent directory contains other files not ignored by `.gitignore` - if so, delete the `.gitkeep` file
+  5. Report summary of changes when complete
+
+## Output Formatting Rules
+
+- **MUST** 使用條列式 (bullet list) 而非表格，除非是模擬圖表或表格真正必要
+- **MUST NOT** 濫用表格語法（`|` 和 `-----`）
+- **SHOULD** 用縮排條列取代多欄表格
+- 例外情況：比較多個選項的優缺點、數據對照表、API 參數規格等真正需要表格的場景
 
 ## About This File
 
@@ -54,6 +64,15 @@ If assigned as Conductor in Project Roles table:
 - **SHOULD** make minimal, focused changes
 - **SHOULD** commit frequently with clear messages
 
+### Agent Skills
+
+Claude Code discovers skills from `.claude/skills/<name>/SKILL.md`. The canonical source is the `skills/` directory at the project root.
+
+To sync skills after changes:
+```powershell
+.\scripts\windows\Sync-AgentSkills.ps1
+```
+
 ### MCP Server Configurations
 
 ```json
@@ -73,7 +92,11 @@ If assigned as Conductor in Project Roles table:
 
 ### Project-Specific Context
 
-(Add any project-specific context or conventions that Claude should be aware of)
+- Zero-knowledge invariant: credential plaintext exists only in the browser. Do not add backend code that receives, generates, logs, or returns plaintext secrets, even for "helper" features such as password generation or strength checks.
+- Admin role manages users only; there is no server path that lets an admin read another user's credentials. Keep it that way.
+- TOTP MFA is stubbed (`/api/v1/totp/*` returns 503) and WebAuthn registration does not verify attestation or signatures. Do not describe either as working protection.
+- Open security findings and the recommended fix order are in `docs/research/2026-10-23-security-review-storage-and-auth-surface.md`. Read it before touching auth, crypto, nginx, service worker, or deployment config.
+- Verified commands (2026-10-23): `pytest` at the root passes 188 tests; frontend uses `npm run test:run` inside `frontend/`.
 
 ---
 
@@ -81,4 +104,4 @@ If assigned as Conductor in Project Roles table:
 
 This file is maintained by Claude only. Other agents should not modify this file.
 
-Last updated: <!-- Update this when making changes -->
+Last updated: 2026-10-23
