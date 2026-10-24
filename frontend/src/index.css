@@ -32,8 +32,10 @@
   }
 }
 
+/* Disabled controls must look disabled: forms such as the admin password one
+   stay disabled until the vault is unlocked. */
 @utility btn {
-  @apply px-4 py-2 rounded-lg font-medium transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-2;
+  @apply px-4 py-2 rounded-lg font-medium transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 @utility btn-primary {
@@ -49,7 +51,7 @@
 }
 
 @utility input {
-  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed;
 }
 
 @utility card {

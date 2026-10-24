@@ -110,6 +110,19 @@ export default function CredentialsPage() {
     }
   }, [isUnlocked, queryClient])
 
+  // On lock, also close the views that showed plaintext so they do not reopen
+  // on the next unlock (state adjusted during render, not in an effect)
+  const [wasUnlocked, setWasUnlocked] = useState(isUnlocked)
+  if (wasUnlocked !== isUnlocked) {
+    setWasUnlocked(isUnlocked)
+    if (!isUnlocked) {
+      setShowDetail(false)
+      setSelectedCredential(null)
+      setShowCredentialForm(false)
+      setSelectedTemplate(null)
+    }
+  }
+
   // Client-side search filtering
   const filteredCredentials = useMemo(() => {
     if (!searchQuery.trim()) return decryptedCache

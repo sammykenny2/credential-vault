@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
+import VaultLockControl from '@/components/VaultLockControl'
 import {
   LayoutDashboard,
   Key,
@@ -67,8 +68,13 @@ export default function Layout() {
           </ul>
         </nav>
 
-        {/* User info & Logout */}
+        {/* Vault lock, user info & Logout */}
         <div className="p-4 border-t border-gray-800">
+          {user?.has_vault_keys && (
+            <div className="mb-3">
+              <VaultLockControl />
+            </div>
+          )}
           <div className="mb-3 px-4">
             <p className="text-sm font-medium">{user?.display_name}</p>
             <p className="text-xs text-gray-400">{user?.email}</p>
