@@ -2,14 +2,11 @@
 
 name: CI
 
-# CI paused: the account's Actions quota for this month is exhausted, so
-# pushes and pull requests do not trigger runs. Run manually from the Actions
-# tab (workflow_dispatch) when needed. To re-enable automatic runs, restore:
-#   push:
-#     branches: [main, master]
-#   pull_request:
-#     branches: [main, master]
 on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -85,9 +82,12 @@ jobs:
           pip install -e ".[dev]"
           pip install pip-audit
 
+      # Audit the pinned dependencies, not the project itself: the editable
+      # credential-vault install is not on PyPI, and --strict fails on it.
       - name: Audit Python dependencies
         run: |
-          pip-audit --strict
+          pip freeze --exclude-editable > "${RUNNER_TEMP}/requirements-audit.txt"
+          pip-audit --strict --disable-pip --no-deps -r "${RUNNER_TEMP}/requirements-audit.txt"
 
   # ============================================
   # Frontend
