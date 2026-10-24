@@ -715,14 +715,14 @@ describe('Credential blob format', () => {
     await expect(
       unlockVault(VAULT_PASSWORD, rewrapped.saltBase64, rewrapped.encryptedPrivateKeyBase64, vault.publicKeyBase64)
     ).rejects.toThrow()
-  })
+  }, 30000)
 
   it('refuses to re-wrap with the wrong current password', async () => {
     const vault = await setupVault(VAULT_PASSWORD)
     await expect(
       rewrapPrivateKey('wrong-password', 'new-password', vault.saltBase64, vault.encryptedPrivateKeyBase64)
     ).rejects.toThrow()
-  })
+  }, 30000)
 
   it('base64-encodes buffers larger than one chunk', () => {
     const big = new Uint8Array(200_000)

@@ -1,14 +1,20 @@
 // Credential Vault - Service Worker
-// Cache-first for hashed static assets, network-first for HTML navigation.
+// Cache-first for hashed static assets, network-only for HTML navigation.
 // API responses are never cached: they carry encrypted vault material and
 // key blobs that must not persist in Cache Storage on the device.
+//
+// HTML documents are never cached either. A cached document is replayed with
+// the headers it was stored with, so after a deploy it would keep running the
+// old Content-Security-Policy (an old CSP without 'wasm-unsafe-eval' blocks
+// vault setup and unlock). The app cannot work offline anyway: every vault
+// operation needs the API.
 
-const STATIC_CACHE = 'static-v2'
+// Bumped from static-v2: activate deletes the old cache and the index.html
+// precached in it.
+const STATIC_CACHE = 'static-v3'
 
 // Static assets to precache
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
   '/vault.svg',
   '/manifest.json',
 ]
@@ -55,9 +61,9 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // HTML navigation - network first (SPA)
+  // HTML navigation - network only, never stored or replayed
   if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(networkFirst(request, STATIC_CACHE))
+    event.respondWith(networkOnlyDocument(request))
     return
   }
 
@@ -80,6 +86,23 @@ async function networkOnly(request) {
   }
 }
 
+// Network-only strategy for HTML documents: always the deployed document and
+// its current headers; offline gets a plain page without scripts.
+async function networkOnlyDocument(request) {
+  try {
+    return await fetch(request)
+  } catch {
+    return new Response(
+      '<!doctype html><meta charset="utf-8"><title>Offline</title>' +
+        '<p>Credential Vault needs a connection to your tailnet.</p>',
+      {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      }
+    )
+  }
+}
+
 // Cache-first strategy (for static assets with hashes)
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request)
@@ -93,15 +116,11 @@ async function cacheFirst(request, cacheName) {
     }
     return response
   } catch {
-    // Return offline fallback for navigation
-    if (request.mode === 'navigate') {
-      return caches.match('/index.html')
-    }
     return new Response('Offline', { status: 503 })
   }
 }
 
-// Network-first strategy (for HTML and other same-origin assets)
+// Network-first strategy (for other same-origin assets, never HTML documents)
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request)
@@ -113,12 +132,6 @@ async function networkFirst(request, cacheName) {
   } catch {
     const cached = await caches.match(request)
     if (cached) return cached
-
-    // For navigation, return cached index.html
-    if (request.mode === 'navigate') {
-      return caches.match('/index.html')
-    }
-
     return new Response('Offline', { status: 503 })
   }
 }

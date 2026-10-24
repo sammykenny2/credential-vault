@@ -8,6 +8,8 @@
 
 import { describe, it, expect } from 'vitest'
 import conf from '../../security-headers.conf?raw'
+import nginxConf from '../../nginx.conf?raw'
+import serviceWorker from '../../public/sw.js?raw'
 
 function cspDirective(name: string): string[] {
   const policy = conf.match(/add_header Content-Security-Policy "([^"]+)"/)?.[1]
@@ -34,5 +36,23 @@ describe('nginx Content-Security-Policy', () => {
 
   it('cannot be framed', () => {
     expect(cspDirective('frame-ancestors')).toEqual(["'none'"])
+  })
+})
+
+// A cached HTML document is replayed with its old headers, so a CSP change
+// would not reach a browser that still holds the document (seen in Firefox
+// after a deploy: the old CSP kept blocking WebAssembly).
+describe('the HTML document and its CSP reach the browser fresh after a deploy', () => {
+  it('nginx makes browsers revalidate the SPA document, with the security headers', () => {
+    const spaLocation = nginxConf.match(/location \/ \{([^}]*)\}/)?.[1] ?? ''
+    expect(spaLocation).toContain('add_header Cache-Control "no-cache" always;')
+    expect(spaLocation).toContain('include /etc/nginx/snippets/security-headers.conf;')
+  })
+
+  it('the service worker neither precaches nor caches HTML documents', () => {
+    const precache = serviceWorker.match(/PRECACHE_URLS = \[([^\]]*)\]/)?.[1] ?? ''
+    expect(precache).not.toMatch(/'\/'|'\/index\.html'/)
+    expect(serviceWorker).toContain('event.respondWith(networkOnlyDocument(request))')
+    expect(serviceWorker).not.toContain("caches.match('/index.html')")
   })
 })
