@@ -18,11 +18,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
-# Install the application and its dependencies
-COPY pyproject.toml README.md VERSION ./
+# Locked dependencies first, in their own layer. uv only exports the hashed
+# requirements from uv.lock; pip installs them and rejects any file whose hash
+# does not match.
+COPY --from=ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a /uv /usr/local/bin/uv
+COPY pyproject.toml uv.lock ./
+RUN uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.txt \
+    && pip install --no-cache-dir --require-hashes -r requirements.txt
+
+# Then the application itself, without resolving dependencies again
+COPY README.md VERSION ./
 COPY app/ ./app/
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 # ============================================
 # Production Stage

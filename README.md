@@ -37,7 +37,7 @@ cp .env.example .env
 # Development (local)
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-pip install -e ".[dev]"
+uv sync --extra dev     # exact versions from uv.lock (or: pip install -e ".[dev]")
 alembic upgrade head
 uvicorn app.main:app --reload
 

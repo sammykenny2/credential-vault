@@ -43,8 +43,8 @@ python -m venv .venv
 # Activate (Linux/macOS)
 source .venv/bin/activate
 
-# Install dependencies
-pip install -e ".[dev]"
+# Install dependencies (exact versions from uv.lock; `pip install -e ".[dev]"` also works, unpinned)
+uv sync --extra dev
 ```
 
 #### Node.js Project

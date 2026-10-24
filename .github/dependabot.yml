@@ -16,6 +16,17 @@ updates:
       actions:
         update-types: [minor, patch]
 
+  # Python dependencies are locked in uv.lock
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      python:
+        update-types: [minor, patch]
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:

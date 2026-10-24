@@ -77,7 +77,10 @@ source .venv/bin/activate
 #### 安裝依賴套件
 
 ```bash
-# 安裝專案（含開發依賴）
+# 安裝專案（含開發依賴），版本與 CI、正式環境的 image 相同（取自 uv.lock）
+uv sync --extra dev
+
+# 沒有 uv 時也可以（版本不鎖定）
 pip install -e ".[dev]"
 ```
 

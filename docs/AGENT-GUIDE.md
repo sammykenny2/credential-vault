@@ -37,8 +37,12 @@ project-specific procedures that are too detailed for always-loaded instructions
 ### Entry points and commands
 
 - Backend: `app/main.py` (FastAPI). Run `uvicorn app.main:app --reload` after
-  `pip install -e ".[dev]"` and `alembic upgrade head`. Admin CLI: `vault-cli`
+  `uv sync --extra dev` and `alembic upgrade head`. Admin CLI: `vault-cli`
   (`app/cli.py`).
+- Python dependencies are locked in `uv.lock` (universal, hashed). After editing
+  `pyproject.toml` run `uv lock` with uv 0.12.24 (`uvx --from uv==0.12.24 uv lock`,
+  the version CI and the Dockerfile pin); CI fails on a stale lock. CI and the
+  backend image install `uv export --frozen` output with `pip --require-hashes`.
 - Frontend: `frontend/` (Vite 8 + React 19 + TypeScript 6, Node 22+). `npm install`,
   `npm run dev` (port 3000, proxies `/api` to 8000), `npm run build`.
 - Tests: `pytest` at the root (210 tests, coverage configured in `pyproject.toml`);
