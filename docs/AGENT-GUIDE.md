@@ -51,10 +51,13 @@ project-specific procedures that are too detailed for always-loaded instructions
   `cd frontend && npm run lint`.
 - Deployment: `docker-compose.yaml` (tailscale sidecar, backend, frontend/nginx),
   deployed with `scripts/windows/Deploy-CredentialVault.ps1`: by default the latest
-  CI release (a push to main that changes `VERSION` is a release: the `publish`
-  job pushes to GHCR, creates the `v<VERSION>` GitHub release and records digests as
-  `release/backend` / `release/frontend` commit statuses; the script pulls by
-  digest and checks the revision and version labels), or `-Build` from the checkout; then
+  CI release (a push to main that changes `VERSION` is a release, run as three
+  least-privilege jobs: `publish` pushes `:<sha>` to GHCR and attests build
+  provenance, `scan` runs grype and fails on fixable High/Critical findings,
+  `release` re-puts the scanned manifest as `:<VERSION>`/`:latest`, records digests as
+  `release/backend` / `release/frontend` commit statuses and creates the `v<VERSION>`
+  GitHub release with commit-subject notes; the script pulls by digest, checks the
+  revision and version labels and runs `gh attestation verify`), or `-Build` from the checkout; then
   pre-deploy backup, `up -d`, health and tailnet checks, and a check of the
   served `Cache-Control`/CSP headers on `/` and `/sw.js`. Also `-Tag <version|sha>`,
   `-Backup`, `-Restore`, `-Rollback`, `-Status`, `-Stop`. Keep the publish job's
@@ -69,6 +72,12 @@ project-specific procedures that are too detailed for always-loaded instructions
   `__APP_REVISION__` in `vite.config.ts` (build args in the image). The sidebar
   (`VersionInfo`) shows the bundle's build and a reload hint when `/health`
   reports another.
+- CI hygiene: every action is pinned to a full commit SHA with the version in a
+  comment; base images and the Tailscale sidecar are pinned `tag@digest`;
+  Dependabot (`.github/dependabot.yml`, two-week cooldown) proposes updates for
+  actions, `uv.lock`, npm, Dockerfiles and compose. `ci.yaml` skips docs-only
+  changes (`docs/**`, `**/*.md`); `docker-check.yaml` builds both images when a
+  Dockerfile, dependency file, nginx config or compose changes.
 
 ### Coding conventions
 

@@ -198,11 +198,16 @@ Copy-Item .env.production.example .env.production
 
 映像檔有兩種來源：
 
-- **CI release（預設）**：版號只寫在 repo 根目錄的 `VERSION`（`x.y.z`）。每次 push 和 PR 都只跑測試；只有 push 到 main 且 `VERSION` 是還沒發布過的版號時，`publish` job 才會 build 映像檔並發布（所以 Dockerfile 壞掉要到發版時才會發現）：把映像檔推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為版號、commit SHA 與 `latest`，只保留最新 5 版），把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status，最後建立 GitHub release `v<版號>`。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 與版號相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
-  - 發布新版：改 `VERSION`（例如 `0.3.0` → `0.3.1`）、commit、push 到 main。CI 會擋下格式不對或比最新 release 還小的版號。版號不變的 push 只跑測試，不產生映像檔。
+- **CI release（預設）**：版號只寫在 repo 根目錄的 `VERSION`（`x.y.z`）。平常的 push 和 PR 只跑測試（只改 `docs/` 或 Markdown 的連測試都不跑）；改到 Dockerfile、依賴檔、nginx 設定或 compose 時，另外試 build 映像檔（`docker-check.yaml`，不推送）。只有 push 到 main 且 `VERSION` 是還沒發布過的版號時才發版，分三步：
+  - `publish`：build 兩個映像檔，只以 commit SHA 為標籤推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`），並簽署 build provenance（GitHub artifact attestation，證明映像檔是這個 repo 的 CI 從這個 commit build 的）。
+  - `scan`：用 grype 掃描兩個映像檔，有「已有修補版本」的 High 或 Critical 漏洞就停止發版。這一步沒有任何寫入權限。
+  - `release`：掃描通過後才把同一份映像檔加上版號與 `latest` 標籤、把 digest 記成該 commit 的 `release/backend`、`release/frontend` status、建立 GitHub release `v<版號>`（說明列出上一版以來的 commit），只保留最新 5 版。
+  - 部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，確認標籤上的 commit 與版號相符，並用 `gh attestation verify` 驗證簽章；只拿到 GHCR 憑證、或能寫 commit status 的人都無法換掉要部署的映像檔。
+  - 發布新版：改 `VERSION`（例如 `0.3.1` → `0.3.2`）、commit、push 到 main。CI 會擋下格式不對或比最新 release 還小的版號。版號不變的 push 不產生映像檔。
   - 發布失敗時不會建立 tag，修好後用同一個版號再 push 一次即可。
-  - 不帶參數部署的是最新的 GitHub release。`-Tag 0.3.0` 部署指定版本，只有最新 5 版可選，更舊的映像檔已被刪除。
-  - 介面左下角顯示正在用的版號與 commit（例如 `v0.3.0 · 501cad8`）。瀏覽器還在用舊版介面時，下方會提示伺服器的版本，點一下重新整理即可。
+  - 不帶參數部署的是最新的 GitHub release。`-Tag 0.3.1` 部署指定版本，只有最新 5 版可選。v0.3.0 早於簽章機制，不能再用 `-Tag` 部署，要回去請用 `-Rollback` 或 `-Build`。
+  - 介面左下角顯示正在用的版號與 commit（例如 `v0.3.1 · 1a2b3c4`）。瀏覽器還在用舊版介面時，下方會提示伺服器的版本，點一下重新整理即可。
+  - 依賴更新：Dependabot 每週對 GitHub Actions、Python（`uv.lock`）、npm、base image 與 Tailscale 開 PR，新版本發布滿兩週才會提議。
 - **本機 build（`-Build`）**：從目前的 checkout 建置，版號一樣取自 `VERSION`。CI 不能跑的時候用這個。
 
 CI release 模式的一次性準備：
