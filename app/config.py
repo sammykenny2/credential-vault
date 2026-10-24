@@ -89,7 +89,7 @@ class Settings(BaseSettings):
         return self.app_env == "production"
 
     @model_validator(mode="after")
-    def _refuse_unsafe_production_config(self) -> "Settings":
+    def _refuse_unsafe_production_config(self) -> Settings:
         """Fail fast instead of signing sessions with a well-known key."""
         if not self.is_production:
             return self

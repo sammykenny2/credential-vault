@@ -33,7 +33,7 @@ updates:
         update-types: [minor, patch]
 
   # Base images in both Dockerfiles. Python and Node stay on their current
-  # minor/major line (Python 3.11, Node 24) until that move is made on purpose.
+  # minor/major line (Python 3.14, Node 24) until that move is made on purpose.
   - package-ecosystem: docker
     directories: [/, /frontend]
     schedule:

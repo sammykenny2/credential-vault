@@ -6,7 +6,7 @@
 # Build Stage
 # ============================================
 # Base images are pinned by digest (Dependabot moves tag and digest together)
-FROM python:3.11-slim@sha256:b7a9e5f6a93d6d4a31f129bbd4bdee69efccb6ded0fb230d78aafaf37af98377 AS builder
+FROM python:3.14-slim@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8 AS builder
 
 WORKDIR /build
 
@@ -37,17 +37,16 @@ RUN pip install --no-cache-dir --no-deps .
 # ============================================
 # Production Stage
 # ============================================
-FROM python:3.11-slim@sha256:b7a9e5f6a93d6d4a31f129bbd4bdee69efccb6ded0fb230d78aafaf37af98377
+FROM python:3.14-slim@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
 
 WORKDIR /app
 
-# Runtime dependencies only (curl for the health check). The base image's
-# pip, setuptools and wheel go: the app runs from /opt/venv, and setuptools
-# vendors outdated packages that image scans flag.
+# Runtime dependencies only (curl for the health check). The base image's pip
+# goes too: the app runs from /opt/venv and installs nothing at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && python -m pip uninstall --yes --no-cache-dir pip setuptools wheel
+    && python -m pip uninstall --yes --no-cache-dir pip
 
 # Non-root runtime user
 RUN useradd --create-home --shell /usr/sbin/nologin appuser

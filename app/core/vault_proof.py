@@ -70,7 +70,7 @@ def verify_proof(
 
     try:
         secret = base64.b64decode(proof_b64, validate=True)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False
     if len(secret) != CHALLENGE_BYTES:
         return False

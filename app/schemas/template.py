@@ -18,7 +18,7 @@ class TemplateField(BaseModel):
     defaultValue: str | None = Field(None, max_length=1000)
 
     @model_validator(mode="after")
-    def _no_default_for_secret_fields(self) -> "TemplateField":
+    def _no_default_for_secret_fields(self) -> TemplateField:
         """Templates are stored unencrypted; a secret default would be plaintext on the server."""
         if self.isSecret and self.defaultValue:
             raise ValueError(
