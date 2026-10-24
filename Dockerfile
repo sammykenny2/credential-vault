@@ -15,9 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Self-contained virtualenv; /root/.local would be unreadable by the runtime user
-RUN python -m venv /opt/venv
-ENV PATH=/opt/venv/bin:$PATH
+# Self-contained virtualenv; /root/.local would be unreadable by the runtime
+# user. Created without pip or setuptools: nothing at runtime needs them, and
+# setuptools vendors outdated packages. The base image's pip installs into it.
+RUN python -m venv --without-pip /opt/venv
+ENV PIP_PYTHON=/opt/venv/bin/python
 
 # Locked dependencies first, in their own layer. uv only exports the hashed
 # requirements from uv.lock; pip installs them and rejects any file whose hash
@@ -39,10 +41,13 @@ FROM python:3.11-slim@sha256:b7a9e5f6a93d6d4a31f129bbd4bdee69efccb6ded0fb230d78a
 
 WORKDIR /app
 
-# Runtime dependencies only (curl for the health check)
+# Runtime dependencies only (curl for the health check). The base image's
+# pip, setuptools and wheel go: the app runs from /opt/venv, and setuptools
+# vendors outdated packages that image scans flag.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall --yes --no-cache-dir pip setuptools wheel
 
 # Non-root runtime user
 RUN useradd --create-home --shell /usr/sbin/nologin appuser
