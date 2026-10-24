@@ -27,7 +27,7 @@
 - Stack and versions: Python 3.11+, FastAPI, SQLAlchemy 2 (async) + aiosqlite,
   Alembic, PyJWT, passlib[bcrypt], cryptography; frontend React 19, TypeScript 6,
   Vite 8, Vitest 5, Tailwind 4, Zustand 5, TanStack Query, hash-wasm (Argon2id),
-  Web Crypto API. Node 22+ for the frontend toolchain.
+  Web Crypto API. Node 24+ for the frontend toolchain.
 - Test command: `pytest` at the repository root (backend, coverage enabled via
   `pyproject.toml`); `cd frontend && npm run test:run` (Vitest). Lint with
   `ruff check . && ruff format --check .`, `mypy app/`, and `npm run lint`.
