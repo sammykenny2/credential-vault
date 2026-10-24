@@ -20,7 +20,9 @@
     publish job pushed to GHCR for the newest GitHub release. A release is
     cut when a push to main changes VERSION. Their digests are read from
     that commit's release/* statuses through the GitHub API, the images are
-    pulled by digest and must carry the matching revision and version labels.
+    pulled by digest, must carry the matching revision and version labels,
+    and must have a build attestation signed by this repository's CI
+    workflow for that commit (gh attestation verify).
     Then: stop the backend, back up the database, start the stack and wait for
     the health checks. -Build does the same with images built from this
     checkout instead.
@@ -487,6 +489,16 @@ function Import-ReleaseImages {
         $version = Get-ImageLabel $ref "version"
         if ($Release.Version -and $version -ne $Release.Version) {
             throw "$ref is version '$version', expected $($Release.Version). Refusing to deploy it."
+        }
+        # Signed build provenance: built by this repository's CI workflow, on
+        # main, from the release commit. Labels can be set by anyone who can
+        # push an image; the Sigstore signature cannot.
+        Write-Status "Verifying the build provenance of $service" "INFO"
+        & gh attestation verify "oci://$ref" --repo $Release.Repo `
+            --signer-workflow "$($Release.Repo)/.github/workflows/ci.yaml" `
+            --source-ref "refs/heads/main" --source-digest $Release.Sha | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "$ref has no valid build attestation from $($Release.Repo) CI for $($Release.Sha). Refusing to deploy it. (Releases before attestations were added cannot be deployed this way; use -Rollback or -Build.)"
         }
         $refs[$service] = $ref
     }
