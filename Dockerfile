@@ -5,7 +5,8 @@
 # ============================================
 # Build Stage
 # ============================================
-FROM python:3.11-slim AS builder
+# Base images are pinned by digest (Dependabot moves tag and digest together)
+FROM python:3.11-slim@sha256:b7a9e5f6a93d6d4a31f129bbd4bdee69efccb6ded0fb230d78aafaf37af98377 AS builder
 
 WORKDIR /build
 
@@ -34,7 +35,7 @@ RUN pip install --no-cache-dir --no-deps .
 # ============================================
 # Production Stage
 # ============================================
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:b7a9e5f6a93d6d4a31f129bbd4bdee69efccb6ded0fb230d78aafaf37af98377
 
 WORKDIR /app
 

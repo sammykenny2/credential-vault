@@ -27,6 +27,31 @@ updates:
       python:
         update-types: [minor, patch]
 
+  # Base images in both Dockerfiles. Python and Node stay on their current
+  # minor/major line (3.11, 22) until that move is made on purpose.
+  - package-ecosystem: docker
+    directories: [/, /frontend]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+    groups:
+      images:
+        update-types: [minor, patch]
+
+  # The Tailscale sidecar in docker-compose.yaml
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:

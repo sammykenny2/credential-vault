@@ -4,7 +4,8 @@
 # ============================================
 # Build Stage
 # ============================================
-FROM node:22-alpine AS builder
+# Base images are pinned by digest (Dependabot moves tag and digest together)
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS builder
 
 WORKDIR /app
 
@@ -22,7 +23,7 @@ RUN npm run build
 # ============================================
 # Production Stage
 # ============================================
-FROM nginx:alpine
+FROM nginx:1.31.8-alpine@sha256:1ef7ca94d7879df82421428ce13bd1eaa412404953859cf7a5b6512c25e67a60
 
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
