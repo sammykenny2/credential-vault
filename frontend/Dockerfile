@@ -12,8 +12,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 
-# Copy source and build
+# Copy source and build. APP_VERSION / APP_REVISION are baked into the bundle
+# (vite.config.ts); this build context has no VERSION file to read.
 COPY . .
+ARG APP_VERSION
+ARG APP_REVISION
 RUN npm run build
 
 # ============================================

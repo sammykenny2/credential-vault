@@ -19,7 +19,7 @@ RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
 # Install the application and its dependencies
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md VERSION ./
 COPY app/ ./app/
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
@@ -49,6 +49,12 @@ ENV PATH=/opt/venv/bin:$PATH \
 COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 COPY --chown=appuser:appuser alembic/ ./alembic/
+COPY --chown=appuser:appuser VERSION ./VERSION
+
+# Commit the image was built from, reported by /health next to VERSION so the
+# UI can tell when the browser runs a different build than the server.
+ARG APP_REVISION=unknown
+ENV APP_REVISION=$APP_REVISION
 
 # SQLite lives here; docker-compose mounts the vault_data volume over it, and a
 # new named volume copies this directory's appuser ownership on first use

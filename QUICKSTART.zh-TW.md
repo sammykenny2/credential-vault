@@ -195,10 +195,12 @@ Copy-Item .env.production.example .env.production
 
 映像檔有兩種來源：
 
-- **CI release（預設）**：每次 push 到 main，CI 通過後 `publish` job 把映像檔推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為 commit SHA 與 `latest`，只保留最新 5 版），並把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
-  - 不帶參數部署的是 main 上最新一個發布成功的 commit。最新的 commit 若 CI 還在跑或失敗，部署的會是前一個 release。
-  - `-Tag <commit sha>` 只能指定最新 5 版內的 commit，更舊的映像檔已被刪除。
-- **本機 build（`-Build`）**：從目前的 checkout 建置。CI 不能跑的時候用這個。
+- **CI release（預設）**：版號只寫在 repo 根目錄的 `VERSION`（`x.y.z`）。每次 push 和 PR 都會跑測試並試 build 映像檔，但只有 push 到 main 且 `VERSION` 是還沒發布過的版號時，`publish` job 才會發布：把映像檔推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為版號、commit SHA 與 `latest`，只保留最新 5 版），把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status，最後建立 GitHub release `v<版號>`。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 與版號相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
+  - 發布新版：改 `VERSION`（例如 `0.3.0` → `0.3.1`）、commit、push 到 main。CI 會擋下格式不對或比最新 release 還小的版號。版號不變的 push 只跑測試，不產生映像檔。
+  - 發布失敗時不會建立 tag，修好後用同一個版號再 push 一次即可。
+  - 不帶參數部署的是最新的 GitHub release。`-Tag 0.3.0` 部署指定版本，只有最新 5 版可選，更舊的映像檔已被刪除。
+  - 介面左下角顯示正在用的版號與 commit（例如 `v0.3.0 · 501cad8`）。瀏覽器還在用舊版介面時，下方會提示伺服器的版本，點一下重新整理即可。
+- **本機 build（`-Build`）**：從目前的 checkout 建置，版號一樣取自 `VERSION`。CI 不能跑的時候用這個。
 
 CI release 模式的一次性準備：
 
@@ -209,8 +211,8 @@ CI release 模式的一次性準備：
 # 部署最新的 CI release：查 release → 依 digest 拉映像檔並驗證 → 停後端 → 備份 → 啟動 → 健康檢查
 .\scripts\windows\Deploy-CredentialVault.ps1
 
-# 部署指定 commit 的 CI release
-.\scripts\windows\Deploy-CredentialVault.ps1 -Tag <commit sha>
+# 部署指定版本的 CI release（也接受該 release 的 commit SHA）
+.\scripts\windows\Deploy-CredentialVault.ps1 -Tag 0.3.0
 
 # 從目前的 checkout 建置並部署
 .\scripts\windows\Deploy-CredentialVault.ps1 -Build
@@ -219,7 +221,7 @@ CI release 模式的一次性準備：
 其他動作：
 
 ```powershell
-.\scripts\windows\Deploy-CredentialVault.ps1 -Status    # 容器健康與執行中的 commit、tailnet 網址、最近的備份
+.\scripts\windows\Deploy-CredentialVault.ps1 -Status    # 容器健康與執行中的版號與 commit、tailnet 網址、最近的備份
 .\scripts\windows\Deploy-CredentialVault.ps1 -Backup    # 備份到 backups\backup-<時間>.db
 .\scripts\windows\Deploy-CredentialVault.ps1 -Restore .\backups\<檔名>.db  # 以備份取代資料庫（會先備份現況）
 .\scripts\windows\Deploy-CredentialVault.ps1 -Rollback  # 回到上一次部署前的映像檔與資料庫
@@ -235,6 +237,8 @@ Docker Desktop 必須在登入 Windows 時自動啟動（設定 → General → 
 腳本的每個步驟都是 `docker compose` 指令，在沒有 PowerShell 的主機上可以照順序手動執行：
 
 ```bash
+# 版號與 commit 會顯示在介面上
+export VAULT_VERSION="$(cat VERSION)" VAULT_REVISION="$(git rev-parse HEAD)"
 docker compose --env-file .env.production build --pull
 docker compose --env-file .env.production stop backend
 docker compose --env-file .env.production run --rm --no-deps -T \
@@ -242,7 +246,7 @@ docker compose --env-file .env.production run --rm --no-deps -T \
 docker compose --env-file .env.production up -d
 ```
 
-改用 CI release 時，把第一行換成：從 GitHub 上該 commit 的 `release/*` status 取得 digest，`docker pull ghcr.io/<owner>/credential-vault-backend@<digest>`（frontend 同理），確認 `org.opencontainers.image.revision` 標籤等於該 commit，再 `docker tag` 成 `credential-vault-backend:local` / `credential-vault-frontend:local`。
+改用 CI release 時，把前兩行換成：從 GitHub release `v<版號>` 所在 commit 的 `release/*` status 取得 digest，`docker pull ghcr.io/<owner>/credential-vault-backend@<digest>`（frontend 同理），確認 `org.opencontainers.image.revision` 標籤等於該 commit，再 `docker tag` 成 `credential-vault-backend:local` / `credential-vault-frontend:local`。
 
 還原：`docker compose --env-file .env.production run --rm --no-deps -T --user root -v "<資料夾>:/restore:ro" backend python -m app.maintenance restore /restore/<檔名>`。
 

@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { useAutoLock } from '@/hooks/useVaultLock'
+import VersionInfo from '@/components/VersionInfo'
 import {
   LayoutDashboard,
   Key,
@@ -82,6 +83,7 @@ export default function Layout() {
             <LogOut className="w-5 h-5" />
             Logout
           </button>
+          <VersionInfo />
         </div>
       </aside>
 

@@ -47,17 +47,24 @@ project-specific procedures that are too detailed for always-loaded instructions
   `cd frontend && npm run lint`.
 - Deployment: `docker-compose.yaml` (tailscale sidecar, backend, frontend/nginx),
   deployed with `scripts/windows/Deploy-CredentialVault.ps1`: by default the latest
-  CI release (the `publish` job pushes to GHCR and records digests as
+  CI release (a push to main that changes `VERSION` is a release: the `publish`
+  job pushes to GHCR, creates the `v<VERSION>` GitHub release and records digests as
   `release/backend` / `release/frontend` commit statuses; the script pulls by
-  digest and checks the revision label), or `-Build` from the checkout; then
+  digest and checks the revision and version labels), or `-Build` from the checkout; then
   pre-deploy backup, `up -d`, health and tailnet checks, and a check of the
-  served `Cache-Control`/CSP headers on `/` and `/sw.js`. Also `-Tag <sha>`,
+  served `Cache-Control`/CSP headers on `/` and `/sw.js`. Also `-Tag <version|sha>`,
   `-Backup`, `-Restore`, `-Rollback`, `-Status`, `-Stop`. Keep the publish job's
   `provenance: false` / `sbom: false`: attestation manifests would be counted
   and deleted by the keep-5 retention step. The database is the `credential-vault_vault_data` named
   volume, never `./data` (the dev database). Backup/restore run
   `python -m app.maintenance` inside the backend image so other hosts can repeat
   the same `docker compose` steps. The stack on a NAS has not been exercised yet.
+- Version: `VERSION` (x.y.z) is the only copy. pyproject reads it
+  (`[tool.setuptools.dynamic]`), `app/config.py` reads it at runtime (`/health`
+  returns `version` and `revision`), and the frontend bakes `__APP_VERSION__` /
+  `__APP_REVISION__` in `vite.config.ts` (build args in the image). The sidebar
+  (`VersionInfo`) shows the bundle's build and a reload hint when `/health`
+  reports another.
 
 ### Coding conventions
 

@@ -20,7 +20,8 @@ services:
     # Tailnet machine name; the HTTPS address becomes <TS_HOSTNAME>.<tailnet>.ts.net
     hostname: ${TS_HOSTNAME:-credential-vault}
     environment:
-      - TS_AUTHKEY=${TS_AUTHKEY}
+      # Optional: left empty, the sidecar prints a browser login URL instead
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
       - TS_HOSTNAME=${TS_HOSTNAME:-credential-vault}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_CONFIG=/config/serve.json
@@ -58,8 +59,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Set by the deploy script (-Build) from VERSION and the checkout, so the
+      # UI, /health and -Status can show which build runs.
+      args:
+        APP_REVISION: ${VAULT_REVISION:-unknown}
       labels:
-        # Set by the deploy script (-Build) so -Status can show the commit.
+        org.opencontainers.image.version: ${VAULT_VERSION:-unknown}
         org.opencontainers.image.revision: ${VAULT_REVISION:-unknown}
     env_file:
       - .env.production
@@ -99,7 +104,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${VAULT_VERSION:-}
+        APP_REVISION: ${VAULT_REVISION:-unknown}
       labels:
+        org.opencontainers.image.version: ${VAULT_VERSION:-unknown}
         org.opencontainers.image.revision: ${VAULT_REVISION:-unknown}
     depends_on:
       - backend

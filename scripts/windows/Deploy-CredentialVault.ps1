@@ -17,15 +17,17 @@
     work by hand, or from a shell script, on any other Docker host.
 
     Without parameters, deploys the latest CI release: the images the CI
-    publish job pushed to GHCR for the newest main commit. Their digests are
-    read from that commit's release/* statuses through the GitHub API, the
-    images are pulled by digest and must carry the matching revision label.
+    publish job pushed to GHCR for the newest GitHub release. A release is
+    cut when a push to main changes VERSION. Their digests are read from
+    that commit's release/* statuses through the GitHub API, the images are
+    pulled by digest and must carry the matching revision and version labels.
     Then: stop the backend, back up the database, start the stack and wait for
     the health checks. -Build does the same with images built from this
     checkout instead.
 
 .PARAMETER Tag
-    Which CI release to deploy: "latest" (default) or a commit SHA. Needs the
+    Which CI release to deploy: "latest" (default), a version such as 0.3.0,
+    or the commit SHA of a release. Only the newest 5 releases are kept. Needs the
     GitHub CLI (gh auth login). The images are public; "docker login ghcr.io"
     is needed only if the packages are made private.
 
@@ -61,8 +63,8 @@
     Deploy (or update to) the latest CI release.
 
 .EXAMPLE
-    .\Deploy-CredentialVault.ps1 -Tag 0e255ed
-    Deploy the CI release built from that commit.
+    .\Deploy-CredentialVault.ps1 -Tag 0.3.0
+    Deploy release v0.3.0 (-Tag also takes the release's commit SHA).
 
 .EXAMPLE
     .\Deploy-CredentialVault.ps1 -Build
@@ -382,13 +384,27 @@ function Get-HeaderValue {
     return (@($Response.Headers[$Name]) -join ", ")
 }
 
-function Get-ImageRevision {
-    # The org.opencontainers.image.revision label (commit SHA), or "".
-    param([string]$Image)
+function Get-ImageLabel {
+    # One org.opencontainers.image.* label of an image, or "".
+    param([string]$Image, [string]$Name)
     $json = Invoke-Docker image inspect --format "{{json .Config.Labels}}" $Image
     if (-not $json) { return "" }
     $labels = ($json -join "") | ConvertFrom-Json
-    return "$(Get-JsonProperty $labels 'org.opencontainers.image.revision')"
+    if ($null -eq $labels) { return "" }
+    return "$(Get-JsonProperty $labels "org.opencontainers.image.$Name")"
+}
+
+function Get-ImageRevision {
+    # The revision label (commit SHA), or "".
+    param([string]$Image)
+    return Get-ImageLabel $Image "revision"
+}
+
+function Get-CheckoutVersion {
+    # VERSION of this checkout, for the -Build images.
+    $file = Join-Path $repoRoot "VERSION"
+    if (-not (Test-Path $file)) { return "unknown" }
+    return "$(Get-Content -Raw $file)".Trim()
 }
 
 function Get-CheckoutRevision {
@@ -418,7 +434,8 @@ function Get-ReleaseDigests {
 }
 
 function Resolve-Release {
-    # Find the CI release for -Tag ("latest" or a commit SHA) on GitHub.
+    # Find the CI release for -Tag on GitHub: "latest" (the newest GitHub
+    # release), a version such as 0.3.0, or a commit SHA.
     param([string]$Tag)
     $useBuild = "Or build from this checkout: .\scripts\windows\Deploy-CredentialVault.ps1 -Build"
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
@@ -430,22 +447,24 @@ function Resolve-Release {
     if (-not $repo) { throw "Could not determine the GitHub repository of this checkout. $useBuild" }
 
     if ($Tag -eq "latest") {
-        $shas = Invoke-Gh api "repos/$repo/commits?sha=main&per_page=30" --jq ".[].sha"
-        foreach ($sha in @($shas)) {
-            $sha = "$sha".Trim()
-            if (-not $sha) { continue }
-            $digests = Get-ReleaseDigests -Repo $repo -Sha $sha
-            if ($digests) { return [pscustomobject]@{ Repo = $repo; Sha = $sha; Digests = $digests } }
+        $ref = "$(Invoke-Gh api "repos/$repo/releases/latest" --jq .tag_name)".Trim()
+        if ($LASTEXITCODE -ne 0 -or $ref -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "No release published yet: bump VERSION and push to main to publish one. $useBuild"
         }
-        throw "No CI release found on the last 30 commits of main (the CI publish job has not run yet). $useBuild"
+    } elseif ($Tag -match '^v?([0-9]+\.[0-9]+\.[0-9]+)$') {
+        $ref = "v$($Matches[1])"
+    } elseif ($Tag -match '^[0-9a-fA-F]{7,40}$') {
+        $ref = $Tag
+    } else {
+        throw "-Tag must be 'latest', a version such as 0.3.0, or a commit SHA, got '$Tag'."
     }
+    $version = if ($ref -like "v*") { $ref.Substring(1) } else { "" }
 
-    if ($Tag -notmatch '^[0-9a-fA-F]{7,40}$') { throw "-Tag must be 'latest' or a commit SHA, got '$Tag'." }
-    $sha = "$(Invoke-Gh api "repos/$repo/commits/$Tag" --jq .sha)".Trim()
-    if (-not $sha) { throw "Commit $Tag was not found in $repo." }
+    $sha = "$(Invoke-Gh api "repos/$repo/commits/$ref" --jq .sha)".Trim()
+    if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') { throw "$ref was not found in $repo." }
     $digests = Get-ReleaseDigests -Repo $repo -Sha $sha
-    if (-not $digests) { throw "Commit $Tag has no CI release (the publish job did not run or failed for it). $useBuild" }
-    return [pscustomobject]@{ Repo = $repo; Sha = $sha; Digests = $digests }
+    if (-not $digests) { throw "$ref has no CI release (the publish job did not run or failed for it). $useBuild" }
+    return [pscustomobject]@{ Repo = $repo; Sha = $sha; Version = $version; Digests = $digests }
 }
 
 function Import-ReleaseImages {
@@ -464,6 +483,10 @@ function Import-ReleaseImages {
         $revision = Get-ImageRevision $ref
         if ($revision -ne $Release.Sha) {
             throw "$ref was built from '$revision', expected $($Release.Sha). Refusing to deploy it."
+        }
+        $version = Get-ImageLabel $ref "version"
+        if ($Release.Version -and $version -ne $Release.Version) {
+            throw "$ref is version '$version', expected $($Release.Version). Refusing to deploy it."
         }
         $refs[$service] = $ref
     }
@@ -557,13 +580,19 @@ function Show-StackStatus {
         $id = Get-ServiceContainer $service
         $health = if ($id) { Get-ContainerHealth $id } else { "not created" }
         $type = if ($health -eq "healthy") { "OK" } else { "WARN" }
-        $revision = ""
+        $build = ""
         if ($id -and $builtImages.ContainsKey($service)) {
             $image = "$(Invoke-Docker inspect --format '{{.Image}}' $id)".Trim()
-            if ($image) { $revision = Get-ImageRevision $image }
-            if ($revision) { $revision = " (commit $revision)" }
+            if ($image) {
+                $revision = Get-ImageRevision $image
+                $version = Get-ImageLabel $image "version"
+                $parts = @()
+                if ($version -and $version -ne "unknown") { $parts += "v$version" }
+                if ($revision) { $parts += "commit $revision" }
+                if ($parts) { $build = " ($($parts -join ', '))" }
+            }
         }
-        Write-Status "$service`: $health$revision" $type
+        Write-Status "$service`: $health$build" $type
     }
     $tailnet = Get-TailnetState
     if ($tailnet -and $tailnet.DnsName) {
@@ -647,8 +676,9 @@ try {
         'Build' {
             Test-Prerequisites -Start
             Save-PreviousImages
+            $env:VAULT_VERSION = Get-CheckoutVersion
             $env:VAULT_REVISION = Get-CheckoutRevision
-            Write-Status "Building images from this checkout ($env:VAULT_REVISION)..." "INFO"
+            Write-Status "Building v$env:VAULT_VERSION images from this checkout ($env:VAULT_REVISION)..." "INFO"
             Invoke-Compose build --pull
             Publish-Stack
         }
@@ -656,7 +686,8 @@ try {
         default {
             Test-Prerequisites -Start
             $release = Resolve-Release -Tag $Tag
-            Write-Status "CI release: commit $($release.Sha) of $($release.Repo)" "INFO"
+            $name = if ($release.Version) { "v$($release.Version), commit" } else { "commit" }
+            Write-Status "CI release: $name $($release.Sha) of $($release.Repo)" "INFO"
             $refs = Import-ReleaseImages $release
             Save-PreviousImages
             $imageTag = Get-ImageTag

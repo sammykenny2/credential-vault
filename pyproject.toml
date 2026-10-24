@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "credential-vault"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Self-hosted credential management system with E2EE and Google OAuth"
 readme = "README.md"
 license = {text = "MIT"}
@@ -61,6 +61,11 @@ Repository = "https://github.com/username/credential-vault"
 [project.scripts]
 credential-vault = "app.main:main"
 vault-cli = "app.cli:main"
+
+# The release version lives in VERSION (also read by the app, CI and the
+# frontend build); bumping it is what publishes a release.
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
 
 [tool.setuptools.packages.find]
 where = ["."]
