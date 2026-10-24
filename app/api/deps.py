@@ -104,8 +104,22 @@ async def get_vault_proven_user(
     return current_user
 
 
+async def get_vault_proven_admin_user(
+    request: Request,
+    admin_user: Annotated[User, Depends(get_current_admin_user)],
+) -> User:
+    """Admin, additionally proven to hold the unlocked vault key.
+
+    Required for changes to accounts: with a session token alone, a stolen
+    admin token could promote or reactivate an account and keep admin access.
+    """
+    ensure_vault_proof(request, admin_user)
+    return admin_user
+
+
 # Type aliases for cleaner dependency injection
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 VaultProvenUser = Annotated[User, Depends(get_vault_proven_user)]
+VaultProvenAdmin = Annotated[User, Depends(get_vault_proven_admin_user)]
 DbSession = Annotated[AsyncSession, Depends(get_db)]

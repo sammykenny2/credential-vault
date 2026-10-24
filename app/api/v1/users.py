@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.api.deps import AdminUser, CurrentUser, DbSession, VaultProvenUser
+from app.api.deps import AdminUser, CurrentUser, DbSession, VaultProvenAdmin, VaultProvenUser
 from app.core.security import SecurityService
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
@@ -163,10 +163,10 @@ async def list_users(
 async def create_user(
     request: Request,
     data: UserCreate,
-    admin_user: AdminUser,
+    admin_user: VaultProvenAdmin,
     db: DbSession,
 ):
-    """Create a new user (admin only).
+    """Create a new user (admin only, requires proof of vault unlock).
 
     Creates a user account that can be claimed via Google OAuth login.
     """
@@ -220,12 +220,13 @@ async def get_user(
 
 @router.patch("/{user_id}", response_model=UserRead)
 async def update_user(
+    request: Request,
     user_id: str,
     data: UserUpdate,
-    admin_user: AdminUser,
+    admin_user: VaultProvenAdmin,
     db: DbSession,
 ):
-    """Update user (admin only)."""
+    """Update user (admin only, requires proof of vault unlock)."""
     user_service = UserService(db)
     user = await user_service.get_by_id(user_id)
 
@@ -235,7 +236,31 @@ async def update_user(
             detail="User not found",
         )
 
+    # Same protections as DELETE /users/{id}, which also deactivates
+    if data.is_active is False:
+        if user_id == admin_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot deactivate yourself",
+            )
+        if await user_service.is_last_admin(user):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete or deactivate the last admin",
+            )
+
+    changes = data.model_dump(exclude_unset=True)
     updated_user = await user_service.update(user, data)
+
+    audit_service = AuditLogService(db)
+    await audit_service.log_from_request(
+        request,
+        action=AuditAction.USER_UPDATED,
+        user_id=admin_user.id,
+        resource_type="user",
+        resource_id=user_id,
+        details=changes,
+    )
     return updated_user
 
 
@@ -244,10 +269,10 @@ async def update_user_role(
     request: Request,
     user_id: str,
     data: UserRoleUpdate,
-    admin_user: AdminUser,
+    admin_user: VaultProvenAdmin,
     db: DbSession,
 ):
-    """Update user role (admin only).
+    """Update user role (admin only, requires proof of vault unlock).
 
     Admins can demote themselves only if there is at least one other active admin.
     """
@@ -296,10 +321,10 @@ async def update_user_role(
 async def reactivate_user(
     request: Request,
     user_id: str,
-    admin_user: AdminUser,
+    admin_user: VaultProvenAdmin,
     db: DbSession,
 ):
-    """Reactivate a deactivated user (admin only)."""
+    """Reactivate a deactivated user (admin only, requires proof of vault unlock)."""
     user_service = UserService(db)
     user = await user_service.get_by_id(user_id)
 
@@ -333,7 +358,7 @@ async def reactivate_user(
 async def delete_user(
     request: Request,
     user_id: str,
-    admin_user: AdminUser,
+    admin_user: VaultProvenAdmin,
     db: DbSession,
     hard_delete: bool = Query(
         False,
@@ -344,7 +369,7 @@ async def delete_user(
         description="Also delete credentials (only used when hard_delete=false)",
     ),
 ):
-    """Delete or deactivate user (admin only).
+    """Delete or deactivate user (admin only, requires proof of vault unlock).
 
     - Default: Soft delete (deactivate). User record and credentials preserved.
     - delete_credentials=true: Deactivate and delete credentials.

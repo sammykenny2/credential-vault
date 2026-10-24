@@ -1,13 +1,26 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
+import { useVaultKey } from '@/hooks/useVaultKey'
+import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { UserCheck, UserX, Key, ShieldCheck, ShieldOff } from 'lucide-react'
 import clsx from 'clsx'
+
+function describeError(err: unknown): string {
+  return err instanceof VaultLockedError
+    ? 'Your vault is locked. Unlock it, then try again.'
+    : 'The change could not be saved.'
+}
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuthStore()
   const queryClient = useQueryClient()
+  // Changing accounts needs proof of vault unlock, so the actions stay
+  // disabled while the vault is locked.
+  const { isUnlocked } = useVaultKey()
+  const [actionError, setActionError] = useState('')
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin', 'users'],
@@ -20,26 +33,29 @@ export default function AdminUsersPage() {
     [users]
   )
 
-  const deactivateMutation = useMutation({
-    mutationFn: userService.deactivate,
+  const mutationCallbacks = {
+    onMutate: () => setActionError(''),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
     },
+    onError: (err: unknown) => setActionError(describeError(err)),
+  }
+
+  const deactivateMutation = useMutation({
+    mutationFn: async (id: string) => userService.deactivate(id, await vaultProofHeaders()),
+    ...mutationCallbacks,
   })
 
   const activateMutation = useMutation({
-    mutationFn: (id: string) => userService.update(id, { is_active: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
-    },
+    mutationFn: async (id: string) =>
+      userService.update(id, { is_active: true }, await vaultProofHeaders()),
+    ...mutationCallbacks,
   })
 
   const roleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: 'user' | 'admin' }) =>
-      userService.updateRole(id, role),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
-    },
+    mutationFn: async ({ id, role }: { id: string; role: 'user' | 'admin' }) =>
+      userService.updateRole(id, role, await vaultProofHeaders()),
+    ...mutationCallbacks,
   })
 
   const handlePromote = (id: string, displayName: string) => {
@@ -77,6 +93,23 @@ export default function AdminUsersPage() {
           Users are created automatically when they sign in with Google OAuth.
         </p>
       </div>
+
+      {!isUnlocked && (
+        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm mb-6">
+          Your vault is locked. Changing users requires an unlocked vault, so a stolen session
+          alone cannot change accounts.{' '}
+          <Link to="/credentials" className="font-medium underline">
+            Unlock it on the Credentials page
+          </Link>
+          .
+        </div>
+      )}
+
+      {actionError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm mb-6">
+          {actionError}
+        </div>
+      )}
 
       {/* Users Table */}
       {isLoading ? (
@@ -171,7 +204,8 @@ export default function AdminUsersPage() {
                           user.role === 'user' ? (
                             <button
                               onClick={() => handlePromote(user.id, user.display_name)}
-                              className="p-1 text-purple-600 hover:text-purple-800"
+                              disabled={!isUnlocked}
+                              className="p-1 text-purple-600 hover:text-purple-800 disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Promote to Admin"
                             >
                               <ShieldCheck className="w-5 h-5" />
@@ -179,7 +213,8 @@ export default function AdminUsersPage() {
                           ) : !isLastAdmin ? (
                             <button
                               onClick={() => handleDemote(user.id, user.display_name)}
-                              className="p-1 text-yellow-600 hover:text-yellow-800"
+                              disabled={!isUnlocked}
+                              className="p-1 text-yellow-600 hover:text-yellow-800 disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Demote to User"
                             >
                               <ShieldOff className="w-5 h-5" />
@@ -200,7 +235,8 @@ export default function AdminUsersPage() {
                             !isLastAdmin ? (
                               <button
                                 onClick={() => deactivateMutation.mutate(user.id)}
-                                className="p-1 text-red-600 hover:text-red-800"
+                                disabled={!isUnlocked}
+                                className="p-1 text-red-600 hover:text-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="Deactivate"
                               >
                                 <UserX className="w-5 h-5" />
@@ -216,7 +252,8 @@ export default function AdminUsersPage() {
                           ) : (
                             <button
                               onClick={() => activateMutation.mutate(user.id)}
-                              className="p-1 text-green-600 hover:text-green-800"
+                              disabled={!isUnlocked}
+                              className="p-1 text-green-600 hover:text-green-800 disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Reactivate"
                             >
                               <UserCheck className="w-5 h-5" />

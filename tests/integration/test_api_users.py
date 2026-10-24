@@ -1,13 +1,31 @@
 """Integration tests for user management API endpoints."""
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.core.security import SecurityService
+from app.core.vault_proof import VAULT_PROOF_HEADER
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.user import UserRole
 from app.services.user import UserService
+from tests.integration.test_api_vault_proof import _obtain_proof, _user_with_vault
+
+
+async def _proven_admin(client: AsyncClient, db_session, email: str):
+    """An admin with a vault; every later request on ``client`` carries its unlock proof.
+
+    Changing accounts requires proof of vault unlock (X-Vault-Proof), see
+    TestAdminChangesRequireVaultProof.
+    """
+    admin, private_key, headers = await _user_with_vault(db_session, email)
+    admin.role = UserRole.ADMIN
+    await db_session.commit()
+    client.headers[VAULT_PROOF_HEADER] = await _obtain_proof(client, headers, private_key)
+    return headers["Authorization"].removeprefix("Bearer "), admin
 
 
 class TestUserMeAPI:
@@ -157,19 +175,9 @@ class TestUserRoleAPI:
     """Test user role management endpoints."""
 
     @pytest.fixture
-    async def admin_token(self, db_session):
-        """Create an admin user and return their token + user."""
-        service = UserService(db_session)
-        admin = await service.create_oauth_user(
-            email="admin@example.com",
-            display_name="Admin User",
-            google_id="google-admin-1",
-            role=UserRole.ADMIN,
-        )
-        await db_session.commit()
-
-        token = SecurityService.create_access_token(admin.id)
-        return token, admin
+    async def admin_token(self, client: AsyncClient, db_session):
+        """Create an admin user with an unlocked vault and return their token + user."""
+        return await _proven_admin(client, db_session, "admin@example.com")
 
     @pytest.fixture
     async def regular_user(self, db_session):
@@ -368,19 +376,9 @@ class TestUserDeactivateAPI:
     """Test user deactivation endpoints."""
 
     @pytest.fixture
-    async def admin_token(self, db_session):
-        """Create an admin user and return their token + user."""
-        service = UserService(db_session)
-        admin = await service.create_oauth_user(
-            email="deactadmin@example.com",
-            display_name="Deactivate Admin",
-            google_id="google-deactadmin",
-            role=UserRole.ADMIN,
-        )
-        await db_session.commit()
-
-        token = SecurityService.create_access_token(admin.id)
-        return token, admin
+    async def admin_token(self, client: AsyncClient, db_session):
+        """Create an admin user with an unlocked vault and return their token + user."""
+        return await _proven_admin(client, db_session, "deactadmin@example.com")
 
     @pytest.fixture
     async def user_with_credentials(self, db_session):
@@ -462,22 +460,16 @@ class TestUserDeactivateAPI:
         """Test that the last active admin cannot be deleted or deactivated."""
         token, admin1 = admin_token
 
-        # Create a second admin to perform the deletion
-        service = UserService(db_session)
-        admin2 = await service.create_oauth_user(
-            email="admin2@example.com",
-            display_name="Admin 2",
-            google_id="google-admin2",
-            role=UserRole.ADMIN,
+        # Create a second admin, with its own vault and proof, to perform the deletion
+        admin2, admin2_key, admin2_headers = await _user_with_vault(
+            db_session, "admin2@example.com"
         )
+        admin2.role = UserRole.ADMIN
         await db_session.commit()
-        token2 = SecurityService.create_access_token(admin2.id)
+        admin2_headers[VAULT_PROOF_HEADER] = await _obtain_proof(client, admin2_headers, admin2_key)
 
         # Admin 2 tries to delete Admin 1 (Admin 1 is not the last admin, so this should work)
-        response = await client.delete(
-            f"/api/v1/users/{admin1.id}",
-            headers={"Authorization": f"Bearer {token2}"},
-        )
+        response = await client.delete(f"/api/v1/users/{admin1.id}", headers=admin2_headers)
         assert response.status_code == 204
 
         # Now Admin 2 is the ONLY active admin left. The "cannot delete the last
@@ -552,3 +544,108 @@ class TestUserDeactivateAPI:
 
         assert response.status_code == 400
         assert "already active" in response.json()["detail"]
+
+
+class TestAdminChangesRequireVaultProof:
+    """A stolen admin session token alone must not be able to change accounts.
+
+    With it, an attacker could promote or reactivate an account of their own
+    and keep admin access after the token expires.
+    """
+
+    @pytest.fixture
+    async def admin_headers(self, db_session):
+        admin, _, headers = await _user_with_vault(db_session, "nproof-admin@example.com")
+        admin.role = UserRole.ADMIN
+        await db_session.commit()
+        return headers
+
+    @pytest.fixture
+    async def target(self, db_session):
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="target@example.com", display_name="Target", google_id="google-target"
+        )
+        await db_session.commit()
+        return user
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("method", "path", "body"),
+        [
+            ("POST", "/api/v1/users/", {"email": "new@example.com", "display_name": "New"}),
+            ("PATCH", "/api/v1/users/{id}", {"is_active": True}),
+            ("PATCH", "/api/v1/users/{id}/role", {"role": "admin"}),
+            ("POST", "/api/v1/users/{id}/reactivate", None),
+            ("DELETE", "/api/v1/users/{id}", None),
+        ],
+    )
+    async def test_rejected_without_proof(
+        self, client: AsyncClient, db_session, admin_headers, target, method, path, body
+    ):
+        response = await client.request(
+            method, path.format(id=target.id), headers=admin_headers, json=body
+        )
+
+        assert response.status_code == 403
+        assert "Vault proof" in response.json()["detail"]
+        await db_session.refresh(target)
+        assert target.role == UserRole.USER
+        assert target.is_active is True
+
+    @pytest.mark.asyncio
+    async def test_regular_users_still_get_admin_required(
+        self, client: AsyncClient, db_session, target
+    ):
+        _, _, headers = await _user_with_vault(db_session, "plain@example.com")
+
+        response = await client.patch(
+            f"/api/v1/users/{target.id}/role", headers=headers, json={"role": "admin"}
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Admin access required"
+
+
+class TestUserUpdateAPI:
+    """PATCH /users/{id} can deactivate, so it has the same guards as DELETE and is audited."""
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_deactivate_self(self, client: AsyncClient, db_session):
+        token, admin = await _proven_admin(client, db_session, "patch-admin@example.com")
+
+        response = await client.patch(
+            f"/api/v1/users/{admin.id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 400
+        assert "Cannot deactivate yourself" in response.json()["detail"]
+        await db_session.refresh(admin)
+        assert admin.is_active is True
+
+    @pytest.mark.asyncio
+    async def test_changes_are_audited(self, client: AsyncClient, db_session):
+        token, admin = await _proven_admin(client, db_session, "patch-admin@example.com")
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="patch-user@example.com", display_name="User", google_id="google-patch-user"
+        )
+        await db_session.commit()
+
+        response = await client.patch(
+            f"/api/v1/users/{user.id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 200
+        entry = (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.USER_UPDATED)
+            )
+        ).scalar_one()
+        assert entry.user_id == admin.id
+        assert entry.resource_id == user.id
+        assert json.loads(entry.details) == {"is_active": False}
