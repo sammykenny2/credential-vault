@@ -11,6 +11,7 @@ export {
   generateSalt,
   setupVault,
   unlockVault,
+  isVaultPassword,
   rewrapPrivateKey,
   credentialBlobVersion,
   KDF_VERSION,

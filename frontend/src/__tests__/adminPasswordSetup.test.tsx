@@ -1,0 +1,107 @@
+/**
+ * AdminPasswordSetup: disabled while the vault is locked, and never sends the
+ * vault password to the server as the sign-in password.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+
+vi.mock('@/services/api', () => ({ default: { get: vi.fn() } }))
+vi.mock('@/services/authService', () => ({ authService: { setPassword: vi.fn() } }))
+vi.mock('@/lib/crypto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/crypto')>()),
+  isVaultPassword: vi.fn(),
+}))
+vi.mock('@/lib/vaultProof', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vaultProof')>()),
+  vaultProofHeaders: vi.fn(),
+}))
+
+import AdminPasswordSetup from '@/components/AdminPasswordSetup'
+import api from '@/services/api'
+import { authService } from '@/services/authService'
+import { isVaultPassword } from '@/lib/crypto'
+import { vaultProofHeaders } from '@/lib/vaultProof'
+import { useVaultKeyStore } from '@/hooks/useVaultKey'
+import type { User } from '@/types'
+
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const KEYS = { public_key: 'pk', encrypted_private_key: 'wrapped', key_salt: 'salt', kdf_version: 2 }
+const PASSWORD = 'a-long-sign-in-password'
+
+let container: HTMLDivElement
+let root: Root
+
+async function render() {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  await act(async () => root.render(<AdminPasswordSetup />))
+}
+
+async function typeInto(selector: string, value: string) {
+  const input = container.querySelector<HTMLInputElement>(selector)!
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    setValue.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+async function submit() {
+  await act(async () => container.querySelector('form')!.requestSubmit())
+}
+
+describe('AdminPasswordSetup', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset().mockResolvedValue({ data: KEYS })
+    vi.mocked(authService.setPassword).mockReset()
+    vi.mocked(isVaultPassword).mockReset()
+    vi.mocked(vaultProofHeaders).mockReset().mockResolvedValue({ 'X-Vault-Proof': 'proof' })
+    useVaultKeyStore.getState().setKeys({} as CryptoKey, {} as CryptoKey, 'pk')
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    useVaultKeyStore.getState().clearKeys()
+  })
+
+  it('keeps the fields and buttons disabled while the vault is locked', async () => {
+    useVaultKeyStore.getState().clearKeys()
+    await render()
+
+    expect(container.textContent).toContain('The vault is locked')
+    const controls = container.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')
+    expect(controls.length).toBe(4)
+    for (const control of controls) expect(control.disabled).toBe(true)
+  })
+
+  it('refuses the vault password and sends nothing to the server', async () => {
+    vi.mocked(isVaultPassword).mockResolvedValue(true)
+    await render()
+
+    await typeInto('#admin-password', PASSWORD)
+    await typeInto('#admin-password-confirm', PASSWORD)
+    await submit()
+
+    expect(isVaultPassword).toHaveBeenCalledWith(PASSWORD, 'salt', 'wrapped', 2)
+    expect(container.textContent).toContain('This is your vault password')
+    expect(vaultProofHeaders).not.toHaveBeenCalled()
+    expect(authService.setPassword).not.toHaveBeenCalled()
+  })
+
+  it('saves a different password with the vault proof', async () => {
+    vi.mocked(isVaultPassword).mockResolvedValue(false)
+    vi.mocked(authService.setPassword).mockResolvedValue({ has_password: true } as User)
+    await render()
+
+    await typeInto('#admin-password', PASSWORD)
+    await typeInto('#admin-password-confirm', PASSWORD)
+    await submit()
+
+    expect(authService.setPassword).toHaveBeenCalledWith(PASSWORD, { 'X-Vault-Proof': 'proof' })
+  })
+})

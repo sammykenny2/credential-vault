@@ -15,12 +15,14 @@ import { authService } from '@/services/authService'
 import { rewrapPrivateKey, KDF_VERSION } from '@/lib/crypto'
 import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { useVaultKey } from '@/hooks/useVaultKey'
+import { useAuthStore } from '@/stores/authStore'
 import { MIN_VAULT_PASSWORD_LENGTH } from '@/components/MasterPasswordModal'
 import type { VaultKeyMaterial } from '@/types'
 import { secretFieldProps } from '@/lib/inputProps'
 
 export default function VaultPasswordChange() {
   const { isUnlocked } = useVaultKey()
+  const hasSignInPassword = useAuthStore((state) => state.user?.has_password ?? false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -100,6 +102,8 @@ export default function VaultPasswordChange() {
       <p className="text-sm text-gray-500 mb-4">
         Re-wraps your encryption key with a new password. Your credentials are not
         re-encrypted and remain readable. The vault must be unlocked.
+        {hasSignInPassword &&
+          ' Do not reuse your admin sign-in password: that one is sent to the server, the vault password never is.'}
       </p>
 
       {!isUnlocked && (
@@ -138,7 +142,8 @@ export default function VaultPasswordChange() {
             <button
               type="button"
               onClick={() => setShowPasswords(!showPasswords)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              disabled={!isUnlocked || isBusy}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:hover:text-gray-400"
               aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}
             >
               {showPasswords ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
