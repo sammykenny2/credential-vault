@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { setupService } from '@/services/setupService'
@@ -14,7 +14,20 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
   // No setup check while an OAuth callback is being processed
-  const [checkingSetup, setCheckingSetup] = useState(() => !searchParams.get('code'))
+  const [isOAuthCallback] = useState(() => Boolean(searchParams.get('code')))
+
+  // Whether an admin exists decides what this page says. Right after a deploy
+  // the backend may still be starting (nginx answers 502), so keep retrying
+  // instead of showing the sign-in page without knowing.
+  const setupStatus = useQuery({
+    queryKey: ['setup-status'],
+    queryFn: () => setupService.getStatus(),
+    enabled: !isOAuthCallback,
+    retry: true,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+    staleTime: 0,
+  })
+  const needsAdmin = setupStatus.data?.is_initialized === false
 
   // If already authenticated, redirect to dashboard (unless handling link callback)
   useEffect(() => {
@@ -24,28 +37,6 @@ export default function LoginPage() {
       navigate('/dashboard')
     }
   }, [isAuthenticated, navigate, searchParams])
-
-  // Check if setup is needed (no admin exists)
-  useEffect(() => {
-    // Don't check setup if we're processing an OAuth callback
-    if (searchParams.get('code')) {
-      return
-    }
-
-    setupService
-      .getStatus()
-      .then((status) => {
-        if (!status.is_initialized) {
-          navigate('/admin/setup', { replace: true })
-        } else {
-          setCheckingSetup(false)
-        }
-      })
-      .catch(() => {
-        // If status check fails, show login anyway
-        setCheckingSetup(false)
-      })
-  }, [navigate, searchParams])
 
   // Handle OAuth callback (code in URL params)
   const oauthCallbackMutation = useMutation({
@@ -132,10 +123,12 @@ export default function LoginPage() {
 
   const isProcessing = oauthCallbackMutation.isPending || isRedirecting
 
-  if (checkingSetup || isBootstrapping) {
+  if ((!isOAuthCallback && setupStatus.isPending) || isBootstrapping) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-gray-500">
+          {setupStatus.failureCount > 0 ? 'Waiting for the server to start...' : 'Loading...'}
+        </div>
       </div>
     )
   }
@@ -156,6 +149,21 @@ export default function LoginPage() {
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm mb-6">
             {error}
+          </div>
+        )}
+
+        {/* First run: the first Google sign-in becomes the admin (app/api/v1/oauth.py) */}
+        {needsAdmin && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm mb-6">
+            <p className="font-medium">No administrator yet</p>
+            <p className="mt-1">
+              The first Google account to sign in becomes the administrator. To use an email
+              and a break-glass password instead,{' '}
+              <Link to="/admin/setup" className="underline">
+                create the administrator here
+              </Link>
+              .
+            </p>
           </div>
         )}
 

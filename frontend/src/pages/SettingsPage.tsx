@@ -4,6 +4,7 @@ import { authService } from '@/services/authService'
 import { User, FileText, ShieldCheck } from 'lucide-react'
 import TemplateManager from '@/components/TemplateManager'
 import VaultPasswordChange from '@/components/VaultPasswordChange'
+import AdminPasswordSetup from '@/components/AdminPasswordSetup'
 import PasswordVerifyModal from '@/components/PasswordVerifyModal'
 import { beginOAuthFlow, clearOAuthFlow } from '@/lib/oauthState'
 
@@ -38,7 +39,9 @@ export default function SettingsPage() {
             <label className="text-sm text-gray-500">Authentication</label>
             {user?.has_google_linked ? (
               <div className="flex items-center gap-2">
-                <p className="font-medium">Google OAuth</p>
+                <p className="font-medium">
+                  {user.has_password ? 'Google OAuth, or email and password' : 'Google OAuth'}
+                </p>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   Linked
                 </span>
@@ -57,6 +60,14 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* An admin from Google sign-in can add a password, which makes the account
+          the same as one created on /admin/setup and linked to Google */}
+      {user?.role === 'admin' && !user.has_password && (
+        <section className="card mb-6">
+          <AdminPasswordSetup />
+        </section>
+      )}
 
       {/* Vault Status Section */}
       <section className="card mb-6">

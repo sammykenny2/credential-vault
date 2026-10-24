@@ -171,6 +171,7 @@ async def get_current_user_info(current_user: CurrentUser):
         "role": current_user.role,
         "has_vault_keys": current_user.has_vault_keys,
         "has_google_linked": current_user.has_google_linked,
+        "has_password": current_user.has_password,
     }
 
 

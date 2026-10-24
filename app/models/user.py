@@ -121,6 +121,11 @@ class User(Base, TimestampMixin):
         return self.public_key is not None and self.encrypted_private_key is not None
 
     @property
+    def has_password(self) -> bool:
+        """Check if the account has a password for admin sign-in (/auth/login)."""
+        return self.hashed_password is not None
+
+    @property
     def has_google_linked(self) -> bool:
         """Check if user has a real Google account linked (not a setup placeholder)."""
         return self.google_id is not None and not self.google_id.startswith("setup-")

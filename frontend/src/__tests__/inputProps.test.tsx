@@ -14,7 +14,12 @@ const sources = import.meta.glob<string>(['../**/*.tsx', '!../__tests__/**'], {
 })
 
 // Files whose password fields are the account's own login password.
-const ACCOUNT_FORMS = ['pages/AdminSetupPage.tsx', 'pages/AdminLoginPage.tsx', 'components/PasswordVerifyModal.tsx']
+const ACCOUNT_FORMS = [
+  'pages/AdminSetupPage.tsx',
+  'pages/AdminLoginPage.tsx',
+  'components/PasswordVerifyModal.tsx',
+  'components/AdminPasswordSetup.tsx',
+]
 
 // Types where autocomplete and spell checking do not apply.
 const NON_TEXT_TYPES = /type="(checkbox|radio|range|file|hidden)"/
@@ -23,6 +28,11 @@ interface Field {
   file: string
   tag: string
   source: string
+}
+
+/** type="password", or a show/hide toggle such as type={show ? 'text' : 'password'}. */
+function isPasswordField(field: Field): boolean {
+  return /password/.test(field.source.match(/type=(\{[^}]*\}|"[^"]*")/)?.[1] ?? '')
 }
 
 /** Every <input> / <textarea> element, cut at its closing > (skipping JSX expressions). */
@@ -94,8 +104,8 @@ describe('every text field declares how browsers may treat it', () => {
 
   it('treats every non-account password field and every textarea as a secret', () => {
     const exposed = fields.filter((field) => {
-      const isPassword = /password/.test(field.source.match(/type=(\{[^}]*\}|"[^"]*")/)?.[1] ?? '')
-      const mustBeSecret = field.tag === 'textarea' || (isPassword && !ACCOUNT_FORMS.includes(field.file))
+      const mustBeSecret =
+        field.tag === 'textarea' || (isPasswordField(field) && !ACCOUNT_FORMS.includes(field.file))
       return mustBeSecret && !field.source.includes('{...secretFieldProps}')
     })
     expect(exposed.map((field) => `${field.file}: ${field.source.slice(0, 80)}`)).toEqual([])
@@ -103,9 +113,9 @@ describe('every text field declares how browsers may treat it', () => {
 
   it('gives account password fields the standard tokens', () => {
     const accountPasswords = fields.filter(
-      (field) => ACCOUNT_FORMS.includes(field.file) && /type="password"/.test(field.source),
+      (field) => ACCOUNT_FORMS.includes(field.file) && isPasswordField(field),
     )
-    expect(accountPasswords.length).toBe(4)
+    expect(accountPasswords.length).toBe(6)
     for (const field of accountPasswords) {
       expect(field.source).toMatch(/autoComplete="(new-password|current-password)"/)
     }

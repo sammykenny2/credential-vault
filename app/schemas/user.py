@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import UserRole
 
@@ -33,6 +33,20 @@ class UserRoleUpdate(BaseModel):
     role: UserRole
 
 
+class PasswordSet(BaseModel):
+    """Password for admin sign-in, same rule as the /admin/setup page."""
+
+    password: str = Field(min_length=8)
+
+    @field_validator("password")
+    @classmethod
+    def fits_bcrypt(cls, value: str) -> str:
+        # bcrypt only uses the first 72 bytes; refuse rather than truncate.
+        if len(value.encode()) > 72:
+            raise ValueError("Password must be at most 72 bytes")
+        return value
+
+
 class UserRead(UserBase):
     """User read schema."""
 
@@ -43,6 +57,7 @@ class UserRead(UserBase):
     is_active: bool
     has_vault_keys: bool
     has_google_linked: bool
+    has_password: bool
     created_at: datetime
     last_login_at: datetime | None
 

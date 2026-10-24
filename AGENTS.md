@@ -17,8 +17,9 @@
 - Type: single-project
 - Purpose: Self-hosted credential vault with zero-knowledge end-to-end encryption.
   Credentials are encrypted in the browser (Argon2id + RSA-OAEP + AES-256-GCM);
-  the server stores only ciphertext. Identity is Google OAuth 2.0 with a
-  break-glass local admin login. Access is intended only through Tailscale,
+  the server stores only ciphertext. Identity is Google OAuth 2.0; admins can
+  also sign in with email and password (`/admin/login`), and while no admin
+  exists the first Google sign-in becomes the admin. Access is intended only through Tailscale,
   deployed to a NAS with Docker Compose.
 - Entry points: `app/main.py` (FastAPI, `uvicorn app.main:app`), `app/cli.py`
   (`vault-cli` admin management), `frontend/src/main.tsx` (Vite + React SPA),

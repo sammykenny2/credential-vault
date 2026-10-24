@@ -8,6 +8,8 @@ export interface User {
   role: UserRole
   has_vault_keys: boolean
   has_google_linked: boolean
+  /** The account can also sign in with email and password (/admin/login). */
+  has_password: boolean
   is_active: boolean
   created_at: string
   last_login_at: string | null

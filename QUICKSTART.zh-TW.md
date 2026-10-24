@@ -182,7 +182,12 @@ Copy-Item .env.production.example .env.production
 
 ### 管理員帳號
 
-`.env.production` 不必放任何管理員資料。空資料庫第一次打開網站時會自動進入 `/admin/setup`，在瀏覽器輸入 email 與緊急登入密碼建立管理員（伺服器只存 bcrypt 雜湊），之後用同一個 email 的 Google 帳號登入會自動綁定。部署完請立刻完成這一步：在管理員建立之前，tailnet 上任何人打開網站都能搶先建立。`ADMIN_EMAIL` / `ADMIN_PASSWORD` 只是改由設定檔建立管理員的替代做法。
+`.env.production` 不必放任何管理員資料。還沒有管理員時，登入頁會提示，兩種方式擇一：
+
+- 直接用 Google 登入：第一個登入的 Google 帳號就是管理員。之後可在設定頁的「Sign in with Password」補上密碼（需先解鎖 vault），就能在 `/admin/login` 用 email 加密碼登入。
+- 點登入頁上的連結到 `/admin/setup`，輸入 email 與密碼建立管理員（伺服器只存 bcrypt 雜湊），之後用同一個 email 的 Google 帳號登入會自動綁定。
+
+兩種方式最後的帳號狀態相同：Google 與 email 加密碼都能登入。部署完請立刻完成這一步：在管理員建立之前，tailnet 上任何人打開網站都能搶先成為管理員。設了 `ADMIN_EMAIL` 時，只有那個 Google 帳號能成為第一位管理員；`ADMIN_EMAIL` 加 `ADMIN_PASSWORD` 則在啟動時直接建立管理員。
 
 `config/tailscale/serve.json` 已在 repo 中，`${TS_CERT_DOMAIN}` 由 Tailscale 容器在執行時自動代入，不需要修改。
 
@@ -306,8 +311,8 @@ docker compose --env-file .env.production down
 
 | 變數 | 說明 |
 |------|------|
-| `ADMIN_EMAIL` | 初始管理員 Email |
-| `ADMIN_PASSWORD` | 初始管理員密碼 |
+| `ADMIN_EMAIL` | 只有這個 Google 帳號能成為第一位管理員（不設則第一個登入的 Google 帳號成為管理員） |
+| `ADMIN_PASSWORD` | 與 `ADMIN_EMAIL` 一起設定時，啟動即建立該管理員並設此密碼 |
 | `ADMIN_DISPLAY_NAME` | 管理員顯示名稱 |
 
 ---

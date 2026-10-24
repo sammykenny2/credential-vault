@@ -27,9 +27,9 @@ class BootstrapService:
     async def check_admin_bootstrap(self) -> None:
         """Log bootstrap status and create break-glass admin on startup.
 
-        With Google OAuth, the first user matching ADMIN_EMAIL
-        will be auto-promoted to admin during their first OAuth login.
-        See app/api/v1/oauth.py for the promotion logic.
+        While no admin exists, the Google account that signs in becomes the
+        admin (only the ADMIN_EMAIL account when that is set), or the admin is
+        created on the /admin/setup page. See app/api/v1/oauth.py.
 
         If ADMIN_PASSWORD is also set and no admin exists yet,
         creates the admin with a hashed password for break-glass login.
@@ -63,8 +63,9 @@ class BootstrapService:
                 )
         else:
             logger.warning(
-                "No admin exists and ADMIN_EMAIL not set. "
-                "Set ADMIN_EMAIL to auto-promote a user to admin on first OAuth login."
+                "No admin exists. The first Google sign-in becomes the admin, "
+                "or create one on the /admin/setup page. Until then anyone who "
+                "can reach the site can claim it."
             )
 
 

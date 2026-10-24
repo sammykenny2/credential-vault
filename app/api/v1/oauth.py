@@ -169,23 +169,11 @@ async def google_callback(
             # Link Google account to existing user
             await user_service.link_google_account(user, google_id)
         else:
-            # Create new user
-            role = UserRole.USER
-
-            # Auto-promote to admin if configured and no admin exists
-            if settings.admin_email and email == settings.admin_email:
-                from app.services.bootstrap import BootstrapService
-
-                bootstrap = BootstrapService(db)
-                if not await bootstrap.has_any_admin():
-                    role = UserRole.ADMIN
-                    logger.info("Auto-promoting %s to admin (bootstrap)", email)
-
             user = await user_service.create_oauth_user(
                 email=email,
                 display_name=display_name,
                 google_id=google_id,
-                role=role,
+                role=UserRole.USER,
             )
             await db.commit()
 
@@ -194,6 +182,19 @@ async def google_callback(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated",
         )
+
+    # While no admin exists, the Google account that signs in becomes the
+    # admin, the same first-come window as the /admin/setup page. ADMIN_EMAIL,
+    # when set, limits this to that address. Applies to existing accounts too,
+    # so a user who signed in before any admin existed is promoted next time.
+    promoted_from: UserRole | None = None
+    if user.role != UserRole.ADMIN and (not settings.admin_email or email == settings.admin_email):
+        from app.services.bootstrap import BootstrapService
+
+        if not await BootstrapService(db).has_any_admin():
+            promoted_from = user.role
+            user.role = UserRole.ADMIN
+            logger.info("No admin exists: promoting user %s to admin", user.id)
 
     # Update last login
     await user_service.update_last_login(user)
@@ -208,6 +209,19 @@ async def google_callback(
         user_id=user.id,
         details={"provider": "google"},
     )
+    if promoted_from is not None:
+        await audit_service.log_from_request(
+            request,
+            action=AuditAction.USER_ROLE_CHANGED,
+            user_id=user.id,
+            resource_type="user",
+            resource_id=user.id,
+            details={
+                "old_role": promoted_from.value,
+                "new_role": UserRole.ADMIN.value,
+                "reason": "first_admin_google_sign_in",
+            },
+        )
     await db.commit()
 
     return token

@@ -54,6 +54,12 @@ export const authService = {
     return response.data
   },
 
+  /** Add a password to an admin account; `headers` must carry the vault proof. */
+  async setPassword(password: string, headers: Record<string, string>): Promise<User> {
+    const response = await api.put<User>('/users/me/password', { password }, { headers })
+    return response.data
+  },
+
   async linkGoogleAccount(data: GoogleOAuthCallback): Promise<User> {
     const response = await api.post<User>('/users/me/link-google', data)
     return response.data

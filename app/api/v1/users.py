@@ -2,11 +2,19 @@
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.api.deps import AdminUser, CurrentUser, DbSession
+from app.api.deps import AdminUser, CurrentUser, DbSession, VaultProvenUser
+from app.core.security import SecurityService
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
 from app.schemas.auth import GoogleOAuthCallback
-from app.schemas.user import UserAdminRead, UserCreate, UserRead, UserRoleUpdate, UserUpdate
+from app.schemas.user import (
+    PasswordSet,
+    UserAdminRead,
+    UserCreate,
+    UserRead,
+    UserRoleUpdate,
+    UserUpdate,
+)
 from app.services.audit_log import AuditLogService
 from app.services.user import UserService
 
@@ -33,6 +41,47 @@ async def update_me(
     user_service = UserService(db)
     updated_user = await user_service.update(current_user, data)
     return updated_user
+
+
+@router.put("/me/password", response_model=UserRead)
+async def set_my_password(
+    request: Request,
+    data: PasswordSet,
+    current_user: VaultProvenUser,
+    db: DbSession,
+):
+    """Add a password to an admin account that has none.
+
+    An admin who became admin through Google sign-in has no password; with one
+    the account is the same as an admin created on /admin/setup and later
+    linked to Google: it signs in with Google or with email and password
+    (POST /auth/login). Requires proof of unlock, so a stolen session token
+    cannot add a password and keep access. Changing an existing password is
+    not supported here.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can sign in with a password",
+        )
+    if current_user.has_password:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A password is already set for this account",
+        )
+
+    current_user.hashed_password = SecurityService.hash_password(data.password)
+    await db.flush()
+
+    await AuditLogService(db).log_from_request(
+        request,
+        action=AuditAction.USER_UPDATED,
+        user_id=current_user.id,
+        resource_type="user",
+        resource_id=current_user.id,
+        details={"password": "set"},
+    )
+    return current_user
 
 
 @router.post("/me/link-google", response_model=UserRead)
