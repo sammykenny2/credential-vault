@@ -80,8 +80,8 @@ class TestSetPassword:
         assert SecurityService.verify_password("the-original-password", user.hashed_password)
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("password", ["short", "x" * 73])
-    async def test_rejects_passwords_bcrypt_cannot_hold(
+    @pytest.mark.parametrize("password", ["short", "x" * 1025])
+    async def test_rejects_passwords_outside_the_length_bounds(
         self, client: AsyncClient, db_session, password
     ):
         _, private_key, headers = await _admin_with_vault(db_session)
@@ -90,3 +90,19 @@ class TestSetPassword:
         response = await _set_password(client, {**headers, VAULT_PROOF_HEADER: proof}, password)
 
         assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_accepts_a_password_longer_than_72_bytes(self, client: AsyncClient, db_session):
+        user, private_key, headers = await _admin_with_vault(db_session)
+        proof = await _obtain_proof(client, headers, private_key)
+        long_password = "a-long-passphrase-" * 6  # 108 bytes
+
+        response = await _set_password(
+            client, {**headers, VAULT_PROOF_HEADER: proof}, long_password
+        )
+
+        assert response.status_code == 200
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": user.email, "password": long_password}
+        )
+        assert login.status_code == 200

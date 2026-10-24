@@ -23,11 +23,6 @@ updates:
       interval: weekly
     cooldown:
       default-days: 14
-    ignore:
-      # passlib 1.7.4 does not work with bcrypt 4 or later (pyproject.toml
-      # pins bcrypt<4.0.0); lift this together with replacing passlib.
-      - dependency-name: bcrypt
-        versions: [">=4.0.0"]
     groups:
       python:
         update-types: [minor, patch]

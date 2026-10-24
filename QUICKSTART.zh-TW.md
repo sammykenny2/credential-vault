@@ -188,7 +188,7 @@ Copy-Item .env.production.example .env.production
 `.env.production` 不必放任何管理員資料。還沒有管理員時，登入頁會提示，兩種方式擇一：
 
 - 直接用 Google 登入：第一個登入的 Google 帳號就是管理員。之後可在設定頁的「Sign in with Password」補上密碼（需先解鎖 vault），就能在 `/admin/login` 用 email 加密碼登入。
-- 點登入頁上的連結到 `/admin/setup`，輸入 email 與密碼建立管理員（伺服器只存 bcrypt 雜湊），之後用同一個 email 的 Google 帳號登入會自動綁定。
+- 點登入頁上的連結到 `/admin/setup`，輸入 email 與密碼建立管理員（伺服器只存 Argon2id 雜湊），之後用同一個 email 的 Google 帳號登入會自動綁定。
 
 兩種方式最後的帳號狀態相同：Google 與 email 加密碼都能登入。管理使用者（Users 頁的升降級、停用、重新啟用）也需要先解鎖 vault，只偷到登入 token 的人無法變更帳號。Credentials 頁右上角 Backup 旁的 Lock 可隨時手動鎖定。部署完請立刻完成這一步：在管理員建立之前，tailnet 上任何人打開網站都能搶先成為管理員。設了 `ADMIN_EMAIL` 時，只有那個 Google 帳號能成為第一位管理員；`ADMIN_EMAIL` 加 `ADMIN_PASSWORD` 則在啟動時直接建立管理員。
 

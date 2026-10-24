@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
-from app.core.security import SecurityService
+from app.core.security import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SecurityService
 from app.core.session import issue_session
 from app.models.user import User, UserRole
 from app.schemas.auth import Token
@@ -24,7 +24,7 @@ class SetupAdminRequest(BaseModel):
     """Request to create the initial admin account."""
 
     email: EmailStr
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
     display_name: str | None = None
 
 

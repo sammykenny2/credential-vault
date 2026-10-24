@@ -1,6 +1,7 @@
 """Integration tests for authentication API endpoints."""
 
 import pytest
+from argon2 import PasswordHasher
 from httpx import AsyncClient
 
 from app.core.security import SecurityService
@@ -268,6 +269,53 @@ class TestBreakGlassLogin:
         set_cookie = response.headers.get("set-cookie", "")
         assert "refresh_token=" in set_cookie
         assert "HttpOnly" in set_cookie
+
+    @pytest.mark.asyncio
+    async def test_local_login_rehashes_a_weaker_hash(self, client: AsyncClient, db_session):
+        """A hash made with older, weaker Argon2 parameters is upgraded at login."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="google-admin",
+            role=UserRole.ADMIN,
+        )
+        weak = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+        user.hashed_password = weak.hash("admin-secret-123")
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "admin-secret-123"},
+        )
+
+        assert response.status_code == 200
+        await db_session.refresh(user)
+        assert user.hashed_password is not None
+        assert not SecurityService.password_needs_rehash(user.hashed_password)
+        assert SecurityService.verify_password("admin-secret-123", user.hashed_password)
+
+    @pytest.mark.asyncio
+    async def test_local_login_rejects_a_hash_from_before_argon2(
+        self, client: AsyncClient, db_session
+    ):
+        """An admin whose stored hash is bcrypt (pre-switch) cannot sign in with it."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="admin@example.com",
+            display_name="Admin",
+            google_id="google-admin",
+            role=UserRole.ADMIN,
+        )
+        user.hashed_password = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO5zBN6sR4w2gU6oR2l5bq3lB9W8y0Ewm"
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "anything"},
+        )
+
+        assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_local_login_wrong_password(self, client: AsyncClient, db_session):

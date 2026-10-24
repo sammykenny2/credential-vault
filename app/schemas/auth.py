@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field
 
+from app.core.security import MAX_PASSWORD_LENGTH
+
 
 class Token(BaseModel):
     """Session response body.
@@ -65,11 +67,11 @@ class VaultRekeyRequest(BaseModel):
 class VerifyPasswordRequest(BaseModel):
     """Request to verify user's password."""
 
-    password: str
+    password: str = Field(max_length=MAX_PASSWORD_LENGTH)
 
 
 class LocalLoginRequest(BaseModel):
     """Break-glass local login request (admin only)."""
 
     email: str
-    password: str
+    password: str = Field(max_length=MAX_PASSWORD_LENGTH)

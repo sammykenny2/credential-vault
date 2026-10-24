@@ -96,7 +96,7 @@ To sync skills after changes:
 - Admin role manages users only; there is no server path that lets an admin read another user's credentials. Keep it that way.
 - TOTP MFA and WebAuthn/passkeys are stubbed (`/api/v1/totp/*` and `/api/v1/webauthn/*` return 503). Do not describe either as working protection; a WebAuthn implementation must verify attestation and assertion signatures (for example with `py_webauthn`) before it is wired to anything.
 - Open security findings and the recommended fix order are in `docs/research/2026-10-23-security-review-storage-and-auth-surface.md`. Read it before touching auth, crypto, nginx, service worker, or deployment config.
-- Verified commands (2026-10-24): `pytest` at the root passes 235 tests; frontend uses `npm run test:run` inside `frontend/` (203 tests).
+- Verified commands (2026-10-24): `pytest` at the root passes 241 tests; frontend uses `npm run test:run` inside `frontend/` (203 tests).
 - Supply chain: pin any new GitHub Action to a full commit SHA (`uses: owner/action@<sha> # vX.Y.Z`) and any new image to `tag@sha256:...`; prefer releases at least two weeks old. Python dependencies change only through `uv.lock` (`uvx --from uv==0.12.24 uv lock`). Do not give a job that runs third-party scanners or tools write permissions.
 - Releases: `VERSION` (x.y.z) is the only copy of the version. A push to main that changes it publishes images and the `v<VERSION>` GitHub release; other pushes only test. Do not reintroduce a version in `pyproject.toml`, `config.py` or `package.json`.
 - Admin account changes (`/users/*` writes) and adding a sign-in password require `X-Vault-Proof` (`VaultProvenAdmin` / `VaultProvenUser`). Do not add an account-changing endpoint behind plain `AdminUser`.

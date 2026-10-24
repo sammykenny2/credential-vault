@@ -38,7 +38,7 @@ async def local_login(
     user_service = UserService(db)
     user = await user_service.get_by_email(data.email)
 
-    # One bcrypt verification on every path and a single error message, so
+    # One Argon2 verification on every path and a single error message, so
     # neither timing nor wording reveals whether the address has an account,
     # a password, or admin rights.
     stored_hash = user.hashed_password if user and user.hashed_password else DUMMY_PASSWORD_HASH
@@ -50,13 +50,18 @@ async def local_login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    assert user is not None  # narrowed by `eligible`
+    assert user is not None and user.hashed_password is not None  # narrowed by `eligible`
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated",
         )
+
+    # A hash made with weaker Argon2 parameters is upgraded while the password
+    # is at hand; saved with the last-login update below.
+    if SecurityService.password_needs_rehash(user.hashed_password):
+        user.hashed_password = SecurityService.hash_password(data.password)
 
     # Update last login
     await user_service.update_last_login(user)

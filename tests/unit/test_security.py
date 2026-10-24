@@ -1,5 +1,7 @@
 """Tests for security utilities."""
 
+from argon2 import PasswordHasher
+
 from app.core.security import SecurityService
 
 
@@ -78,7 +80,7 @@ class TestPasswordHashing:
 
         assert isinstance(hashed, str)
         assert hashed != "test-password-123"
-        assert hashed.startswith("$2")  # bcrypt hash prefix
+        assert hashed.startswith("$argon2id$")
 
     def test_verify_password_correct(self):
         """Test verifying correct password returns True."""
@@ -103,3 +105,23 @@ class TestPasswordHashing:
         # Both should still verify
         assert SecurityService.verify_password(password, hash1) is True
         assert SecurityService.verify_password(password, hash2) is True
+
+    def test_hash_from_before_the_switch_does_not_verify(self):
+        """A bcrypt hash (passlib era) fails closed instead of raising."""
+        bcrypt_hash = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO5zBN6sR4w2gU6oR2l5bq3lB9W8y0Ewm"
+
+        assert SecurityService.verify_password("anything", bcrypt_hash) is False
+        assert SecurityService.verify_password("anything", "not a hash") is False
+
+    def test_long_password_is_not_truncated(self):
+        """Argon2 uses the whole password; bcrypt ignored everything past 72 bytes."""
+        hashed = SecurityService.hash_password("x" * 100)
+
+        assert SecurityService.verify_password("x" * 100, hashed) is True
+        assert SecurityService.verify_password("x" * 72, hashed) is False
+
+    def test_needs_rehash_only_for_weaker_parameters(self):
+        weak = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash("pw")
+
+        assert SecurityService.password_needs_rehash(weak) is True
+        assert SecurityService.password_needs_rehash(SecurityService.hash_password("pw")) is False

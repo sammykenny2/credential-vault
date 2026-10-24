@@ -25,7 +25,7 @@
   (`vault-cli` admin management), `frontend/src/main.tsx` (Vite + React SPA),
   `docker-compose.yaml` (tailscale sidecar + backend + frontend/nginx).
 - Stack and versions: Python 3.14+, FastAPI, SQLAlchemy 2 (async) + aiosqlite,
-  Alembic, PyJWT, passlib[bcrypt], cryptography; frontend React 19, TypeScript 6,
+  Alembic, PyJWT, argon2-cffi (Argon2id), cryptography; frontend React 19, TypeScript 6,
   Vite 8, Vitest 5, Tailwind 4, Zustand 5, TanStack Query, hash-wasm (Argon2id),
   Web Crypto API. Node 24+ for the frontend toolchain.
 - Test command: `pytest` at the repository root (backend, coverage enabled via
