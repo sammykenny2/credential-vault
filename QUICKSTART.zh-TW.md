@@ -195,7 +195,7 @@ Copy-Item .env.production.example .env.production
 
 映像檔有兩種來源：
 
-- **CI release（預設）**：版號只寫在 repo 根目錄的 `VERSION`（`x.y.z`）。每次 push 和 PR 都會跑測試並試 build 映像檔，但只有 push 到 main 且 `VERSION` 是還沒發布過的版號時，`publish` job 才會發布：把映像檔推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為版號、commit SHA 與 `latest`，只保留最新 5 版），把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status，最後建立 GitHub release `v<版號>`。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 與版號相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
+- **CI release（預設）**：版號只寫在 repo 根目錄的 `VERSION`（`x.y.z`）。每次 push 和 PR 都只跑測試；只有 push 到 main 且 `VERSION` 是還沒發布過的版號時，`publish` job 才會 build 映像檔並發布（所以 Dockerfile 壞掉要到發版時才會發現）：把映像檔推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為版號、commit SHA 與 `latest`，只保留最新 5 版），把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status，最後建立 GitHub release `v<版號>`。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 與版號相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
   - 發布新版：改 `VERSION`（例如 `0.3.0` → `0.3.1`）、commit、push 到 main。CI 會擋下格式不對或比最新 release 還小的版號。版號不變的 push 只跑測試，不產生映像檔。
   - 發布失敗時不會建立 tag，修好後用同一個版號再 push 一次即可。
   - 不帶參數部署的是最新的 GitHub release。`-Tag 0.3.0` 部署指定版本，只有最新 5 版可選，更舊的映像檔已被刪除。
