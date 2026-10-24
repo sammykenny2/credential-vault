@@ -133,30 +133,37 @@ jobs:
         run: npm run build
 
   # ============================================
-  # Docker images: built and published only when VERSION is new
+  # Release: build, scan, publish (only when VERSION is new)
   # ============================================
   # Runs only for a release: a push to main whose VERSION has no v<VERSION>
-  # tag yet (decided in `validate`). Other runs skip this job, so a broken
-  # Dockerfile first shows up at release time. It pushes
-  # ghcr.io/<owner>/credential-vault-{backend,frontend} tagged with the
-  # version, the commit SHA and `latest`, records each digest as a commit
-  # status (release/backend, release/frontend), creates the GitHub release
-  # v<VERSION> and keeps the newest 5 versions. The tag is created last, so a
-  # failed release is retried by the next push with the same VERSION.
-  # scripts/windows/Deploy-CredentialVault.ps1 resolves releases from those
-  # statuses through the GitHub API and pulls by digest, so a registry
-  # credential alone cannot change what gets deployed. Nothing here deploys.
+  # tag yet (decided in `validate`). Three jobs, each with only the
+  # permissions it needs:
+  #   publish  builds both images and pushes them tagged with the commit SHA
+  #   scan     scans the pushed images with grype and has no write access, so
+  #            a compromised scanner has no token worth stealing
+  #   release  after a clean scan only: tags the images with the version and
+  #            `latest`, records each digest as a commit status
+  #            (release/backend, release/frontend), creates the GitHub
+  #            release v<VERSION> and keeps the newest 5 image versions
+  # The release tag is created last, so a failed release is retried by the
+  # next push with the same VERSION. Other runs skip all three.
+  # scripts/windows/Deploy-CredentialVault.ps1 resolves releases through the
+  # GitHub API and pulls by digest, so a registry credential alone cannot
+  # change what gets deployed. Nothing here deploys.
   publish:
     needs: [python, security, frontend, validate]
     if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # create the v<VERSION> release and tag
-      packages: write   # push and prune images in GHCR
-      statuses: write   # record the image digests on the commit
+      contents: read
+      packages: write   # push the images to GHCR
     env:
       VERSION: ${{ needs.validate.outputs.version }}
-      PREVIOUS: ${{ needs.validate.outputs.previous }}
+    outputs:
+      backend: ${{ steps.names.outputs.backend }}
+      frontend: ${{ steps.names.outputs.frontend }}
+      backend_digest: ${{ steps.backend.outputs.digest }}
+      frontend_digest: ${{ steps.frontend.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -192,10 +199,7 @@ jobs:
           sbom: false
           build-args: |
             APP_REVISION=${{ github.sha }}
-          tags: |
-            ${{ steps.names.outputs.backend }}:${{ env.VERSION }}
-            ${{ steps.names.outputs.backend }}:${{ github.sha }}
-            ${{ steps.names.outputs.backend }}:latest
+          tags: ${{ steps.names.outputs.backend }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -213,21 +217,88 @@ jobs:
           build-args: |
             APP_VERSION=${{ env.VERSION }}
             APP_REVISION=${{ github.sha }}
-          tags: |
-            ${{ steps.names.outputs.frontend }}:${{ env.VERSION }}
-            ${{ steps.names.outputs.frontend }}:${{ github.sha }}
-            ${{ steps.names.outputs.frontend }}:latest
+          tags: ${{ steps.names.outputs.frontend }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.names.outputs.created }}
 
+  # Fails on any High or Critical vulnerability that has a fixed version
+  # (unfixed ones cannot be acted on and would block every release).
+  scan:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Scan the backend image
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ needs.publish.outputs.backend }}@${{ needs.publish.outputs.backend_digest }}
+          grype-version: v0.120.1
+          only-fixed: true
+          severity-cutoff: high
+          fail-build: true
+          output-format: table
+
+      - name: Scan the frontend image
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ needs.publish.outputs.frontend }}@${{ needs.publish.outputs.frontend_digest }}
+          grype-version: v0.120.1
+          only-fixed: true
+          severity-cutoff: high
+          fail-build: true
+          output-format: table
+
+  release:
+    needs: [validate, publish, scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the v<VERSION> release and tag
+      packages: write   # tag and prune images in GHCR
+      statuses: write   # record the image digests on the commit
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      PREVIOUS: ${{ needs.validate.outputs.previous }}
+      BACKEND: ${{ needs.publish.outputs.backend }}
+      FRONTEND: ${{ needs.publish.outputs.frontend }}
+      BACKEND_DIGEST: ${{ needs.publish.outputs.backend_digest }}
+      FRONTEND_DIGEST: ${{ needs.publish.outputs.frontend_digest }}
+      BACKEND_REF: ${{ needs.publish.outputs.backend }}@${{ needs.publish.outputs.backend_digest }}
+      FRONTEND_REF: ${{ needs.publish.outputs.frontend }}@${{ needs.publish.outputs.frontend_digest }}
+    steps:
+      # Re-put each scanned manifest under the new tags through the registry
+      # API, so the tags name exactly the scanned digest. (`docker buildx
+      # imagetools create` would wrap it in a new index with another digest.)
+      - name: Tag the scanned images with the version and latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          media="application/vnd.oci.image.manifest.v1+json"
+          for pair in "${BACKEND}|${BACKEND_DIGEST}" "${FRONTEND}|${FRONTEND_DIGEST}"; do
+            image="${pair%%|*}"
+            digest="${pair#*|}"
+            repo="${image#ghcr.io/}"
+            token="$(curl -fsS -u "${GITHUB_ACTOR}:${GH_TOKEN}" \
+              "https://ghcr.io/token?scope=repository:${repo}:pull,push" | jq -r .token)"
+            manifest="${RUNNER_TEMP}/manifest.json"
+            curl -fsS -H "Authorization: Bearer ${token}" -H "Accept: ${media}" \
+              -o "${manifest}" "https://ghcr.io/v2/${repo}/manifests/${digest}"
+            if [ "sha256:$(sha256sum "${manifest}" | cut -d' ' -f1)" != "${digest}" ]; then
+              echo "Fetched manifest for ${image} does not match ${digest}"; exit 1
+            fi
+            for tag in "${VERSION}" latest; do
+              curl -fsS -X PUT -H "Authorization: Bearer ${token}" -H "Content-Type: ${media}" \
+                --data-binary "@${manifest}" "https://ghcr.io/v2/${repo}/manifests/${tag}" > /dev/null
+              echo "${image}:${tag} -> ${digest}"
+            done
+          done
+
       - name: Record image digests on the commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
-          FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
         run: |
           for pair in "backend:${BACKEND_DIGEST}" "frontend:${FRONTEND_DIGEST}"; do
             name="${pair%%:*}"
@@ -240,8 +311,8 @@ jobs:
           done
           {
             echo "### Published v${VERSION}"
-            echo "- backend: \`${{ steps.names.outputs.backend }}@${BACKEND_DIGEST}\`"
-            echo "- frontend: \`${{ steps.names.outputs.frontend }}@${FRONTEND_DIGEST}\`"
+            echo "- backend: \`${BACKEND_REF}\`"
+            echo "- frontend: \`${FRONTEND_REF}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Notes list the commits since the previous release. --generate-notes
@@ -249,8 +320,6 @@ jobs:
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BACKEND_REF: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
-          FRONTEND_REF: ${{ steps.names.outputs.frontend }}@${{ steps.frontend.outputs.digest }}
         run: |
           notes="${RUNNER_TEMP}/notes.md"
           {
