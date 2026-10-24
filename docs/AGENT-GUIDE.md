@@ -27,11 +27,6 @@ project-specific procedures that are too detailed for always-loaded instructions
   sign-in password (`PUT /users/me/password`) and every admin change to
   accounts (create, update, role, reactivate, delete) use `VaultProvenAdmin`,
   so an admin manages users only with the vault unlocked.
-- The admin sign-in password is sent to the server; the vault password never
-  is. `AdminPasswordSetup` refuses a sign-in password that unwraps the vault
-  key (`isVaultPassword` in `frontend/src/lib/crypto.ts`). The reverse (a new
-  vault password equal to the sign-in password) cannot be checked without
-  sending the vault password, so the vault password form only warns.
 - Not implemented despite older docs: TOTP MFA and WebAuthn/passkeys (both
   `/api/v1/totp/*` and `/api/v1/webauthn/*` return 503), credential sharing,
   emergency access, server-side backup. The `webauthn_credentials` table remains

@@ -96,7 +96,7 @@ To sync skills after changes:
 - Admin role manages users only; there is no server path that lets an admin read another user's credentials. Keep it that way.
 - TOTP MFA and WebAuthn/passkeys are stubbed (`/api/v1/totp/*` and `/api/v1/webauthn/*` return 503). Do not describe either as working protection; a WebAuthn implementation must verify attestation and assertion signatures (for example with `py_webauthn`) before it is wired to anything.
 - Open security findings and the recommended fix order are in `docs/research/2026-10-23-security-review-storage-and-auth-surface.md`. Read it before touching auth, crypto, nginx, service worker, or deployment config.
-- Verified commands (2026-10-24): `pytest` at the root passes 229 tests; frontend uses `npm run test:run` inside `frontend/` (201 tests).
+- Verified commands (2026-10-24): `pytest` at the root passes 229 tests; frontend uses `npm run test:run` inside `frontend/` (199 tests).
 - Admin account changes (`/users/*` writes) and adding a sign-in password require `X-Vault-Proof` (`VaultProvenAdmin` / `VaultProvenUser`). Do not add an account-changing endpoint behind plain `AdminUser`.
 - Production runs only through `scripts/windows/Deploy-CredentialVault.ps1` (Docker, `credential-vault_vault_data` volume). `./data` is the dev database; never point the compose stack at it, and never run `docker compose down -v` (it deletes the vault).
 

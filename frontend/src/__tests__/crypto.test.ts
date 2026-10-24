@@ -21,7 +21,6 @@ import {
   importEncryptedPrivateKey,
   setupVault,
   unlockVault,
-  isVaultPassword,
   encryptCredential,
   decryptCredential,
   encryptCredentialLegacy,
@@ -446,17 +445,6 @@ describe('Vault Setup & Unlock', () => {
     const encrypted = await encryptCredential(SAMPLE_CREDENTIAL, unlocked.publicKey, CRED_ID)
     const decrypted = await decryptCredential(encrypted, unlocked.privateKey, CRED_ID)
     expect(decrypted).toEqual(SAMPLE_CREDENTIAL)
-  }, 30000)
-
-  it('recognises the vault password and nothing else', async () => {
-    const vault = await setupVault(VAULT_PASSWORD)
-
-    expect(
-      await isVaultPassword(VAULT_PASSWORD, vault.saltBase64, vault.encryptedPrivateKeyBase64)
-    ).toBe(true)
-    expect(
-      await isVaultPassword('a-different-password', vault.saltBase64, vault.encryptedPrivateKeyBase64)
-    ).toBe(false)
   }, 30000)
 })
 

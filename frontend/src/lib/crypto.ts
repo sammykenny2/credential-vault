@@ -299,29 +299,6 @@ export async function unlockVault(
   return { privateKey, publicKey }
 }
 
-/**
- * Whether `password` is the vault password: true when it unwraps the private key.
- *
- * Used before a password is sent to the server (the admin sign-in password),
- * so the vault password never reaches it. Only a wrong-key unwrap counts as
- * "not the vault password"; a KDF failure throws, so the check never passes
- * silently.
- */
-export async function isVaultPassword(
-  password: string,
-  saltBase64: string,
-  encryptedPrivateKeyBase64: string,
-  kdfVersion: number = KDF_VERSION
-): Promise<boolean> {
-  const kek = await deriveKEK(password, new Uint8Array(base64ToArrayBuffer(saltBase64)), kdfVersion)
-  try {
-    await unwrapPkcs8(encryptedPrivateKeyBase64, kek)
-    return true
-  } catch {
-    return false
-  }
-}
-
 export interface RewrappedPrivateKey {
   encryptedPrivateKeyBase64: string
   saltBase64: string

@@ -6,21 +6,14 @@
  * linked to Google: it signs in with Google, or with email and password at
  * /admin/login. The server requires proof of unlock, so a stolen session
  * token cannot add a password and keep access.
- *
- * The sign-in password is sent to the server on every sign-in; the vault
- * password must never be. Before saving, the form checks in the browser that
- * the new password does not unwrap the vault key.
  */
 
 import { useState } from 'react'
 import { LogIn, Eye, EyeOff } from 'lucide-react'
-import api from '@/services/api'
 import { authService } from '@/services/authService'
-import { isVaultPassword, KDF_VERSION } from '@/lib/crypto'
 import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
-import type { VaultKeyMaterial } from '@/types'
 
 // Same rule as the /admin/setup page and the backend (app/schemas/user.py)
 const MIN_PASSWORD_LENGTH = 8
@@ -54,20 +47,7 @@ export default function AdminPasswordSetup() {
 
     setIsBusy(true)
     try {
-      const { data: keys } = await api.get<VaultKeyMaterial>('/auth/vault/keys')
-      const reused = await isVaultPassword(
-        password,
-        keys.key_salt,
-        keys.encrypted_private_key,
-        keys.kdf_version ?? KDF_VERSION
-      )
-      if (reused) {
-        setError(
-          'This is your vault password. Choose a different one: the sign-in password is sent to the server, the vault password never is.'
-        )
-        return
-      }
-
+      // Proof first: it needs the unlocked private key and fails fast when locked.
       const headers = await vaultProofHeaders()
       // The updated user has has_password set, which hides this form.
       setUser(await authService.setPassword(password, headers))
@@ -92,8 +72,7 @@ export default function AdminPasswordSetup() {
       <p className="text-sm text-gray-500 mb-4">
         This admin account signs in with Google only. Add a password to also sign in with your
         email and password at <span className="font-mono">/admin/login</span>, for example when
-        Google sign-in is unavailable. Use a different password from your vault password. The
-        vault must be unlocked.
+        Google sign-in is unavailable. The vault must be unlocked.
       </p>
 
       {!isUnlocked && (
