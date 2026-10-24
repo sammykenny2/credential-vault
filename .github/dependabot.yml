@@ -1,0 +1,27 @@
+# Dependabot version updates: one PR per ecosystem per week for minor and
+# patch updates (grouped), separate PRs for majors so each can be judged on
+# its own. cooldown waits until a release is two weeks old, so a compromised
+# or broken release has time to be pulled before it is proposed here.
+version: 2
+updates:
+  # Workflow actions are pinned by commit SHA; Dependabot moves the SHA and
+  # the version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      frontend:
+        update-types: [minor, patch]
