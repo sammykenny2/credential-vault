@@ -69,6 +69,9 @@ include = ["app*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# ruff 0.17+ also formats Python blocks inside Markdown; the snippets in docs/
+# are illustrations, not code to keep formatted.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
