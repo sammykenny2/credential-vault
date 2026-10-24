@@ -98,6 +98,7 @@ To sync skills after changes:
 - Open security findings and the recommended fix order are in `docs/research/2026-10-23-security-review-storage-and-auth-surface.md`. Read it before touching auth, crypto, nginx, service worker, or deployment config.
 - Verified commands (2026-10-24): `pytest` at the root passes 229 tests; frontend uses `npm run test:run` inside `frontend/` (199 tests).
 - Admin account changes (`/users/*` writes) and adding a sign-in password require `X-Vault-Proof` (`VaultProvenAdmin` / `VaultProvenUser`). Do not add an account-changing endpoint behind plain `AdminUser`.
+- The repository and its GHCR images are public. Never commit secrets, `.env*` files other than the examples, real tailnet names, or personal data (emails, backups, databases).
 - Production runs only through `scripts/windows/Deploy-CredentialVault.ps1` (Docker, `credential-vault_vault_data` volume). `./data` is the dev database; never point the compose stack at it, and never run `docker compose down -v` (it deletes the vault).
 
 ---
@@ -106,4 +107,4 @@ To sync skills after changes:
 
 This file is maintained by Claude only. Other agents should not modify this file.
 
-Last updated: 2026-10-23
+Last updated: 2026-10-24

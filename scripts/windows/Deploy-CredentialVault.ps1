@@ -26,7 +26,8 @@
 
 .PARAMETER Tag
     Which CI release to deploy: "latest" (default) or a commit SHA. Needs the
-    GitHub CLI (gh auth login) and a one-time "docker login ghcr.io".
+    GitHub CLI (gh auth login). The images are public; "docker login ghcr.io"
+    is needed only if the packages are made private.
 
 .PARAMETER Build
     Build the images from this checkout instead of pulling a CI release.
@@ -458,7 +459,7 @@ function Import-ReleaseImages {
         Write-Status "Pulling $ref" "INFO"
         & docker pull $ref | Out-Host
         if ($LASTEXITCODE -ne 0) {
-            throw "docker pull failed for $ref. First pull on this machine? Log in once with a classic personal access token that has only read:packages: docker login ghcr.io -u <github user>"
+            throw "docker pull failed for $ref. If the GHCR packages are private, log in once with a classic personal access token that has only read:packages: docker login ghcr.io -u <github user>"
         }
         $revision = Get-ImageRevision $ref
         if ($revision -ne $Release.Sha) {

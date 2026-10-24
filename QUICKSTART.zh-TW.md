@@ -195,13 +195,15 @@ Copy-Item .env.production.example .env.production
 
 映像檔有兩種來源：
 
-- **CI release（預設）**：main 上的 CI 通過後，`publish` job 把映像檔推到私有的 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為 commit SHA 與 `latest`，只保留最新 5 版），並把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
+- **CI release（預設）**：每次 push 到 main，CI 通過後 `publish` job 把映像檔推到 GHCR（`ghcr.io/<owner>/credential-vault-{backend,frontend}`，標籤為 commit SHA 與 `latest`，只保留最新 5 版），並把兩個 digest 記成該 commit 的 `release/backend`、`release/frontend` status。部署腳本透過 GitHub API 讀 status、以 digest 拉映像檔，並確認映像檔標籤上的 commit 相符；只拿到 GHCR 憑證的人無法換掉要部署的映像檔。
+  - 不帶參數部署的是 main 上最新一個發布成功的 commit。最新的 commit 若 CI 還在跑或失敗，部署的會是前一個 release。
+  - `-Tag <commit sha>` 只能指定最新 5 版內的 commit，更舊的映像檔已被刪除。
 - **本機 build（`-Build`）**：從目前的 checkout 建置。CI 不能跑的時候用這個。
 
 CI release 模式的一次性準備：
 
 - `gh auth login`（GitHub CLI，用來查 release）
-- `docker login ghcr.io -u <GitHub 帳號>`，密碼用一把只有 `read:packages` 權限的 classic personal access token
+- repo 與映像檔都是 public，拉映像檔不用登入。只有把 GHCR package 改成 private 時，才需要 `docker login ghcr.io -u <GitHub 帳號>`，密碼用一把只有 `read:packages` 權限的 classic personal access token
 
 ```powershell
 # 部署最新的 CI release：查 release → 依 digest 拉映像檔並驗證 → 停後端 → 備份 → 啟動 → 健康檢查
