@@ -46,7 +46,8 @@ project-specific procedures that are too detailed for always-loaded instructions
   CI release (the `publish` job pushes to GHCR and records digests as
   `release/backend` / `release/frontend` commit statuses; the script pulls by
   digest and checks the revision label), or `-Build` from the checkout; then
-  pre-deploy backup, `up -d`, health and tailnet checks. Also `-Tag <sha>`,
+  pre-deploy backup, `up -d`, health and tailnet checks, and a check of the
+  served `Cache-Control`/CSP headers on `/` and `/sw.js`. Also `-Tag <sha>`,
   `-Backup`, `-Restore`, `-Rollback`, `-Status`, `-Stop`. Keep the publish job's
   `provenance: false` / `sbom: false`: attestation manifests would be counted
   and deleted by the keep-5 retention step. The database is the `credential-vault_vault_data` named

@@ -311,6 +311,7 @@ function Wait-StackHealthy {
     # can take a while: Tailscale issues the TLS certificate on demand.
     $base = "https://$($tailnet.DnsName)"
     $deadline = (Get-Date).AddSeconds([Math]::Max(90, ($deadline - (Get-Date)).TotalSeconds))
+    $endToEnd = $true
     foreach ($path in @("/health", "/api/v1/setup/status")) {
         $reached = $false
         $lastError = ""
@@ -333,9 +334,51 @@ function Wait-StackHealthy {
             Write-Status "$base$path answers" "OK"
         } else {
             Write-Status "$base$path failed from this machine: $lastError" "WARN"
+            $endToEnd = $false
         }
     }
+    if ($endToEnd -and -not (Test-BrowserCachePolicy $base)) { return $false }
     return $true
+}
+
+function Test-BrowserCachePolicy {
+    # Browser caching decides which CSP a browser runs: the document must be
+    # revalidated on every load and the service worker must never be cached as
+    # immutable, or a deploy does not reach browsers that visited before. nginx
+    # once served /sw.js through the static-asset location; Firefox kept the
+    # old worker, which replayed a cached document whose CSP blocked WebAssembly.
+    param([string]$Base)
+    try {
+        $document = Invoke-WebRequest -Uri "$Base/" -UseBasicParsing -TimeoutSec 30
+        $worker = Invoke-WebRequest -Uri "$Base/sw.js" -UseBasicParsing -TimeoutSec 30
+    } catch {
+        Write-Status "Could not check the browser cache headers: $($_.Exception.Message)" "WARN"
+        return $true
+    }
+    $ok = $true
+    $documentCache = Get-HeaderValue $document "Cache-Control"
+    if ($documentCache -notmatch "no-cache") {
+        Write-Status "/ is sent with Cache-Control '$documentCache': browsers can keep an old document and its old CSP" "ERROR"
+        $ok = $false
+    }
+    if ((Get-HeaderValue $document "Content-Security-Policy") -notmatch "'wasm-unsafe-eval'") {
+        Write-Status "The CSP on / does not allow WebAssembly: vault setup and unlock will fail" "ERROR"
+        $ok = $false
+    }
+    $workerCache = Get-HeaderValue $worker "Cache-Control"
+    if ($workerCache -notmatch "no-cache" -or $workerCache -match "immutable") {
+        Write-Status "/sw.js is sent with Cache-Control '$workerCache': browsers will not pick up a new service worker" "ERROR"
+        $ok = $false
+    }
+    if ($ok) { Write-Status "Document, CSP and service worker cache headers are correct" "OK" }
+    return $ok
+}
+
+function Get-HeaderValue {
+    # Windows PowerShell returns a string per header, PowerShell 7 an array.
+    param($Response, [string]$Name)
+    if (-not $Response.Headers.ContainsKey($Name)) { return "" }
+    return (@($Response.Headers[$Name]) -join ", ")
 }
 
 function Get-ImageRevision {

@@ -29,10 +29,15 @@ createRoot(document.getElementById('root')!).render(
 // per field (lib/inputProps.ts, autoComplete on account fields), not
 // overridden globally: account fields need their username/password tokens.
 
-// Register service worker for PWA/offline support
+// Register service worker for PWA/offline support. The query string gives the
+// registration a new script URL: nginx used to serve /sw.js as immutable, so
+// browsers that cached it never fetched an update for that URL. A new URL has
+// no cache entry, so they install the current worker, whose activate step
+// deletes the old cache. Keep the URL stable from now on; /sw.js is served
+// with no-cache, so later updates arrive through the normal update check.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    navigator.serviceWorker.register('/sw.js?v=4').catch(() => {
       // Service worker registration failed - app works fine without it
     })
   })

@@ -49,6 +49,27 @@ describe('the HTML document and its CSP reach the browser fresh after a deploy',
     expect(spaLocation).toContain('include /etc/nginx/snippets/security-headers.conf;')
   })
 
+  // nginx picks a regex location over any prefix location, so a prefix block
+  // such as `location /sw.js` is dead config when the static-asset regex also
+  // matches the path. That served sw.js as immutable for a year and browsers
+  // never picked up a new worker.
+  it('no prefix location is shadowed by the static-asset regex location', () => {
+    const assetPattern = nginxConf.match(/location ~\* (\S+) \{/)?.[1]
+    expect(assetPattern, 'static-asset regex location not found').toBeDefined()
+    const assetRegex = new RegExp(assetPattern!, 'i')
+    const prefixPaths = [...nginxConf.matchAll(/location (\/\S*) \{/g)].map((m) => m[1])
+    expect(prefixPaths).toContain('/')
+    expect(prefixPaths.filter((path) => assetRegex.test(path))).toEqual([])
+  })
+
+  it('nginx serves the service worker with no-cache from an exact-match location', () => {
+    const swLocation = nginxConf.match(/location = \/sw\.js \{([^}]*)\}/)?.[1]
+    expect(swLocation, 'location = /sw.js not found').toBeDefined()
+    expect(swLocation).toMatch(/add_header Cache-Control "no-cache/)
+    expect(swLocation).not.toContain('immutable')
+    expect(swLocation).toContain('include /etc/nginx/snippets/security-headers.conf;')
+  })
+
   it('the service worker neither precaches nor caches HTML documents', () => {
     const precache = serviceWorker.match(/PRECACHE_URLS = \[([^\]]*)\]/)?.[1] ?? ''
     expect(precache).not.toMatch(/'\/'|'\/index\.html'/)
