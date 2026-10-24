@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
-import VaultLockControl from '@/components/VaultLockControl'
+import { useAutoLock } from '@/hooks/useVaultLock'
 import {
   LayoutDashboard,
   Key,
@@ -15,6 +15,7 @@ import clsx from 'clsx'
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  useAutoLock()
 
   const handleLogout = async () => {
     // Server-side revocation first (invalidates every token for this account),
@@ -68,13 +69,8 @@ export default function Layout() {
           </ul>
         </nav>
 
-        {/* Vault lock, user info & Logout */}
+        {/* User info & Logout */}
         <div className="p-4 border-t border-gray-800">
-          {user?.has_vault_keys && (
-            <div className="mb-3">
-              <VaultLockControl />
-            </div>
-          )}
           <div className="mb-3 px-4">
             <p className="text-sm font-medium">{user?.display_name}</p>
             <p className="text-xs text-gray-400">{user?.email}</p>

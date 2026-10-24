@@ -16,6 +16,7 @@ import { recordTemplateUsage } from '@/lib/templateStorage'
 import CredentialBackupDialog from '@/components/CredentialBackupDialog'
 import { BACKUP_REMINDER_DAYS, daysSinceBackup, isBackupDue } from '@/lib/backupReminder'
 import { VaultLockedError } from '@/lib/vaultProof'
+import { lockVault } from '@/hooks/useVaultLock'
 import { privateFieldProps } from '@/lib/inputProps'
 
 // Decrypted credential cache entry
@@ -251,6 +252,14 @@ export default function CredentialsPage() {
           >
             <Archive className="w-4 h-4" />
             <span className="hidden sm:inline">Backup</span>
+          </button>
+          <button
+            onClick={lockVault}
+            className="btn btn-secondary flex items-center gap-2"
+            title="Lock the vault now"
+          >
+            <Lock className="w-4 h-4" />
+            <span className="hidden sm:inline">Lock</span>
           </button>
           <button
             onClick={handleAddCredential}
