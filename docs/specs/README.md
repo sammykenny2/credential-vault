@@ -49,6 +49,7 @@ Use [000-template.md](./000-template.md) as the starting point for new specs.
 | Spec | Title | Status | Related Plan |
 |------|-------|--------|--------------|
 | [000-template](./000-template.md) | Template | - | - |
+| [SPEC-004](./SPEC-004-structured-credentials-and-attachments.md) | 結構化憑證、集合與加密附件 | Draft | [PLAN-004](../plans/PLAN-004-structured-credentials-and-attachments.md) |
 <!-- Add new specs above this line -->
 
 ## For AI Agents
@@ -60,3 +61,5 @@ Use [000-template.md](./000-template.md) as the starting point for new specs.
 ---
 
 *See also: [plans/](../plans/) for implementation plans*
+
+*Last updated: 2026-11-05*

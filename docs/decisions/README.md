@@ -39,6 +39,7 @@ Use [000-template.md](./000-template.md) as the starting point for new ADRs.
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
 | [000-template](./000-template.md) | Template | - | - |
+| [ADR-003](./003-structured-credentials-and-attachments.md) | 結構化憑證、集合與端到端加密附件 | Proposed | 2026-11-05 |
 <!-- Add new ADRs above this line -->
 
 ## For AI Agents
@@ -50,3 +51,5 @@ Use [000-template.md](./000-template.md) as the starting point for new ADRs.
 ---
 
 *See also: [AGENTS.md](../../AGENTS.md) for decision-making protocols*
+
+*Last updated: 2026-11-05*

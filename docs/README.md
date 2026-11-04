@@ -32,6 +32,16 @@ These important documents live in the project root:
 | [services.md](./services.md) | Complete | Service registry and port assignments |
 | [SCRIPT-STANDARDS.md](./SCRIPT-STANDARDS.md) | Bootstrap | Script standards and naming |
 
+## Current Design Proposals
+
+The following documents describe proposed behavior and have not been implemented.
+
+| Document | Status | Description |
+|----------|--------|-------------|
+| [ADR-003](./decisions/003-structured-credentials-and-attachments.md) | Proposed | 結構化憑證、集合、紀錄關聯與端到端加密附件的架構取捨 |
+| [SPEC-004](./specs/SPEC-004-structured-credentials-and-attachments.md) | Draft | 型別化欄位、安全保存、格式相容性、完整備份還原及 18 項驗收條件 |
+| [PLAN-004](./plans/PLAN-004-structured-credentials-and-attachments.md) | Draft | 八階段實作、測試、獨立審閱與發布／還原計畫 |
+
 ## Scripts
 
 The `scripts/` directory contains platform-specific scripts for your project:
@@ -69,6 +79,7 @@ Add your project-specific automation scripts here.
 | Document | Status | Description |
 |----------|--------|-------------|
 | [research/](./research/) | Directory | Research notes and external sources |
+| [2026-11-05 結構化憑證與加密附件](./research/2026-11-05-structured-vault-use-cases.md) | Complete | 六種開發者／雲端情境的一手來源、現況證據及設計推論；尚未實作 |
 | [2026-10-23 儲存與認證面安全審查](./research/2026-10-23-security-review-storage-and-auth-surface.md) | Complete | 全專案安全掃描：E2EE 儲存結論、弱點清單與修復順序 |
 
 ## Context-Driven Development
@@ -96,3 +107,5 @@ When working on this project:
 - Include a clear title and purpose at the top
 - Keep documents focused and concise
 - Update the "Last updated" date when modifying
+
+*Last updated: 2026-11-05*

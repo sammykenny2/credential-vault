@@ -1,9 +1,10 @@
 # Research index
 
-Updated: 2026-10-23.
+Updated: 2026-11-05.
 
 ## Entries
 
+- [結構化憑證與加密附件的使用情境](2026-11-05-structured-vault-use-cases.md): Apple／Android／Windows signing、GCP、Cloudflare、GenAI 的官方結構與設計推論，支援 ADR-003／SPEC-004／PLAN-004；尚未實作。
 - [儲存與認證面安全審查](2026-10-23-security-review-storage-and-auth-surface.md): 全專案靜態審查。E2EE 儲存本體正確；高風險在伺服器端密碼產生、前端無 CSP 與 localStorage token、WebAuthn 半成品、依賴漏洞與 CI 不擋。含修復順序與未驗證事項。
 
 ## Conventions
