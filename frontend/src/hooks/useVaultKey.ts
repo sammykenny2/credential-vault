@@ -11,7 +11,7 @@ interface VaultKeyState {
   // RSA key pair (in memory only, never persisted)
   privateKey: CryptoKey | null
   publicKey: CryptoKey | null
-  // Server-registered public key base64 (used to verify key correctness before encryption)
+  // Locally generated or private-key-derived public key, checked at unlock.
   expectedPublicKeyBase64: string | null
   // Timestamp when vault was last unlocked
   lastActivity: number | null

@@ -22,10 +22,12 @@ import {
   decryptBackup,
   readBackupFile,
   downloadBackupFile,
+  generateBackupPassword,
 } from '@/lib/credentialBackup'
 import type { CredentialBackupFile, CredentialBackupEntry } from '@/lib/credentialBackup'
 import { recordBackupCompleted } from '@/lib/backupReminder'
 import { secretFieldProps } from '@/lib/inputProps'
+import { MIN_BACKUP_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
 
 interface CredentialBackupDialogProps {
   isOpen: boolean
@@ -99,8 +101,8 @@ export default function CredentialBackupDialog({
       setExportError('Please enter a password.')
       return
     }
-    if (exportPassword.length < 8) {
-      setExportError('Password must be at least 8 characters.')
+    if (exportPassword.length < MIN_BACKUP_PASSWORD_LENGTH) {
+      setExportError(`Password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters.`)
       return
     }
     if (exportPassword !== exportPasswordConfirm) {
@@ -269,9 +271,23 @@ export default function CredentialBackupDialog({
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Backup Password
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Backup Password
+                  </label>
+                  <button
+                    type="button"
+                    className="text-sm text-primary-600 hover:text-primary-700"
+                    onClick={() => {
+                      const generated = generateBackupPassword()
+                      setExportPassword(generated)
+                      setExportPasswordConfirm(generated)
+                      setShowExportPassword(true)
+                    }}
+                  >
+                    Generate strong password
+                  </button>
+                </div>
                 <div className="relative">
                   <input
                     {...secretFieldProps}
@@ -279,7 +295,8 @@ export default function CredentialBackupDialog({
                     value={exportPassword}
                     onChange={(e) => setExportPassword(e.target.value)}
                     className="input pr-10"
-                    placeholder="Enter a strong password (min 8 characters)"
+                    minLength={MIN_BACKUP_PASSWORD_LENGTH}
+                    placeholder={`Enter a strong password (min ${MIN_BACKUP_PASSWORD_LENGTH} characters)`}
                   />
                   <button
                     type="button"
@@ -301,6 +318,7 @@ export default function CredentialBackupDialog({
                   value={exportPasswordConfirm}
                   onChange={(e) => setExportPasswordConfirm(e.target.value)}
                   className="input"
+                  minLength={MIN_BACKUP_PASSWORD_LENGTH}
                   placeholder="Re-enter the password"
                 />
               </div>

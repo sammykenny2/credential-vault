@@ -14,12 +14,13 @@ import api from '@/services/api'
 import { setupVault, unlockVault, KDF_VERSION } from '@/lib/crypto'
 import type { VaultKeyMaterial } from '@/types'
 import { secretFieldProps } from '@/lib/inputProps'
+import { MIN_VAULT_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
 
 /**
  * The encrypted private key is downloadable by anyone holding a session token,
  * so the vault password must resist offline guessing. 12 characters minimum.
  */
-export const MIN_VAULT_PASSWORD_LENGTH = 12
+export { MIN_VAULT_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
 
 interface MasterPasswordModalProps {
   isOpen: boolean
@@ -72,7 +73,7 @@ export default function MasterPasswordModal({
           kdf_version: vaultKeys.kdfVersion,
         })
 
-        // Store keys in memory (with server-registered public key for verification)
+        // Store the locally generated, matching key pair in memory.
         setKeys(vaultKeys.privateKey, vaultKeys.publicKey, vaultKeys.publicKeyBase64)
 
         // Update user state to reflect vault setup
@@ -99,8 +100,8 @@ export default function MasterPasswordModal({
           keyData.kdf_version ?? KDF_VERSION,
         )
 
-        // Store decrypted keys in memory (with server-registered public key for verification)
-        setKeys(keys.privateKey, keys.publicKey, keyData.public_key)
+        // Only retain the public key derived from the authenticated private key.
+        setKeys(keys.privateKey, keys.publicKey, keys.publicKeyBase64)
         onUnlock()
       }
     } catch (err) {

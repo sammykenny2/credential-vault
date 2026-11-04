@@ -4,7 +4,8 @@
 
 ## Status
 
-Implemented (2026-03-03)
+Implemented (2026-03-03). Security boundary clarified 2026-11-05; key trust and
+content authenticity requirements are extended by [ADR-004](004-vault-authenticity-and-key-trust.md).
 
 ## Context
 
@@ -33,7 +34,12 @@ The new architecture will decouple **Authentication** from **Encryption**:
 
 ### Positive
 
-- **Zero-Knowledge Security:** The server (and its administrators) mathematically cannot decrypt the user's data, eliminating the `.env` single point of failure.
+- **Zero-Knowledge Security:** With a trusted frontend, a secret vault password,
+  locally verified key pairs, and operation domain separation, disclosure of the
+  database or control of the data API must not reveal credential plaintext.
+  [ADR-004](004-vault-authenticity-and-key-trust.md) adds protected signing keys
+  for new content and state authenticity. These requirements need regression and
+  deployment evidence; the original encryption design alone is not proof they hold.
 - **Convenience & Security:** Users can utilize Google OAuth (and its associated hardware MFA/Passkeys) for robust identity verification without compromising cryptographic confidentiality.
 - **No Device Lock-in:** Because the encrypted private key is stored on the server, the user can log in from any new device as long as they authenticate via Google and remember their Vault Password.
 
@@ -46,6 +52,18 @@ The new architecture will decouple **Authentication** from **Encryption**:
 ### Neutral
 
 - **Database Schema Changes:** Requires additions to the `users` table (`public_key`, `encrypted_private_key`, `key_salt`) and modifications to how credential blobs are stored.
+
+### Security boundary
+
+The frontend must derive and verify the encryption public key from the
+KEK-protected private material, and each RSA-OAEP operation must have an explicit
+purpose. Public-key encryption does not authenticate the author of a record.
+New attachment records require the signing and migration rules in ADR-004;
+legacy unsigned records retain an unverified origin label.
+
+This model does not protect against replacement of the frontend, unlocked XSS,
+malicious extensions, deletion or omission of data, or replay of a complete valid
+older snapshot. It does not revoke or erase downloaded plaintext copies.
 
 ## Alternatives Considered
 

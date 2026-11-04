@@ -195,6 +195,35 @@ function importPrivateKeyNonExtractable(pkcs8: ArrayBuffer): Promise<CryptoKey> 
   )
 }
 
+/** Derive the public components from authenticated private-key material. */
+async function publicKeyFromPrivateKey(pkcs8: ArrayBuffer): Promise<CryptoKey> {
+  // This temporary key is exportable only to obtain its public RSA components.
+  // The session private key is imported separately as non-extractable.
+  const temporaryKey = await crypto.subtle.importKey(
+    'pkcs8', pkcs8, { name: RSA_ALGORITHM, hash: RSA_HASH }, true, ['decrypt']
+  )
+  const jwk = await crypto.subtle.exportKey('jwk', temporaryKey)
+  try {
+    if (!jwk.n || !jwk.e) throw new Error('Invalid vault RSA private key')
+    return await crypto.subtle.importKey(
+      'jwk',
+      { kty: 'RSA', n: jwk.n, e: jwk.e },
+      { name: RSA_ALGORITHM, hash: RSA_HASH },
+      true,
+      ['encrypt']
+    )
+  } finally {
+    // Release references; JavaScript strings cannot be securely erased.
+    delete jwk.d
+    delete jwk.p
+    delete jwk.q
+    delete jwk.dp
+    delete jwk.dq
+    delete jwk.qi
+    delete jwk.oth
+  }
+}
+
 /** AES-GCM wrap of PKCS8 bytes with the KEK: base64(iv + ciphertext). */
 async function wrapPkcs8(pkcs8: ArrayBuffer, kek: CryptoKey): Promise<string> {
   const iv = generateIV()
@@ -291,12 +320,22 @@ export async function unlockVault(
   encryptedPrivateKeyBase64: string,
   publicKeyBase64: string,
   kdfVersion: number = KDF_VERSION
-): Promise<{ privateKey: CryptoKey; publicKey: CryptoKey }> {
+): Promise<{ privateKey: CryptoKey; publicKey: CryptoKey; publicKeyBase64: string }> {
   const salt = new Uint8Array(base64ToArrayBuffer(saltBase64))
   const kek = await deriveKEK(vaultPassword, salt, kdfVersion)
-  const privateKey = await importEncryptedPrivateKey(encryptedPrivateKeyBase64, kek)
-  const publicKey = await importPublicKey(publicKeyBase64)
-  return { privateKey, publicKey }
+  const pkcs8 = await unwrapPkcs8(encryptedPrivateKeyBase64, kek)
+  try {
+    const publicKey = await publicKeyFromPrivateKey(pkcs8)
+    const derivedPublicKeyBase64 = await exportPublicKey(publicKey)
+    const advertisedPublicKey = await importPublicKey(publicKeyBase64)
+    if (await exportPublicKey(advertisedPublicKey) !== derivedPublicKeyBase64) {
+      throw new Error('Vault public key does not match the encrypted private key')
+    }
+    const privateKey = await importPrivateKeyNonExtractable(pkcs8)
+    return { privateKey, publicKey, publicKeyBase64: derivedPublicKeyBase64 }
+  } finally {
+    new Uint8Array(pkcs8).fill(0)
+  }
 }
 
 export interface RewrappedPrivateKey {

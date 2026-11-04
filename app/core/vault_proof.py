@@ -21,9 +21,12 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 VAULT_PROOF_HEADER = "X-Vault-Proof"
 PROOF_TTL_SECONDS = 300
 CHALLENGE_BYTES = 32
+VAULT_PROOF_OAEP_LABEL = b"credential-vault/vault-proof/v1"
 
 _OAEP = padding.OAEP(
-    mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
+    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+    algorithm=hashes.SHA256(),
+    label=VAULT_PROOF_OAEP_LABEL,
 )
 
 

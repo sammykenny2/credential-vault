@@ -52,13 +52,13 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
       setError(null)
 
       try {
-        // Verify the in-memory public key matches the server-registered key
+        // Verify the in-memory public key still matches the key checked at unlock.
         const expectedBase64 = getExpectedPublicKeyBase64()
         if (expectedBase64) {
           const currentBase64 = await exportPublicKey(publicKey)
           if (currentBase64 !== expectedBase64) {
             setError(
-              'Public key mismatch: in-memory key does not match the registered key. Please re-unlock your vault.'
+              'Public key mismatch: in-memory key does not match the verified vault key. Please re-unlock your vault.'
             )
             return null
           }

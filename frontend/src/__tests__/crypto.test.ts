@@ -416,6 +416,25 @@ describe('Vault Setup & Unlock', () => {
     expect(unlocked.privateKey.type).toBe('private')
     expect(unlocked.publicKey).toBeDefined()
     expect(unlocked.publicKey.type).toBe('public')
+    expect(unlocked.publicKeyBase64).toBe(vault.publicKeyBase64)
+    expect(await exportPublicKey(unlocked.publicKey)).toBe(vault.publicKeyBase64)
+    expect(unlocked.privateKey.extractable).toBe(false)
+  }, 30000)
+
+  it('rejects an advertised public key that does not belong to the private key', async () => {
+    const vault = await setupVault(VAULT_PASSWORD)
+    const other = await generateKeyPair()
+    await expect(unlockVault(
+      VAULT_PASSWORD, vault.saltBase64, vault.encryptedPrivateKeyBase64,
+      await exportPublicKey(other.publicKey)
+    )).rejects.toThrow('Vault public key does not match')
+  }, 30000)
+
+  it('rejects malformed advertised public-key material', async () => {
+    const vault = await setupVault(VAULT_PASSWORD)
+    await expect(unlockVault(
+      VAULT_PASSWORD, vault.saltBase64, vault.encryptedPrivateKeyBase64, 'not-a-public-key'
+    )).rejects.toThrow()
   }, 30000)
 
   it('should fail to unlock vault with wrong password', async () => {

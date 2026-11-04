@@ -15,6 +15,12 @@ project-specific procedures that are too detailed for always-loaded instructions
   AES-256-GCM key wrapped by RSA-OAEP. All credential metadata lives inside the
   ciphertext. The `credentials` table has only `encrypted_data` plus expiry and
   status columns. See `docs/decisions/001-e2ee-architecture.md`.
+- Key trust: unlock derives the RSA public key from the KEK-protected private
+  material, rejects a mismatched API key, and retains only the derived public
+  key. Current proof v1 uses the dedicated OAEP label
+  `credential-vault/vault-proof/v1`; frontend and backend require paired rollout.
+  New signed records, protected signing keys and proof v2 are proposed in
+  ADR-004, not implemented by the existing-service security patch.
 - Invariant: the server never receives, produces, logs, or returns plaintext
   secrets. Features that need plaintext (generation, strength, breach checks)
   belong in `frontend/src/lib/`, not in `app/`.

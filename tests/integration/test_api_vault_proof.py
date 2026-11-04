@@ -9,11 +9,13 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from httpx import AsyncClient
 
 from app.core.security import SecurityService
-from app.core.vault_proof import VAULT_PROOF_HEADER
+from app.core.vault_proof import VAULT_PROOF_HEADER, VAULT_PROOF_OAEP_LABEL
 from app.services.user import UserService
 
 OAEP = padding.OAEP(
-    mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
+    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+    algorithm=hashes.SHA256(),
+    label=VAULT_PROOF_OAEP_LABEL,
 )
 
 
@@ -56,6 +58,20 @@ async def _create_credential(client: AsyncClient, headers: dict) -> str:
 
 
 class TestVaultChallenge:
+    @pytest.mark.asyncio
+    async def test_challenge_requires_its_oaep_domain(self, client: AsyncClient, db_session):
+        _, private_key, headers = await _user_with_vault(db_session)
+        response = await client.post("/api/v1/auth/vault/challenge", headers=headers)
+        assert response.status_code == 200
+        unlabeled = padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        )
+        with pytest.raises(ValueError):
+            private_key.decrypt(base64.b64decode(response.json()["challenge"]), unlabeled)
+        assert VAULT_PROOF_OAEP_LABEL == b"credential-vault/vault-proof/v1"
+
     @pytest.mark.asyncio
     async def test_requires_vault_keys(self, client: AsyncClient, db_session):
         service = UserService(db_session)

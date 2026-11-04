@@ -3,7 +3,7 @@
  * key, cached until near expiry, and refused while the vault is locked.
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/services/api', () => ({
   default: {
@@ -20,6 +20,7 @@ import {
   clearVaultProof,
   VaultLockedError,
   VAULT_PROOF_HEADER,
+  VAULT_PROOF_OAEP_LABEL,
 } from '@/lib/vaultProof'
 
 const mockedPost = (api as unknown as { post: ReturnType<typeof vi.fn> }).post
@@ -27,7 +28,9 @@ const mockedPost = (api as unknown as { post: ReturnType<typeof vi.fn> }).post
 let keyPair: CryptoKeyPair
 
 async function challengeFor(publicKey: CryptoKey, secret: Uint8Array<ArrayBuffer>): Promise<string> {
-  const ciphertext = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, secret)
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'RSA-OAEP', label: new TextEncoder().encode(VAULT_PROOF_OAEP_LABEL) }, publicKey, secret
+  )
   return arrayBufferToBase64(ciphertext)
 }
 
@@ -44,6 +47,10 @@ describe('vaultProof', () => {
     clearVaultProof()
     useVaultKeyStore.getState().clearKeys()
     mockedPost.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('refuses while the vault is locked', async () => {
@@ -79,15 +86,65 @@ describe('vaultProof', () => {
   })
 
   it('fetches a new challenge when the cached proof is about to expire', async () => {
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
     useVaultKeyStore.getState().setKeys(keyPair.privateKey, keyPair.publicKey, 'pub')
     mockedPost.mockResolvedValue({
-      data: { challenge: await challengeFor(keyPair.publicKey, randomSecret()), expires_in: 10 },
+      data: { challenge: await challengeFor(keyPair.publicKey, randomSecret()), expires_in: 300 },
     })
 
     await getVaultProof()
+    clock.mockReturnValue(now + 271_000)
     await getVaultProof()
 
     expect(mockedPost).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects ciphertext from an unlabeled RSA-OAEP domain', async () => {
+    useVaultKeyStore.getState().setKeys(keyPair.privateKey, keyPair.publicKey, 'pub')
+    const ciphertext = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, keyPair.publicKey, randomSecret())
+    mockedPost.mockResolvedValue({
+      data: { challenge: arrayBufferToBase64(ciphertext), expires_in: 300 },
+    })
+    await expect(vaultProofHeaders()).rejects.toThrow()
+  })
+
+  it.each([0, 10, 301, NaN, Infinity])('rejects invalid proof lifetime %s', async (expiresIn) => {
+    useVaultKeyStore.getState().setKeys(keyPair.privateKey, keyPair.publicKey, 'pub')
+    mockedPost.mockResolvedValue({
+      data: { challenge: await challengeFor(keyPair.publicKey, randomSecret()), expires_in: expiresIn },
+    })
+    await expect(getVaultProof()).rejects.toThrow('Invalid vault proof lifetime')
+  })
+
+  it('rejects a challenge with an unexpected plaintext length', async () => {
+    useVaultKeyStore.getState().setKeys(keyPair.privateKey, keyPair.publicKey, 'pub')
+    mockedPost.mockResolvedValue({
+      data: { challenge: await challengeFor(keyPair.publicKey, new Uint8Array(31)), expires_in: 300 },
+    })
+    await expect(getVaultProof()).rejects.toThrow('Invalid vault proof challenge')
+  })
+
+  it('shares a single in-flight challenge between concurrent requests', async () => {
+    useVaultKeyStore.getState().setKeys(keyPair.privateKey, keyPair.publicKey, 'pub')
+    mockedPost.mockResolvedValue({
+      data: { challenge: await challengeFor(keyPair.publicKey, randomSecret()), expires_in: 300 },
+    })
+    const proofs = await Promise.all([getVaultProof(), getVaultProof(), getVaultProof()])
+    expect(new Set(proofs).size).toBe(1)
+    expect(mockedPost).toHaveBeenCalledTimes(1)
+  })
+
+  it('discards a challenge result after locking while the request is pending', async () => {
+    useVaultKeyStore.getState().setKeys(keyPair.privateKey, keyPair.publicKey, 'pub')
+    const challenge = await challengeFor(keyPair.publicKey, randomSecret())
+    let complete!: (value: unknown) => void
+    mockedPost.mockReturnValue(new Promise((resolve) => { complete = resolve }))
+    const rejected = expect(getVaultProof()).rejects.toBeInstanceOf(VaultLockedError)
+    clearVaultProof()
+    useVaultKeyStore.getState().clearKeys()
+    complete({ data: { challenge, expires_in: 300 } })
+    await rejected
   })
 
   it('drops the cache when the vault is unlocked with a different key', async () => {

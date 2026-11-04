@@ -10,8 +10,10 @@ import {
   generateSalt,
   arrayBufferToBase64,
   base64ToArrayBuffer,
+  generatePassword,
 } from './crypto'
 import type { CredentialData } from './crypto'
+import { MIN_BACKUP_PASSWORD_LENGTH } from './passwordPolicy'
 
 // === Types ===
 
@@ -46,6 +48,11 @@ function generateIV(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(IV_LENGTH))
 }
 
+/** 32 uniformly sampled alphanumeric characters provide over 128 bits of entropy. */
+export function generateBackupPassword(): string {
+  return generatePassword(32, { uppercase: true, lowercase: true, numbers: true, symbols: false })
+}
+
 /**
  * Encrypt credentials into a backup file.
  */
@@ -53,6 +60,9 @@ export async function encryptBackup(
   credentials: CredentialBackupEntry[],
   password: string
 ): Promise<CredentialBackupFile> {
+  if (password.length < MIN_BACKUP_PASSWORD_LENGTH) {
+    throw new Error(`Backup password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters.`)
+  }
   const salt = generateSalt()
   const iv = generateIV()
   const key = await deriveKEK(password, salt)
