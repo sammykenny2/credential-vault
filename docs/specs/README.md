@@ -49,7 +49,7 @@ Use [000-template.md](./000-template.md) as the starting point for new specs.
 | Spec | Title | Status | Related Plan |
 |------|-------|--------|--------------|
 | [000-template](./000-template.md) | Template | - | - |
-| [SPEC-004](./SPEC-004-structured-credentials-and-attachments.md) | 結構化憑證、集合與加密附件 | Draft | [PLAN-004](../plans/PLAN-004-structured-credentials-and-attachments.md) |
+| [SPEC-004](./SPEC-004-structured-credentials-and-attachments.md) | 結構化憑證、集合、加密附件與來源驗證 | Draft; security gate closed | [PLAN-004](../plans/PLAN-004-structured-credentials-and-attachments.md) |
 <!-- Add new specs above this line -->
 
 ## For AI Agents

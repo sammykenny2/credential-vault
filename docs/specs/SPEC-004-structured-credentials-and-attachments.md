@@ -6,10 +6,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft；尚未實作 |
+| **Status** | Draft；安全 gate 未通過，禁止進入格式定案 |
 | **Owner** | 專案維護者 |
 | **Reviewer** | 待指定獨立審閱者 |
-| **Decision** | [ADR-003](../decisions/003-structured-credentials-and-attachments.md)（Proposed） |
+| **Decision** | [ADR-003](../decisions/003-structured-credentials-and-attachments.md)、[ADR-004](../decisions/004-vault-authenticity-and-key-trust.md)（Proposed） |
 | **Plan** | [PLAN-004](../plans/PLAN-004-structured-credentials-and-attachments.md)（Draft） |
 | **Baseline** | `2d41d37`；2026-11-05 |
 
@@ -20,6 +20,8 @@
 並支援有 revision 的安全保存、非破壞性資料遷移及包含附件的完整備份還原。
 
 本規格描述預期的新行為，不宣告現有程式已符合。需求與驗收 ID 供實作及測試追蹤。
+2026-11-05 外部設計審閱已納入修訂；它是獨立設計輸入，不是對修正版、熱修補或 Phase 1 的核准。
+進入 Task 1.2／Task 2.5 前必須通過 PLAN Phase 0；不得只完成文件便宣稱 gate 已通過。
 
 ## Goals
 
@@ -33,8 +35,8 @@
 
 - 任意深度的 section、通用 JSON 編輯器、廠商 JSON／憑證／profile 解析器。
 - 檔案預覽、解壓縮、執行、安裝、內容掃毒、第三方秘密分析或公開下載連結。
-- 分享、集合 ACL、權限繼承、完整版本歷史、秘密注入、自動簽署與外部金鑰輪替。
-- 更換認證方式、vault KDF 或既有 credential RSA／AES 金鑰階層。
+- 分享、集合 ACL、權限繼承、完整版本歷史、秘密注入、外部軟體／文件自動簽署與外部金鑰輪替。
+- 更換登入方式或 vault KDF。新增 KEK 保護的簽章金鑰、proof v2 及來源驗證屬本次必要範圍。
 - 安全抹除保證、解鎖中端點遭入侵的防護，以及惡意伺服器回放的完整偵測。
 
 ## User Stories
@@ -64,19 +66,27 @@
 | FR-05 | 檔案欄位支援選檔、取消、下載、替換及移除；不要求紀錄必須有文字欄位才能保存 |
 | FR-06 | 附件 bytes、檔名、MIME 與解密材料在瀏覽器處理；清單及搜尋不下載附件內容 |
 | FR-07 | Metadata 與附件以 staged batch 提交，具 revision、冪等重試及完整性驗證 |
-| FR-08 | 所有 vault 寫入檢查能力版本；新寫入／上傳及破壞性操作要求 vault proof，所有存取以 owner 隔離 |
-| FR-09 | 限制請求、檔案、使用者配額、實例數與匯入大小；未提交及 retired 附件受配額及清理規則管理 |
+| FR-08 | 新 vault 寫入檢查能力、來源簽章與狀態；使用有用途隔離及 session 綁定的 proof v2，所有存取以 owner 隔離 |
+| FR-09 | 限制請求、檔案、每使用者及全域配額、磁碟保留、並行量、實例數與匯入大小；所有暫存及退休資料計入容量 |
 | FR-10 | 上鎖、登出、取消或卸載時終止明文工作；過期的非同步結果不得重填 UI 或發起下載 |
 | FR-11 | 完整備份包含所有 active／revoked 紀錄、有效集合、關聯與被引用附件，跨帳號不依賴來源私鑰即可還原 |
 | FR-12 | 既有密文與 v1 備份可讀，舊 template 可轉換；不清空資料庫、不默默移除未知內容 |
 | FR-13 | 刪除集合不刪憑證、附件或子集合；永久刪除憑證明確處理其附件，兩種操作在 UI 區分 |
 | FR-14 | 新增／調整六種情境的 template，並更新使用說明、API、schema、備份及安全文件 |
+| FR-15 | 公鑰由 KEK 解開的私鑰導出並比對；每種 RSA-OAEP 用途有固定不同 label，禁止 empty-label fallback |
+| FR-16 | KEK 保護的簽章金鑰驗證新 credential／collection／狀態，驗證前不解密或提供附件；legacy 來源不自動升級為可信 |
+| FR-17 | Batch／operation／upload 使用原始 Request，在認證、proof、能力及限流成功前不讀 body，之後逐 chunk 計數才解析 |
+| FR-18 | SQLite FK、journal、durability 與鎖定模式明定；條件式 CAS／quota 更新及明確 commit 完成後才回成功 receipt |
+| FR-19 | Commit 時清除 batch payload，只保留有 TTL 的最小 receipt；限流與稽核覆蓋 metadata、附件、proof 及匯出 |
+| FR-20 | ZIP 在既有 CSP 下運作；所有憑證值一律使用 secretFieldProps，顯示／下載檔名清理不受不可信 template 控制 |
+| FR-21 | 新備份密碼至少 12 字元，提供 CSPRNG 復原秘密；下載前提示明文副本風險，附件大小採 4 KiB padding |
 
 ### Non-Functional Requirements
 
 - **Security**：秘密及其明文雜湊不得進入後端、log、URL、analytics、localStorage、sessionStorage、IndexedDB 或 Cache Storage。
   template 定義仍是伺服器可讀資料；其中只允許通用欄位定義。
-- **Integrity**：所有解密結果先做 runtime validation；未知版本／型別、重複 ID、失效檔案參照及型別不符都不能轉存成簡化內容。
+- **Integrity**：使用解開 bundle 的公鑰驗證簽章及狀態，再驗密文雜湊、解密及 runtime validation。
+  「已驗證 manifest」必須完成這整條來源驗證鏈，不能只表示 GCM tag 正確。未知版本／型別不得降級轉存。
 - **Performance**：清單流量只包含 metadata 密文；同時最多處理一個檔案的明文，備份不組成全量附件 Base64／明文字串。
   發布驗證使用 1,000 筆紀錄、24 個 10 MiB 附件，並記錄瀏覽器、硬體、記憶體及時間結果。
 - **Reliability**：失敗保留既有已提交資料；可重試操作必須先查詢既有 batch 結果。所有頁面取完才可稱完整快照。
@@ -101,10 +111,10 @@ Collection（最多三層）
 | DB schema | 新 Alembic revision | 新增式變更；不改寫舊密文 |
 | Vault 寫入協定 | `X-Vault-Protocol: 2` | 缺少或不支援時拒絕 vault 寫入，回 426 |
 | Credential 內容 | `schemaVersion: 2` | 無版本的既有文字 map 視為 v1，只在瀏覽器轉換 |
-| Credential 加密 envelope | 既有 crypto blob v2 | v1 保持可讀；所有新寫入使用現有 ID-bound v2 |
-| Collection 內容／envelope | 內容 v1／collection envelope v1 | 獨立 domain；不得套用 credential 的 legacy fallback |
+| Credential 加密 envelope | 新 crypto blob v3 | RSA label、AAD 與來源簽章；v1／v2 僅明確 legacy read mode |
+| Collection 內容／envelope | 內容 v1／collection envelope v2 | 獨立 RSA label、AAD 與來源簽章；無 legacy fallback |
 | Template | 定義 `schemaVersion: 2`、storage v2、export v2 | `sync_version` 繼續代表 optimistic locking；不兼作格式版本 |
-| Attachment envelope | v1 | 格式不支援就拒絕，不試猜其他格式 |
+| Attachment envelope | v2 | 4 KiB padding，格式不支援就拒絕，不猜其他格式 |
 | Credential backup | `.cvault` v2 | 可讀 v1；v2 不輸出成會漏附件的 v1 |
 
 憑證解密內容的核心結構如下；所有 UUID 為小寫標準 UUID，每個實例 ID 在其紀錄內唯一。
@@ -139,8 +149,9 @@ interface AttachmentManifestEntry {
   mimeType: string
   byteLength: number
   keyBase64: string // 32 bytes 金鑰，僅存在於此加密內容
-  encryptionVersion: 1
+  encryptionVersion: 2
   ciphertextSha256: string
+  paddingBlockSize: 4096
 }
 
 interface CredentialDataV2 {
@@ -163,6 +174,7 @@ interface CredentialDataV2 {
 - 空字串、前後空白、換行與檔案 bytes 保留原樣；欄位 label 的正規化不能改寫值。
 - 附件 ID 與欄位參照必須雙向對應且各只屬於一個 file 欄位；複製含附件欄位要產生新 ID／金鑰並重新加密。
 - 同筆內改名、重排或移動 section 保留欄位 ID；跨紀錄移動附件需要新的 AAD 與加密。
+- 顯示／mask 與輸入的保護分開：所有值的 input／textarea 一律套 secretFieldProps，不能由 template 的 type 或 isSecret 決定。
 - 沒有 template 的臨時欄位及 section 與 template 產生的實例具有相同能力。
 - Template v2 是 `sections[]`，每個定義有 `id`、`label`、`repeatable`、`maxInstances` 與 `fields[]`。
   欄位定義有 ID、label、type、isSecret、required、placeholder 及適用的 validation／選檔提示。
@@ -183,53 +195,82 @@ interface CredentialDataV2 {
 永久刪除憑證要求明確操作及 proof，刪除其 active／retired 附件並使相關 staged batch 提交失敗。
 來源關聯顯示失效；不得跨 owner 搜尋目標或因連結不存在而刪來源。
 
-### 3. 附件加密與安全下載
+### 3. 金鑰信任、來源簽章、padding 與下載
 
-附件二進位 envelope 為 `ASCII("CVAF") | 0x01 | IV(12 bytes) | ciphertext || tag(16 bytes)`。
-空檔合法，最小 envelope 為 33 bytes；驗證長度後才解析。附件金鑰只由 manifest 提供。
-AAD 是以下固定陣列的 `JSON.stringify` 結果之 UTF-8 bytes，所有 ID 來自已驗證的憑證 manifest：
+先完成 [ADR-004](../decisions/004-vault-authenticity-and-key-trust.md) 的 key bundle／proof／簽章決策。
+解鎖由私鑰導出 RSA 公鑰並拒絕 API 不匹配值；驗證公鑰來自 KEK 保護的 bundle。
+備份還原與每個新 writer 都只能使用已驗證的本機金鑰，不在操作中重新信任 API 公鑰。
+
+新 credential envelope v3 的 body 為 `0xFF 0x03 | wrapped_key_len(uint16 BE) | wrapped_key | IV(12) | ciphertext || tag(16)`，
+OAEP label 為 `credential-vault/credential-key/v3`。Collection 為
+`ASCII("CVCL") | 0x02 | wrapped_key_len(uint16 BE) | wrapped_key | IV(12) | ciphertext || tag(16)`，
+label 為 `credential-vault/collection-key/v2`。兩者仍用 RSA-OAEP SHA-256、獨立 AES-256 金鑰與 128-bit GCM tag。
+AAD 各自綁定 domain、版本、vault／owner／實體 ID，且不含會改名的顯示路徑。
+新 RSA 用途必須分配不同 label；不接受跨用途、未識別版本或 empty-label retry。
+
+外層 signed state 與密文一起保存，包含 signer ID、簽章版本、實體／owner／vault ID、內容及 envelope 版本、
+密文 SHA-256、下一 row revision，以及 `is_active`、`expires_at`、`revoked_at`、`is_deleted`。
+ECDSA P-256 SHA-256 的固定順序編碼依 ADR-004；client 先驗來源簽章及所有狀態，再驗雜湊與解密。
+Client 不得依伺服器未驗證的 active／expiry／tombstone 先過濾紀錄，伺服器必須回傳含 tombstone 的快照。
+簽章無法證明服務沒有刪漏紀錄、回放合法舊快照或拒絕服務；不得把這些情況當作可自動修復的內容變更。
+
+附件 envelope 為 `ASCII("CVAF") | 0x02 | IV(12) | ciphertext || tag(16)`。
+加密內文為 `uint64_be(original_length) | original_bytes | random_padding`，
+補至 4,096 bytes 整數倍，最少一個 bucket，因此空檔最小 envelope 為 4,129 bytes。
+DEK、原始大小、檔名及密文 SHA-256 在已驗證來源的 manifest 內。
+AAD 為以下固定陣列的 JSON.stringify UTF-8 bytes，三個 ID 欄位代入小寫 UUID：
 
 ```json
-["credential-vault/attachment", 1, "credentialId", "fieldId", "attachmentId"]
+["credential-vault/attachment", 2, "credentialId", "fieldId", "attachmentId"]
 ```
 
-上述三個 ID 名稱表示對應的小寫 UUID 值，並非傳輸時的固定字串。
-先比對密文 SHA-256，再驗證 GCM tag；全部成功才建立下載 Blob。
-SHA-256 為密文雜湊，不能取代 GCM，亦不得改成明文雜湊送往伺服器。
+Client 依序驗 manifest 來源、密文雜湊、GCM、padding bucket、內部長度與 manifest 原始大小一致，
+全部成功才建立下載 Blob。Bucket／附件數／歸屬／時間仍可見，這是明確接受的 metadata 洩漏。
+不傳明文雜湊，不將 padding 當作隱藏所有檔案型別或流量的保證。
 
-Collection envelope 使用 `ASCII("CVCL") | 0x01 | wrapped_key_len(uint16 big-endian) | RSA-wrapped AES key | IV(12) | ciphertext || tag(16)`。
-延用 RSA-OAEP SHA-256 與每次新產生 AES-256 金鑰；AAD 為
-`JSON.stringify(["credential-vault/collection", 1, collectionId])` 的 UTF-8 bytes。
-先限制 envelope 大小、wrapped key 長度及版本，再解密；憑證與集合的 envelope 不可互換。
+Backend 的附件 GET 回 `Content-Type: application/octet-stream`、固定 opaque ID 的
+`Content-Disposition: attachment`、`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`
+與 `Content-Security-Policy: sandbox`，不含原始檔名。Client 下載明文 Blob 亦使用 octet-stream／download，
+禁止 iframe、object、新頁面預覽、遠端掃描或解析。
 
-下載使用 `application/octet-stream` 與 `download` 行為，不在 iframe、object 或新頁面載入內容。
-下載檔名去除路徑、控制字元、雙向文字控制及平台保留字元；必要時使用安全 fallback 名稱，
-原始檔名仍保留在加密 metadata。副檔名／MIME／`accept` 只作提示，不聲稱內容安全。
-不呼叫遠端解析、掃毒或 telemetry 傳送附件、金鑰及檔名。
+檔名去除路徑、控制字元、雙向文字控制及平台保留字元，同一處理套用畫面顯示及下載名稱；
+必要時使用安全 fallback。加密 metadata 保留原始檔名，但不把它當作可信顯示或路徑。
+下載前顯示明文將存入裝置、vault 上鎖不能收回副本的提示；未驗證來源或壞簽章不得下載。
+Legacy 資料標為來源未驗證，不能透過自動重新簽章取得可信狀態。
 
-每個解鎖 session 有 generation token。選檔、加密、fetch、解密與建立 Blob 後都確認 token 仍有效。
-上鎖／取消時 abort fetch、移除明文參照、清除檔案 input、撤銷 Blob URL，並使未完成工作失效。
-Web Crypto 已啟動的工作不保證可中止；其結果必須丟棄。GC 與瀏覽器下載副本不具抹除保證。
+每個解鎖 session 有 generation token；選檔、加密、fetch、解密及建立 Blob 後重查。
+上鎖／取消時 abort fetch、清除 input 與明文參照、撤銷 Blob URL，使未完成結果失效。
+Web Crypto 已啟動工作可能無法中止；必須丟棄其結果。JS GC、作業系統下載及歷史備份不具抹除保證。
 
 ### 4. 儲存、配額與 batch 協定
 
 | 項目 | 初版預設／硬性規則 |
 |------|-------------------|
-| 單檔原始內容 | 10 MiB；對應密文上限加 33 bytes |
+| 單檔原始內容 | 10 MiB；密文上限為 ceil((8 + 原始上限) / 4096) × 4096 + 33 bytes |
 | 每筆 active 附件 | 5 個，跨所有 file 欄位合計 |
-| 每使用者附件配額 | 250 MiB，包含 active、retired、已接收 staged 及尚未接收的保留額度 |
+| 每使用者附件配額 | 250 MiB，按 padded 密文計算，包含 active、retired、staged 及 reservations |
+| 全域容量／磁碟保留 | 所有使用者合計 2 GiB 邏輯配額；DB volume 至少保留 1 GiB free space，兩者可設定 |
 | Retired／未提交 batch TTL | 24 小時；只能清理非 active 資料 |
 | Section 實例／欄位 | 每筆最多 100 個 section 實例、200 個欄位；每個重複定義最多 20 個實例 |
 | 清單值／關聯 | 每欄最多 100 個值；每筆最多 50 個有效及失效關聯合計 |
 | Metadata 密文 | 憑證維持 1,000,000 字元上限，新增集合亦有相同上限 |
-| Batch metadata／備份 manifest | 各最多 32 MiB；header 最多 4 KiB |
+| Body／staging／備份 | Batch descriptor 64 KiB，單個 operation 1 MiB，staged metadata 合計 32 MiB；備份 manifest 32 MiB，header 4 KiB |
 | 備份容器 | 最多 320 MiB、10,002 個 entries；只接受 STORE |
 
 MiB 為 1,048,576 bytes。可設定的限制須透過 capabilities 回傳；變更須重跑邊界與負載驗證。
-HTTP body 限制在 proxy 及應用串流讀取時實施，不能只信任 Content-Length 或先把全檔讀完才檢查。
+Batch、operation 與 upload 不宣告 Pydantic body 參數；先以 headers／session／DB 完成認證、proof、能力及限流，
+才呼叫原始 Request.stream() 計數讀取，達上限立即停止，完整且有限的 JSON 取得後才 model_validate_json。
+不可在 dependency／middleware 提早 body()／json()／form()，也不能只信任 Content-Length。
+Nginx 按 descriptor／operation／binary 路徑設定 client_max_body_size、limit_req、limit_conn，
+新串流路徑設 proxy_request_buffering off；未部署此防線前不得全站放寬 body limit。
 對 pending quota 的保留與釋放必須是原子操作，並限制並行接收的檔案數與 batch 數，避免記憶體及配額競態。
 
-新增實體為 `vault_state`、`vault_collections`、`vault_batches`、`credential_attachments`。
+新增實體為 `vault_state`、`vault_collections`、`vault_batches`、`credential_attachments`、
+`vault_proof_slots` 與全域容量帳本。全域配額涵蓋所有帳號的 key bundle／template／metadata、
+附件、retired、batch payload 及 reservations；receipt／audit 有數量與時間上限，磁碟預留另涵蓋 DB／WAL／journal overhead。
+帳號建立、key／template 寫入、metadata staging 與附件保留都檢查全域額度，不能靠新增帳號繞過。
+磁碟 free-space 檢查與 ENOSPC rollback 是額外防線，不作為可競態的唯一配額機制。
+
 附件 staged 時綁 owner／batch／預定 credential ID，尚未建立的 credential 不需要先有 row；
 提交時設定可驗證的 credential FK。附件 ID 不能重用或綁到別筆紀錄。
 額度超限時不可先刪舊附件騰出空間，須回報可用容量及所需保留空間。
@@ -240,7 +281,8 @@ HTTP body 限制在 proxy 及應用串流讀取時實施，不能只信任 Conte
 |------|------|
 | `GET /vault/capabilities` | 回協定／內容版本、支援的型別、大小及數量限制 |
 | `GET /vault/snapshot` | Cursor 分頁的所有 credential／collection metadata；每頁攜相同 `vault_revision`，不帶附件 bytes |
-| `POST /vault/batches` | 準備 metadata operations、所有 expected revisions、active 附件集合及上傳計畫，保留額度 |
+| `POST /vault/batches` | 有界 descriptor 指定 expected vault revision、操作數／預算，建立 batch，不接收 32 MiB JSON |
+| `PUT /vault/batches/{batch_id}/operations/{operation_id}` | 逐筆驗證並 stage 有簽章的 metadata、expected row revision、active 附件集合及最多 5 份上傳計畫 |
 | `PUT /vault/batches/{batch_id}/attachments/{attachment_id}` | 接收宣告長度的 raw binary envelope，檢查實際大小及預期密文 SHA-256；相同內容重試可接受 |
 | `POST /vault/batches/{batch_id}/commit` | 重檢版本、revision、owner、附件完整性及配額，在同一 transaction 內提交 |
 | `GET /vault/batches/{batch_id}` | 查詢 pending／committed／aborted／expired 狀態與提交 receipt，處理不明結果 |
@@ -252,19 +294,26 @@ HTTP body 限制在 proxy 及應用串流讀取時實施，不能只信任 Conte
 不得留下可繞過新格式保護、附件同步或整體 revision 的舊寫入路徑。
 Template 所有寫入／sync／import 增加格式能力檢查，保留 owner 隔離與 `sync_version`，未知定義不能被忽略後存回。
 
-準備請求包含 `expected_vault_revision`、metadata `operations[]` 與 `attachment_uploads[]`。
-每個 operation 指明實體種類、ID、操作、expected row revision、宣告的內容版本及必要密文；
+準備請求只有 `expected_vault_revision`、預期操作數與預算。各 operation 分開上傳及保留額度，
+最多 32 MiB 是整批的 staged metadata 上限，不是單次 HTTP JSON body。
+每個 operation 指明實體種類、ID、操作、expected row revision、宣告版本、signed state、簽章及必要密文；
 create 的 expected row revision 為 0。Credential operation 另帶完整 `active_attachment_ids`。
 上傳計畫只包含附件 ID、預定 credential ID、密文長度與密文 SHA-256，不含原始檔名、MIME 或金鑰。
 準備本身不使新紀錄可見，也不鎖住現有紀錄。
 
-提交在單一 transaction 中 compare-and-swap `vault_revision`，檢查所有 row revisions、
+提交使用條件式 UPDATE ... WHERE revision = expected RETURNING 更新整體及 row revision，檢查 affected rows；
+配額保留也使用帶上限條件的原子 UPDATE，不採 SELECT 後無條件更新。
+需要先讀再寫時以 BEGIN IMMEDIATE 建立明確 transaction，不能假設 SQLite SELECT 已啟動寫入 transaction。
+在同一 transaction 檢查操作數／operations digest、所有 row revisions、
 active 附件的歸屬及 bytes，再套用 operations、推進各 row revision 與整體 revision，標記 batch committed。
 集合 tombstone、憑證 revoke／delete 亦推進整體 revision。
 後端不能比對密文內附件參照與外部宣告；客戶端須由同一份已驗證內容產生兩者。
 重複 commit 回原 receipt，不新增附件、不再次推進 revision。競態、取消與 cleanup 同樣受 transaction 保護。
 
-回應 receipt 有 batch ID、提交後整體 revision、受影響 row 的 revision 及密文雜湊。
+必須先明確 await session.commit() 並成功，才可回傳 receipt／HTTP success；flush 或 response 後的 dependency teardown 不足以保證。
+回應前故意使 commit 失敗的測試必須得到非成功回應，重試 status 不能發現假 committed batch。
+
+回應 receipt 只有 batch ID、提交後整體 revision、受影響 row 的 ID／revision／密文雜湊、數量及有界驗證資訊。
 客戶端重讀驗證；相同 revision 的密文不符時顯示錯誤並保留修復資訊，不無條件回寫舊資料。
 若重讀已是較新 revision，則顯示資料已再被修改並重新載入，不誤判為儲存損毀或覆寫較新資料。
 API／附件回應加 `Cache-Control: no-store`；Service Worker 維持 `/api/` network-only。
@@ -278,10 +327,35 @@ API／附件回應加 `Cache-Control: no-store`；Service Worker 維持 `/api/` 
 | 422 | 不合法宣告、ID、數量、長度、雜湊或附件歸屬 |
 | 426 | 缺少或不支援的寫入協定／格式能力；提示更新客戶端 |
 
+### 4.1 SQLite 連線、清理及稽核
+
+採 WAL、synchronous=FULL、foreign_keys=ON、secure_delete=ON、busy_timeout=5000 ms。
+正式啟用 FK 前以唯讀 foreign_key_check 驗證，發現既有違規便停止 migration，另行提出修復，不自動刪資料。
+每一個 runtime／maintenance／測試連線在 transaction 之前開 FK；WAL 切換在維護階段完成並確認實際回傳模式。
+DB volume 必須是同主機可支援 SQLite locking／shared memory 的儲存，不把 DB 放在 NFS／SMB share；NAS 使用本機 Docker volume。
+SQLite／SQLAlchemy 的 legacy transaction 行為必須顯式設定，測試使用至少兩個真實連線及 commit failure，不能只用共用 fixture session。
+
+Commit 在同一 transaction 清除 batch operation ciphertext、上傳計畫及請求 payload，只保留上述 receipt，TTL 24 小時。
+Abort／expire 同樣清除 payload／reservations；已提交的正常紀錄只留在正式資料表，不在 batch 表保留副本。
+Cleanup 有限流、數量與時間界線，與 commit 鎖定協調。Receipt 過期後不自動重試不明提交，先取 snapshot 確認。
+secure_delete 不能抹除 WAL、snapshot、SSD 舊頁面或歷史備份；維護需有 checkpoint／備份保留政策，不保證安全抹除。
+
+新增 AuditAction：challenge issued／proof verified、snapshot read／export、attachment uploaded／downloaded、
+batch prepared／committed／aborted、quota denied、cleanup、signature verification failure、import complete／failed。
+後端僅記 actor／session／opaque IDs、密文大小／bucket、數量、狀態及時間；不記 proof、nonce、檔名、密文 body 或金鑰。
+客戶端簽章失敗可送有界的 ID／error code 事件，伺服器拒絕附帶內容；不視為對惡意主機的可靠告警。
+
+初版限流：challenge 每 owner 5/min、每可信來源 IP 10/min；snapshot pages 每 owner 60/min；
+附件傳輸每 owner 60/min、100 MiB/min；batch create 6/min、同 owner 最多 2 個 pending batch。
+每 owner／IP 附件並行最多 2；多 worker 使用共享／持久計數，不能以各 process memory 假裝全域限流。
+Nginx limit_req／limit_conn 是外層防線，app 另按 owner／session／bytes 控制並回 429／Retry-After；
+對預期長時間備份／還原採進度、有限退避及 proof 更新，不能把限流重試變成重複提交。
+
 ### 5. 完整備份與還原
 
 V2 容器只允許 `header.json`、`manifest.enc` 與 `attachments/{attachmentId}.bin`。
-使用有維護的 ZIP reader/writer，唯讀存取預期 entries，不解壓到檔案系統。
+使用有維護且停用動態 workers 的 ZIP reader/writer，在既有 CSP 下唯讀存取預期 entries，不解壓到檔案系統。
+禁止新增 blob: worker、unsafe-eval、外部 CDN 或放寬 script／worker CSP；需實測所選版本及 lockfile，不能憑記憶決定。
 拒絕 duplicate entries、額外檔案、非預期路徑、symlink、壓縮方法及超限宣告／實際 bytes。
 檔案路徑只使用 UUID，原始檔名與所有使用者內容都在加密 manifest。
 
@@ -291,23 +365,28 @@ Salt 為 32 random bytes、IV 為 12 random bytes，base64 編碼；只接受已
 manifest 的 AAD 為 `JSON.stringify(["credential-vault/backup", 2, backupId, 2, salt])` 的 UTF-8 bytes。
 每份備份重新產生 ID、salt 與 IV；tag 為 128 bits。
 
-Manifest 包含匯出時間、來源 credential／collection IDs、完整解密內容、狀態、到期、來源建立及更新時間，
+新備份密碼至少 12 字元，UI 及 encrypt helper 一致執行；另提供 CSPRNG 產生至少 128 bits 的復原秘密。
+舊備份仍接受其原密碼。不得為便於匯入降低新備份門檻或默默截斷密碼。
+
+Manifest 包含來源驗證公鑰、簽章、signed state、來源可信程度、匯出時間、來源 IDs、完整解密內容與建立／更新時間，
 以及每個被引用附件的來源 AAD IDs、金鑰、預期路徑、大小與密文雜湊。
 來源帳號私鑰不放入備份，也不作為還原的必要條件。
 附件可保留原本的已驗證 envelope，解密金鑰由備份密碼保護的 manifest 提供。
 
-匯出步驟：取完整含 revoked 的 metadata 快照並驗證結構，逐檔驗證雜湊／GCM，
+匯出步驟：以 bundle 的可信驗證公鑰驗證完整含 revoked 的快照簽章、外部狀態與結構，逐檔驗證雜湊／GCM／padding，
 丟棄每檔驗證用明文後將密文寫入容器。匯出結束前再次確認整體 revision 未變；
 若有更動或來源已失效，取消並重試，不宣告完整成功。Staged／未引用 retired 檔案不匯出。
 缺失集合參照依前述根集合／未分類規則正規化匯出副本，不修改來源資料。
 
 還原分成 preflight 與提交：先驗證 header、密碼、manifest、所有 entries 及每個附件的 GCM，
 逐檔丟棄明文，確認限制及配額後才建立 staged batch。
+對新格式先驗來源簽章及 signed state；legacy 來源保留未驗證 provenance，不背景替舊資料背書。
 再重新讀取附件，配置新的 credential、collection、section、field、relation target 與 attachment IDs，
 重新產生附件金鑰與 IV，依新 AAD 加密，並重建全部有效關聯。
 無法對應的來源關聯移入 `unresolvedRelatedIds` 顯示失效，不連到目標 vault 的既有同名紀錄。
 有效 status／expires 保留；server 建立時間為還原當下，來源時間保留於加密備份 provenance。
-全部 staged 完成才提交；失敗僅清理該 batch，既有資料及可見紀錄不變。
+使用目標 key bundle 導出的 RSA 公鑰與簽章私鑰產生新 signed records，全部 staged 完成才提交。
+失敗僅清理該 batch，既有資料及可見紀錄不變；不得重新從 API 取未綁定的公鑰進行整份還原。
 
 備份不依賴來源清單的 decrypted cache、單頁或固定 10,000 筆截斷。
 不能在 UI 顯示匯出成功後才發現缺檔；超限時明確回報，不截斷、不降級到 metadata-only 備份。
@@ -321,7 +400,10 @@ Manifest 包含匯出時間、來源 credential／collection IDs、完整解密�
   ID 在本次編輯工作階段保持穩定，只有明確保存才提交 v2；讀取不產生大量重寫。
 - 舊 template 轉成一個非重複 section，保留 label／required／validation 與可用的遮蔽設定。
   舊非秘密 `defaultValue` 的移除先顯示差異，由使用者明確轉換後才保存；不默默丟棄原定義。
-- V1 credential backup 仍能讀，轉換後由新 batch 還原；template `.cvault` 不得誤當 credential backup。
+- V1 credential backup 仍能讀，來源標為未驗證並保留 provenance；template `.cvault` 不得誤當 credential backup。
+- 正式資料 envelope 版本須先唯讀盤點。證明沒有 v1 後移除 runtime v1 reader；否則只提供明確 legacy mode，無 magic 不可直接 fallback。
+  新格式／無效簽章永遠不能落入 legacy；不得依過去曾清空 DB 的紀錄推定目前沒有 v1。
+  Legacy envelope 僅能承載舊文字 map；出現 sections／附件 manifest／file 欄位即拒絕，附件永遠不能走未簽章相容路徑。
 - 未知未來版本以不可編輯狀態顯示更新提示，原始密文保持不動；不猜測成 legacy。
 - 升版前做可驗證的 DB snapshot，後端與前端成套發布。所有舊寫入路徑先完成 capability gate。
   `VERSION` 是產品版本，與本規格的內容版本分開；本次文件工作不修改它。
@@ -350,6 +432,24 @@ Manifest 包含匯出時間、來源 credential／collection IDs、完整解密�
 | AC-16 | 錯誤密碼、缺檔、截斷、重複 entry、壓縮／路徑攻擊、未知 KDF 及部分超限均無可見部分匯入或假成功 | FR-09、11 |
 | AC-17 | V1 credential／template／backup fixtures 可讀及明確轉換；升級前後舊資料筆數及內容不變 | FR-12 |
 | AC-18 | DB snapshot 在附件 staged／committed 狀態下還原仍一致；正式 nginx 的 body limit、no-store 與 SW 行為實測正確 | FR-07、09、11、14 |
+| AC-19 | RSA 各用途正向向量成功、交叉 label 全數失敗，proof 無 empty-label retry；Phase 0 成套部署證據存在 | FR-15 |
+| AC-20 | API 提供另一公鑰或無效材料時不能解鎖／新寫入／還原；正常解鎖只保留導出公鑰及 non-extractable 私鑰 | FR-15 |
+| AC-21 | 只有公鑰的偽造、簽章置換、外部 active／expiry／tombstone／revision 改動均被拒絕；來源未驗證資料不獲自動簽署 | FR-16 |
+| AC-22 | 未認證／未 proof 的大 body 在 ASGI receive 第一次讀取前被拒絕；真 nginx 路徑上限、限速／並行及 chunked 邊界通過 | FR-17 |
+| AC-23 | 注入 commit failure 不回成功 receipt，正常 receipt 只在 durable commit 後可見；override fixture 不掩蓋 teardown 順序 | FR-18 |
+| AC-24 | 每個新連線 FK=1，既有 foreign_key_check 違規阻擋 migration；無效 FK 寫入失敗、真 user／credential cascade 清除 BLOB | FR-18 |
+| AC-25 | 兩個真實連線持相同 revision 時只有一個 CAS 成功，quota 亦不超收；journal=WAL、synchronous=FULL、busy_timeout 有斷言 | FR-18 |
+| AC-26 | 新備份 8／11 字元拒絕、12 字元可還原；舊短密碼備份仍可讀，復原秘密使用 CSPRNG 且至少 128 bits | FR-21 |
+| AC-27 | 多分頁／被限流 challenge 不逐出 live slots，nonce 不重用、session 不混用，長時間還原可續 proof 且不丟 staged 資料 | FR-08 |
+| AC-28 | 多帳號與並行 reservation 無法超過全域／owner 配額，低磁碟與 ENOSPC 不留假成功，metadata 亦計入容量 | FR-09 |
+| AC-29 | Commit／abort／expire 後 batch 無 ciphertext／body 副本，receipt 期滿清除；secure_delete 已設定且不宣稱抹除 WAL／備份 | FR-19 |
+| AC-30 | Snapshot／附件下載／challenge／batch 的稽核與共享限流有效，429 可續作；log 無原始檔名、秘密、proof、nonce 或 body | FR-19 |
+| AC-31 | 空檔與 bucket 邊界有正反向測試，不同原始小檔同 bucket 長度相同；原始大小／padding 損毀不能下載 | FR-21 |
+| AC-32 | 所選 ZIP library 在既有正式 CSP 下完成 round-trip，未新增 blob: worker／CDN／JS eval，也未降低 CSP | FR-20 |
+| AC-33 | 被竄改 type／isSecret 的 template 不啟用拼字檢查／autofill；所有值 input／textarea 無條件套 secretFieldProps | FR-20 |
+| AC-34 | 有正式版本盤點證據才移除 v1；沒有 magic、未知版本或壞簽章都不能靜默 fallback，legacy provenance 保留 | FR-12、16 |
+| AC-35 | 真實附件 GET 有 octet-stream、attachment、no-store、nosniff、sandbox，header 不洩漏原始檔名 | FR-06、20 |
+| AC-36 | 畫面與下載檔名均清理雙向／控制字元；下載前明文副本提示可見，壞簽章／未知來源沒有下載捷徑 | FR-20、21 |
 
 ## Dependencies
 
@@ -366,7 +466,7 @@ Manifest 包含匯出時間、來源 credential／collection IDs、完整解密�
 
 ## References
 
-- [ADR-003](../decisions/003-structured-credentials-and-attachments.md)。
+- [ADR-003](../decisions/003-structured-credentials-and-attachments.md)、[ADR-004](../decisions/004-vault-authenticity-and-key-trust.md)。
 - [PLAN-004](../plans/PLAN-004-structured-credentials-and-attachments.md)。
 - [官方來源與研究紀錄](../research/2026-11-05-structured-vault-use-cases.md)。
 - [SPEC-001](SPEC-001-template-system.md)、[SPEC-002](SPEC-002-backend-template-api.md)、[SPEC-003](SPEC-003-e2ee-architecture.md)。

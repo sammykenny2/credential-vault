@@ -47,7 +47,7 @@ Use [000-template.md](./000-template.md) as the starting point for new plans.
 | Plan | Title | Status | Related Spec |
 |------|-------|--------|--------------|
 | [000-template](./000-template.md) | Template | - | - |
-| [PLAN-004](./PLAN-004-structured-credentials-and-attachments.md) | 結構化憑證、集合與加密附件 | Draft | [SPEC-004](../specs/SPEC-004-structured-credentials-and-attachments.md) |
+| [PLAN-004](./PLAN-004-structured-credentials-and-attachments.md) | Phase 0 安全 gate 與結構化憑證／加密附件實作 | Draft; gate closed | [SPEC-004](../specs/SPEC-004-structured-credentials-and-attachments.md) |
 <!-- Add new plans above this line -->
 
 ## For AI Agents

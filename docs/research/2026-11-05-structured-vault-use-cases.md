@@ -41,6 +41,25 @@
 - AAD 提供內容與身分的綁定，不是作者簽章；惡意前端與整份快照的惡意回放需要另行處理。
 - 附件配額、保留時間與集合深度是本專案的初版設計值，並非上述平台的限制。
 
+## 實作約束的一手來源
+
+以下查閱日期皆為 2026-11-05，只記錄協定及框架約束；尚未部署修補的利用流程不在此記錄。
+
+- [W3C Web Crypto](https://www.w3.org/TR/2017/REC-WebCryptoAPI-20170126/)：OAEP label、ECDSA 與 GCM
+  是不同操作；ADR-004 另定用途 domain、受保護的驗證信任根與 signed state，不能把可解密等同內容作者已驗證。
+- [SQLite foreign keys](https://www.sqlite.org/foreignkeys.html)：FK enforcement 需要明確啟用；
+  [SQLAlchemy SQLite](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#foreign-key-support)
+  說明逐連線啟用與 transaction 控制。規格要求 preflight、真連線及反向測試。
+- [SQLite WAL](https://www.sqlite.org/wal.html) 與 [PRAGMA](https://www.sqlite.org/pragma.html)：
+  journal／durability／secure_delete 必須確認實際值；WAL 需要同主機儲存，不能假設 NAS 的網路檔案系統可用。
+  DELETE／secure_delete 不提供歷史 snapshot、WAL 或 SSD 的抹除保證。
+- [FastAPI Request](https://fastapi.tiangolo.com/advanced/using-request-directly/) 與
+  [dependency lifecycle](https://fastapi.tiangolo.com/advanced/advanced-dependencies/)：
+  直接接收 Request 需要自行驗證資料；提交 receipt 必須以明確成功 commit 為前提，不把 teardown 當作 durable success。
+
+上述是設計依據。原稿審閱提供的合成／本機實測未當作 NAS 或執行中服務的驗證；修正版仍需獨立重審。
+
 ## 處理狀態
 
-2026-11-05：整理為待審閱的 ADR／SPEC／PLAN。尚未實作、遷移或執行效能及動態安全測試。
+2026-11-05：原稿外部審閱後新增 ADR-004、Phase 0 gate 與驗收條件。附件／集合／簽章格式尚未實作，
+未執行正式遷移、NAS 負載或動態服務測試。既有服務的小範圍修補與本地測試在 PLAN 中分開追蹤。

@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed（2026-11-05）。本文件記錄待審閱的設計，尚未實作；建立文件不代表核准部署或資料遷移。
+Proposed（2026-11-05，外部審閱後修訂）。格式定案受 [ADR-004](004-vault-authenticity-and-key-trust.md) 及 PLAN Phase 0 約束，尚未通過 gate；建立文件不代表已核准或已部署。
 
 ## Context
 
@@ -37,13 +37,17 @@ Apple team、GCP project、Cloudflare account 等背景資訊，會對應多份�
 - 憑證內容升為 `schemaVersion: 2`；集合內容從 `schemaVersion: 1` 開始。
 - Template 定義、localStorage 格式與 template 匯出格式各自升至 v2。
 - `sync_version`、資料列 `revision` 與內容格式版本分開，不混用。
-- 既有憑證的 crypto blob v2 與 vault KDF v2 保留。集合使用獨立 domain 的加密 envelope。
+- KDF v2 保留；新 credential 使用有獨立 OAEP label 的 blob v3，collection 使用有 label 的 envelope v2。
+  舊 v1／v2 僅在盤點後的明確 legacy 模式讀取；不是任意未知資料的 fallback。
 - 後端只記錄宣告的內容版本；瀏覽器負責解密後的嚴格 runtime validation。
 - 新版寫入協定要求版本能力與 revision；拒絕舊客戶端覆寫新格式。版本能力不是權限憑證。
 
-### 3. 每個附件版本使用獨立 AES 金鑰
+### 3. 簽署內容來源，每個附件版本使用獨立 AES 金鑰
 
+- 先依 ADR-004 從 KEK 保護的私鑰導出並驗證公鑰；新增 KEK 保護的 ECDSA P-256 金鑰，簽署密文身分、版本、雜湊、revision 與狀態。
+- 只有通過來源簽章、signed state、雜湊、GCM 及 schema 的內容才稱為已驗證 manifest。
 - 瀏覽器為每次新增或替換產生新的附件 UUID、AES-256 金鑰與 96-bit IV，使用 128-bit GCM tag。
+- 附件 envelope v2 把原始長度與 bytes 補至 4 KiB bucket 後加密；接受 bucket／數量／時間洩漏，不公開精確長度。
 - 附件金鑰、原始檔名、MIME、原始大小及密文 SHA-256 放在憑證加密內容的附件 manifest。
 - 附件 AAD 綁定協定 domain、附件格式版本、憑證 ID、欄位實例 ID 與附件 ID。
   顯示名稱、section 名稱、排序及集合路徑不作為 AAD。
@@ -58,21 +62,27 @@ Apple team、GCP project、Cloudflare account 等背景資訊，會對應多份�
 既有 `app.maintenance` 的 SQLite online backup 可涵蓋同一資料庫內的附件與 metadata；
 發布前仍須驗證 snapshot、還原、資料庫成長與 NAS 實際負載。
 
-預設每檔 10 MiB、每筆最多 5 個附件、每使用者 250 MiB 附件密文與保留空間。
+SQLite 明定 WAL、synchronous=FULL、foreign_keys=ON、secure_delete=ON 與 busy_timeout；啟用前先 foreign_key_check，不自動修復違規。
+預設每檔 10 MiB、每筆最多 5 個附件、每使用者 250 MiB padded 附件密文與保留空間。
+另有所有帳號合計 2 GiB 邏輯配額及至少 1 GiB 的 DB volume free-space 保留，metadata／staging 也受控制。
 這些是待效能驗證的可設定初始值，前後端共用能力資訊；保留舊附件也占配額。
 
 ### 5. 以 staged batch 與 revision 保護寫入
 
-先保存待提交的密文 metadata 與上傳計畫，再接收附件密文，最後在單一 SQLite transaction 內
+每次 body 先通過認證／proof／能力及限流，再以原始 Request 串流計數；descriptor 限 64 KiB，
+operation 限 1 MiB，整批 32 MiB 是 staged 合計而非單一 JSON。逐筆保存密文 metadata 及上傳計畫，再接收附件密文，最後在單一 SQLite transaction 內
 檢查 revision、附件完整性與配額，提交所有 metadata 及附件狀態。
 新紀錄不必先建立可見的空殼；匯入也使用相同機制。
 
-- 憑證與集合各有 revision，使用者另有整體 `vault_revision`。
-  所有提交及直接狀態變更均以整體 revision 作 compare-and-swap，避免集合圖與備份競態。
-- 上傳、提交及 vault 資料的破壞性操作要求 `VaultProvenUser`；所有讀寫都以 owner 過濾。
+- 憑證與集合各有 revision，使用者另有整體 vault_revision；以 UPDATE WHERE revision = expected RETURNING 檢查 affected rows。
+  配額使用條件式原子 UPDATE；需要讀後寫則 BEGIN IMMEDIATE，不以 SELECT 後無條件 UPDATE 充當 CAS。
+- 必須明確 commit 成功才回 receipt，不能依賴 flush 或 response 後的 dependency teardown。
+- 上傳、提交及破壞性操作使用 ADR-004 的 session-bound 簽章 proof v2；所有讀寫以 owner 過濾。
+  多槽 challenge 不覆寫 live proof；nonce、snapshot、上下載、batch 都有限流與只含 ID／密文大小的稽核。
 - 提交可重試且具冪等性。衝突回傳 409，不能靜默重試覆寫其他修改。
 - 新附件在提交前不取代舊附件；被替換附件在提交後保留 24 小時，未提交 batch 亦於 24 小時過期。
   清理由明確狀態與時間判斷，不解析密文猜測引用，也不刪除目前 active 附件。
+- Commit／abort／expire 同時清除 staged metadata payload，只留 24 小時的最小 receipt；不留下永久密文副本。
 - 提交後重讀失敗或網路結果不明時先查 batch 狀態，不沿用現有的無條件回滾覆寫做法。
 
 ### 6. 集合結構與關聯保留在密文內
@@ -81,29 +91,33 @@ Apple team、GCP project、Cloudflare account 等背景資訊，會對應多份�
 後端不建立可讀的集合樹或紀錄關聯表。完整解鎖快照由客戶端驗證深度、循環與同 owner 的目標。
 整體 revision 防止兩個誠實客戶端依不同快照提交互相衝突的結構變更；後端無法驗證密文內的圖。
 
-刪除集合寫入 tombstone，不級聯刪除任何憑證、附件或子集合。
+刪除集合寫入有簽章的 tombstone，不級聯刪除任何憑證、附件或子集合；驗證前不信任外部旗標。
 子集合的失效 parent 以根層顯示，憑證的失效集合以「未分類」顯示，下次保存時正規化。
 尚未載入的目標不能提早判定為遺失。關聯目標刪除時顯示「目標已不存在」，不刪除來源紀錄。
 
 ### 7. 備份是包含附件的獨立可還原封裝
 
 `.cvault` v2 使用 ZIP STORE 容器：固定名稱的加密 manifest 與 UUID 路徑的附件密文。
-備份密碼以既有 Argon2id KDF v2 導出金鑰，加密 manifest；manifest 包含完整憑證內容、
+新備份密碼至少 12 字元，並提供 CSPRNG 產生至少 128 bits 的復原秘密。
+備份密碼以既有 Argon2id KDF v2 導出金鑰，加密 manifest；manifest 包含來源簽章、驗證公鑰、可信程度及完整憑證內容、
 附件解密金鑰、來源 AAD 身分、集合、關聯、狀態與各附件密文的大小及雜湊。
 附件保持其已驗證的 AES-GCM 密文，故備份不依賴來源帳號私鑰，也不需一次解密全部檔案。
 
 完整匯出讀取一致的全量快照，包含 revoked 紀錄，不能只備份清單目前載入的頁面。
-還原先驗證全部容器內容，再重新配置 ID、重建關聯、重新加密附件，最後以單一 batch 提交。
+ZIP 必須在現有 CSP 下運作，不能放寬 worker／script policy；選型以實測決定。
+還原先驗來源簽章、外部狀態及全部容器，再以目標 bundle 的已驗證金鑰重新配置 ID、重建關聯、加密及簽署，最後提交單一 batch。
 缺檔、未知版本、驗證失敗或配額不足都不能報告完整成功。舊版 v1 備份仍可讀。
 
 ### 8. 保留資料遷移與安全限制
 
 Alembic 採新增式 migration；既有密文不在後端轉換、不清空資料庫。
-瀏覽器將舊內容轉成一個 section，保留原始字串與 metadata；首次明確保存才寫回 v2。
+瀏覽器將舊內容轉成一個 section，保留原始字串與 metadata；首次明確保存才寫回 payload v2。
+舊資料標為來源未驗證，不以能解密或批次重新簽署冒充原作者證明。先唯讀盤點正式 envelope，才決定是否可移除 v1 reader。
 舊資料未保存的遮蔽設定無法還原，採保守遮蔽並允許調整。發布前備份與舊版寫入封鎖是必要條件。
 
 此設計不防禦解鎖中的 XSS、惡意擴充套件或遭替換的前端程式。
-AEAD／AAD 不代表作者簽章，也不防禦惡意伺服器回放整份舊快照。
+來源完整性由 ADR-004 的客戶端簽章提供，不由 AEAD／AAD 取代；仍不防禦刪漏資料或整份合法舊快照回放。
+下載前提示明文副本；畫面與下載檔名均清理控制／雙向文字字元。Server 附件 GET 使用 octet-stream、attachment、no-store、nosniff 與 sandbox。
 下載產生的明文副本、SQLite 舊頁面及歷史備份不具安全抹除保證；vault 的 revoked 狀態不會撤銷外部服務金鑰。
 
 ## Consequences
@@ -124,7 +138,7 @@ AEAD／AAD 不代表作者簽章，也不防禦惡意伺服器回放整份舊快
 
 ### Neutral
 
-- 認證方式、vault 密碼 KDF 與 RSA 金鑰階層沿用現況。
+- 登入方式與 vault KDF 沿用現況；新增 key bundle／簽章與 proof v2，既有服務修補先獨立驗證發版。
 - 一般 template 定義仍為伺服器可讀 metadata；本次 v2 template 移除所有值的預設設定，避免放入秘密。
 - 分享、ACL 繼承、無限巢狀、版本歷史、外部金鑰自動輪替與秘密注入均不在本次範圍。
 
@@ -142,6 +156,7 @@ AEAD／AAD 不代表作者簽章，也不防禦惡意伺服器回放整份舊快
 
 ## References
 
+- [ADR-004](004-vault-authenticity-and-key-trust.md)：金鑰信任、用途隔離、來源簽章與 padding。
 - [SPEC-004](../specs/SPEC-004-structured-credentials-and-attachments.md)：需求、協定與驗收。
 - [PLAN-004](../plans/PLAN-004-structured-credentials-and-attachments.md)：實作順序、測試與發布。
 - [2026-11-05 研究紀錄](../research/2026-11-05-structured-vault-use-cases.md)：一手來源及設計推論。
