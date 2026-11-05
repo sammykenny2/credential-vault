@@ -51,8 +51,10 @@ export async function refreshAccessToken(): Promise<string> {
   return refreshPromise
 }
 
-// Requests that must never trigger a refresh-and-retry loop
-const NO_RETRY_PATHS = ['/auth/refresh', '/auth/logout']
+// Requests that must never trigger a refresh-and-retry loop. Logout is not one of
+// them: with an expired access token it would fail, and the refresh cookie would
+// quietly keep the session alive. `_retry` limits it to one attempt like the rest.
+const NO_RETRY_PATHS = ['/auth/refresh']
 
 // Response interceptor - handle token refresh
 api.interceptors.response.use(

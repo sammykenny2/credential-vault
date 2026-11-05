@@ -69,6 +69,25 @@ async def get_current_active_user(
     return current_user
 
 
+# The frontend matches this to offer signing in again, so keep it stable. It is a
+# 403, not a 401: a 401 would make the client refresh, which cannot help.
+RECENT_LOGIN_REQUIRED = "recent_login_required"
+
+
+async def get_recently_signed_in_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
+    """Ensure this session signed in recently, for actions a stale token must not take."""
+    payload = SecurityService.decode_token(token)
+    if payload is None or not SecurityService.is_recent_login(payload):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=RECENT_LOGIN_REQUIRED,
+        )
+    return current_user
+
+
 async def get_current_admin_user(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> User:
@@ -163,6 +182,7 @@ async def get_vault_proven_admin_user(
 
 # Type aliases for cleaner dependency injection
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+RecentlySignedInUser = Annotated[User, Depends(get_recently_signed_in_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 VaultProvenUser = Annotated[User, Depends(get_vault_proven_user)]
 VaultSigningUser = Annotated[User, Depends(get_vault_signing_user)]

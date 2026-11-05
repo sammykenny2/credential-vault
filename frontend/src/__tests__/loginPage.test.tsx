@@ -67,6 +67,14 @@ describe('LoginPage first run', () => {
     container.remove()
   })
 
+  it('offers a password sign-in, which is the only way back for a password-only admin', async () => {
+    getStatus.mockResolvedValue({ is_initialized: true })
+    await renderLogin()
+
+    await waitForText('Sign in with Google')
+    expect(container.querySelector('a[href="/admin/login"]')).not.toBeNull()
+  })
+
   it('says the first Google sign-in becomes the administrator', async () => {
     getStatus.mockResolvedValue({ is_initialized: false })
     await renderLogin()

@@ -196,6 +196,12 @@ export default function LoginPage() {
           </span>
         </button>
 
+        <p className="text-sm text-center mt-4">
+          <Link to="/admin/login" className="text-gray-500 underline">
+            Administrator? Sign in with a password
+          </Link>
+        </p>
+
         {/* Info */}
         <p className="text-xs text-gray-400 text-center mt-6">
           Your credentials are encrypted end-to-end. The server never sees your plaintext data.

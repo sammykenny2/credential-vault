@@ -1,8 +1,67 @@
 """Tests for security utilities."""
 
-from argon2 import PasswordHasher
+import time
 
-from app.core.security import SecurityService
+import pytest
+from argon2 import PasswordHasher
+from fastapi import Response
+
+from app.core.security import RECENT_LOGIN_SECONDS, REFRESH_COOKIE_NAME, SecurityService
+from app.core.session import issue_session, rotate_session
+from app.models.user import User
+
+
+class TestRecentLogin:
+    """The check behind creating vault keys."""
+
+    def test_the_boundary(self):
+        now = int(time.time())
+        assert SecurityService.is_recent_login({"auth_time": now})
+        # A second to spare, so the clock moving on during the test cannot fail it.
+        assert SecurityService.is_recent_login({"auth_time": now - RECENT_LOGIN_SECONDS + 1})
+        assert not SecurityService.is_recent_login({"auth_time": now - RECENT_LOGIN_SECONDS - 1})
+
+    @pytest.mark.parametrize("claim", [None, True, "0", 1.5, [], {}])
+    def test_anything_but_an_integer_is_not_recent(self, claim):
+        assert not SecurityService.is_recent_login({"auth_time": claim})
+
+    def test_no_claim_is_not_recent(self):
+        assert not SecurityService.is_recent_login({})
+
+    def test_a_time_in_the_future_is_not_recent(self):
+        assert not SecurityService.is_recent_login({"auth_time": int(time.time()) + 3600})
+
+    @staticmethod
+    def _payloads(response: Response, token: str) -> tuple[dict, dict]:
+        cookie = response.headers["set-cookie"].split(";")[0]
+        assert cookie.startswith(f"{REFRESH_COOKIE_NAME}=")
+        refresh = cookie.split("=", 1)[1]
+        return SecurityService.decode_token(token), SecurityService.decode_token(refresh)
+
+    def test_signing_in_stamps_both_tokens_with_now(self):
+        response = Response()
+
+        token = issue_session(User(id="user-1", token_version=0), response)
+
+        for payload in self._payloads(response, token.access_token):
+            assert abs(payload["auth_time"] - time.time()) < 60
+
+    def test_rotating_keeps_the_original_sign_in_time(self):
+        response = Response()
+
+        token = rotate_session(User(id="user-1", token_version=0), response, 1234)
+
+        for payload in self._payloads(response, token.access_token):
+            assert payload["auth_time"] == 1234
+
+    @pytest.mark.parametrize("claim", [None, "1234", True])
+    def test_rotating_never_invents_a_sign_in_time(self, claim):
+        response = Response()
+
+        token = rotate_session(User(id="user-1", token_version=0), response, claim)
+
+        for payload in self._payloads(response, token.access_token):
+            assert "auth_time" not in payload
 
 
 class TestJWT:

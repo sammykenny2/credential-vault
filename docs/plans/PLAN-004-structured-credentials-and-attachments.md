@@ -42,7 +42,7 @@
 - [x] Task 0.4a：實作 ADR-004 的 key bundle、紀錄簽章、proof v2 與 RSA-only vault 的一次性升級（既有 credential）。
 - [ ] Task 0.4b：上述實作與 4 KiB padding 設計獲獨立重審，記錄意見及解決狀態。
   2026-11-05 已有兩輪獨立審查，提出的問題已修正，最後一批小修正未再審；padding 尚未審閱。
-- [ ] Task 0.4c：決定 `POST /auth/vault/setup` 的 step-up。目前只要 session token，偷到 token 的人可在沒有 vault 的帳號上安裝自己的金鑰，再通過 `VaultProvenAdmin`。
+- [x] Task 0.4c：`POST /auth/vault/setup` 要求該 session 在 10 分鐘內實際登入。登入時間寫在 token 的 `auth_time`，刷新時原樣保留、不重算，沒有這個 claim 的舊 token 一律拒絕，並回 403 `recent_login_required`。這只縮短窗口：10 分鐘內被偷的 token 仍可在沒有 vault 的帳號上安裝金鑰；要完全擋住需在設定時重新走 Google 驗證。
 - [ ] Task 0.5：先盤點正式 envelope 版本、DB foreign_key_check 與 journal／FK 預設，只讀取得結果。
   沒有證據不能刪 v1 reader；有 FK 違規時另提修復，禁止清空或自動刪 row。
 - [ ] Task 0.6：記錄修補 release／部署版本與瀏覽器重載證據；未部署的利用流程與 PoC 留在本機，
@@ -376,6 +376,7 @@ npm run build
 | 2026-11-05 | 審閱 `97224aa`／`7c7dd05` 後修正：公鑰不符不再顯示成密碼錯誤、未知 blob 版本不落入 v1、自動上鎖清 proof；設計改為強制升級與無狀態 proof。實作 key bundle、紀錄簽章（含 status 與 revision）、proof v1／v2 及一次性升級，寫入改為條件式 CAS 並在回應前明確 commit |
 | 2026-11-05 | 獨立審查後修正：只簽使用者看過的紀錄、重讀比對完整簽章狀態、回滾標記改用導出公鑰為鍵、proof v1 不存每次狀態且只限升級、解密內容檢查形狀、upgrade／setup 條件式寫入。第二輪再修：migration 不重建表、proof v1 混入每位使用者金鑰、失敗後重新載入清單，並補 migration 與頁面測試。端到端以暫存資料庫驗證；未部署。Setup 的 step-up 待決定 |
 | 2026-11-05 | 既有服務修補本地驗證：pytest 242 passed（Windows private tmp 需完整使用者權限）、Vitest 219 passed（maxWorkers=2）、ruff／mypy／ESLint／production build 通過。文件 78 個本機連結、21 個 FR、36 個 AC 與 Phase 0～8 檢查通過；不等於新格式實作或部署驗收 |
+| 2026-11-05 | 完成 Task 0.4c：vault setup 要求該 session 10 分鐘內實際登入，token 帶 `auth_time`，刷新時保留不重算；舊 token 一律拒絕。獨立審查後再修：`/auth/verify-password` 加限流、閒置後的登出會先刷新再登出、登入頁加管理員密碼登入連結。pytest 328、Vitest 350 通過，另以三種故意改壞確認測試會失敗 |
 
 ---
 

@@ -30,6 +30,11 @@ DUMMY_PASSWORD_HASH = password_hasher.hash("not-a-real-password")
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
 
+# How long after signing in a session may still create vault keys. New keys pass
+# every later vault proof, so a token stolen from an idle session must not be able
+# to install them. This narrows the window; it does not close it.
+RECENT_LOGIN_SECONDS = 10 * 60
+
 
 class SecurityService:
     """Security service for JWT, password and cookie operations."""
@@ -64,8 +69,14 @@ class SecurityService:
         return password_hasher.check_needs_rehash(hashed)
 
     @staticmethod
-    def create_access_token(user_id: str, token_version: int = 0) -> str:
-        """Create a JWT access token bound to the user's current token version."""
+    def create_access_token(
+        user_id: str, token_version: int = 0, auth_time: int | None = None
+    ) -> str:
+        """Create a JWT access token bound to the user's current token version.
+
+        ``auth_time`` is when the user signed in, in epoch seconds. A token without
+        it never counts as a recent sign-in.
+        """
         expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
         payload = {
             "sub": user_id,
@@ -73,10 +84,14 @@ class SecurityService:
             "type": "access",
             "ver": token_version,
         }
+        if auth_time is not None:
+            payload["auth_time"] = auth_time
         return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
     @staticmethod
-    def create_refresh_token(user_id: str, token_version: int = 0) -> str:
+    def create_refresh_token(
+        user_id: str, token_version: int = 0, auth_time: int | None = None
+    ) -> str:
         """Create a JWT refresh token bound to the user's current token version."""
         expire = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
         payload = {
@@ -85,6 +100,8 @@ class SecurityService:
             "type": "refresh",
             "ver": token_version,
         }
+        if auth_time is not None:
+            payload["auth_time"] = auth_time
         return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
     @staticmethod
@@ -101,12 +118,27 @@ class SecurityService:
         return dict(payload)
 
     @staticmethod
-    def create_tokens(user_id: str, token_version: int = 0) -> tuple[str, str]:
+    def create_tokens(
+        user_id: str, token_version: int = 0, auth_time: int | None = None
+    ) -> tuple[str, str]:
         """Create both access and refresh tokens."""
         return (
-            SecurityService.create_access_token(user_id, token_version),
-            SecurityService.create_refresh_token(user_id, token_version),
+            SecurityService.create_access_token(user_id, token_version, auth_time),
+            SecurityService.create_refresh_token(user_id, token_version, auth_time),
         )
+
+    @staticmethod
+    def is_recent_login(payload: dict) -> bool:
+        """True when this token's own session signed in within RECENT_LOGIN_SECONDS.
+
+        Uses the token's claim rather than ``users.last_login_at``, so the user
+        signing in on another device does not make a stolen older token count.
+        """
+        auth_time = payload.get("auth_time")
+        if type(auth_time) is not int:
+            return False
+        age = int(datetime.now(UTC).timestamp()) - auth_time
+        return 0 <= age <= RECENT_LOGIN_SECONDS
 
     @staticmethod
     def set_refresh_cookie(response: Response, refresh_token: str) -> None:

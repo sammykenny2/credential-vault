@@ -26,6 +26,7 @@ class TokenPayload(BaseModel):
     exp: int
     type: str  # "access" or "refresh"
     ver: int = 0  # users.token_version at issue time
+    auth_time: int | None = None  # when the user signed in; survives a refresh
 
 
 class GoogleOAuthCallback(BaseModel):

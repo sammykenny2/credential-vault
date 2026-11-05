@@ -2,11 +2,17 @@
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.api.deps import CurrentUser, DbSession, VaultProvenUser, VaultUpgradingUser
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    RecentlySignedInUser,
+    VaultProvenUser,
+    VaultUpgradingUser,
+)
 from app.config import get_settings
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import DUMMY_PASSWORD_HASH, REFRESH_COOKIE_NAME, SecurityService
-from app.core.session import issue_session
+from app.core.session import issue_session, rotate_session
 from app.core.vault_proof import (
     PROOF_TTL_SECONDS,
     SIGNED_PROOF_VERSION,
@@ -137,7 +143,7 @@ async def refresh_session(
             detail="Session has been revoked",
         )
 
-    token = issue_session(user, response)
+    token = rotate_session(user, response, payload.get("auth_time"))
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -190,12 +196,18 @@ async def get_current_user_info(current_user: CurrentUser):
 
 
 @router.post("/verify-password")
+@limiter.limit(AUTH_RATE_LIMIT)
 async def verify_password(
+    request: Request,
     data: VerifyPasswordRequest,
     current_user: CurrentUser,
     db: DbSession,
 ):
-    """Verify user's password (for sensitive operations like linking Google account)."""
+    """Verify user's password (for sensitive operations like linking Google account).
+
+    Limited like login: a stale token could otherwise guess the password here at
+    full speed, then sign in for real and pass the recent sign-in check.
+    """
     if not current_user.hashed_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -369,7 +381,7 @@ async def vault_challenge(current_user: CurrentUser, db: DbSession):
 async def setup_vault(
     request: Request,
     data: VaultSetupRequest,
-    current_user: CurrentUser,
+    current_user: RecentlySignedInUser,
     db: DbSession,
 ):
     """Set up E2EE vault keys for user.
@@ -377,6 +389,9 @@ async def setup_vault(
     Called after first login to establish the user's keys. The key bundle is
     encrypted with the user's vault password (client-side); a new vault is
     signed from the start, so it never has unsigned records.
+
+    Needs a recent sign-in: whoever installs the keys passes every later vault
+    proof, and an account with no vault has no proof to ask for instead.
     """
     user_service = UserService(db)
     configured = await user_service.setup_vault_keys(

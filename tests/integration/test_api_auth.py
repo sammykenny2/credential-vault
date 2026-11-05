@@ -1,10 +1,16 @@
 """Integration tests for authentication API endpoints."""
 
+import time
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from argon2 import PasswordHasher
 from httpx import AsyncClient
 
-from app.core.security import SecurityService
+from app.config import Settings
+from app.core.security import RECENT_LOGIN_SECONDS, SecurityService
+from app.main import app
 from app.models.user import UserRole
 from app.services.user import UserService
 from tests.vault_helpers import new_signing_public_key
@@ -28,7 +34,7 @@ class TestAuthAPI:
         )
         await db_session.commit()
 
-        access_token = SecurityService.create_access_token(user.id)
+        access_token = SecurityService.create_access_token(user.id, auth_time=int(time.time()))
         return access_token, user.id
 
     @pytest.mark.asyncio
@@ -264,6 +270,242 @@ class TestAuthAPI:
         )
         assert response.status_code == 400
         assert "already configured" in response.json()["detail"]
+
+
+VAULT_KEYS = {
+    "public_key": "test-public-key-base64",
+    "encrypted_private_key": "test-encrypted-private-key-base64",
+    "key_salt": "test-salt-base64",
+}
+
+
+class TestVaultSetupNeedsRecentSignIn:
+    """A stale token must not install keys, which would pass every later vault proof."""
+
+    @staticmethod
+    async def _new_user(db_session, email="recent@example.com"):
+        user = await UserService(db_session).create_oauth_user(
+            email=email, display_name="Recent", google_id=f"google-{email}"
+        )
+        await db_session.commit()
+        return user
+
+    @staticmethod
+    async def _setup(client: AsyncClient, token: str):
+        return await client.post(
+            "/api/v1/auth/vault/setup",
+            headers={"Authorization": f"Bearer {token}"},
+            json={**VAULT_KEYS, "signing_public_key": new_signing_public_key()},
+        )
+
+    @staticmethod
+    async def _assert_refused_and_nothing_stored(client: AsyncClient, token: str, response):
+        assert response.status_code == 403
+        assert response.json()["detail"] == "recent_login_required"
+        keys = await client.get(
+            "/api/v1/auth/vault/keys", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert keys.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_within_the_window_is_allowed(self, client: AsyncClient, db_session):
+        user = await self._new_user(db_session)
+        token = SecurityService.create_access_token(
+            user.id, auth_time=int(time.time()) - RECENT_LOGIN_SECONDS + 60
+        )
+
+        response = await self._setup(client, token)
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_past_the_window_is_refused(self, client: AsyncClient, db_session):
+        user = await self._new_user(db_session)
+        token = SecurityService.create_access_token(
+            user.id, auth_time=int(time.time()) - RECENT_LOGIN_SECONDS - 60
+        )
+
+        response = await self._setup(client, token)
+
+        await self._assert_refused_and_nothing_stored(client, token, response)
+
+    @pytest.mark.asyncio
+    async def test_a_token_from_before_this_check_is_refused(self, client: AsyncClient, db_session):
+        user = await self._new_user(db_session)
+        token = SecurityService.create_access_token(user.id)
+
+        response = await self._setup(client, token)
+
+        await self._assert_refused_and_nothing_stored(client, token, response)
+
+    @pytest.mark.asyncio
+    async def test_refreshing_does_not_make_a_session_recent(self, client: AsyncClient, db_session):
+        """Otherwise a stolen refresh cookie could reopen the window at any time."""
+        user = await self._new_user(db_session)
+        signed_in_at = int(time.time()) - RECENT_LOGIN_SECONDS - 60
+        refresh = SecurityService.create_refresh_token(user.id, auth_time=signed_in_at)
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"refresh_token={refresh}"}
+        )
+        assert refreshed.status_code == 200
+        token = refreshed.json()["access_token"]
+        assert SecurityService.decode_token(token)["auth_time"] == signed_in_at
+
+        rotated = refreshed.cookies.get("refresh_token")
+        assert SecurityService.decode_token(rotated)["auth_time"] == signed_in_at
+
+        response = await self._setup(client, token)
+
+        await self._assert_refused_and_nothing_stored(client, token, response)
+
+    @pytest.mark.asyncio
+    async def test_refreshing_an_older_token_does_not_add_a_sign_in_time(
+        self, client: AsyncClient, db_session
+    ):
+        user = await self._new_user(db_session)
+        refresh = SecurityService.create_refresh_token(user.id)
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"refresh_token={refresh}"}
+        )
+        assert refreshed.status_code == 200
+        token = refreshed.json()["access_token"]
+        assert "auth_time" not in SecurityService.decode_token(token)
+
+        response = await self._setup(client, token)
+
+        await self._assert_refused_and_nothing_stored(client, token, response)
+
+    @pytest.mark.asyncio
+    async def test_refreshing_keeps_a_recent_session_able_to_set_up(
+        self, client: AsyncClient, db_session
+    ):
+        """The app gets its access token by refreshing after a Google sign-in."""
+        user = await self._new_user(db_session)
+        refresh = SecurityService.create_refresh_token(user.id, auth_time=int(time.time()))
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"refresh_token={refresh}"}
+        )
+
+        response = await self._setup(client, refreshed.json()["access_token"])
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_signing_in_elsewhere_does_not_help_a_stolen_older_token(
+        self, client: AsyncClient, db_session
+    ):
+        """The check reads the token's own sign-in, not the account's last login."""
+        user = await self._new_user(db_session)
+        token = SecurityService.create_access_token(
+            user.id, auth_time=int(time.time()) - RECENT_LOGIN_SECONDS - 60
+        )
+        user.last_login_at = datetime.now(UTC)
+        await db_session.commit()
+
+        response = await self._setup(client, token)
+
+        await self._assert_refused_and_nothing_stored(client, token, response)
+
+    @pytest.mark.asyncio
+    async def test_a_real_sign_in_can_set_up(self, client: AsyncClient, db_session):
+        password = "correct-horse-battery"
+        user = await self._new_user(db_session, email="breakglass@example.com")
+        user.role = UserRole.ADMIN
+        user.hashed_password = SecurityService.hash_password(password)
+        await db_session.commit()
+
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "breakglass@example.com", "password": password},
+        )
+        assert login.status_code == 200
+        token = login.json()["access_token"]
+        assert abs(SecurityService.decode_token(token)["auth_time"] - time.time()) < 60
+
+        response = await self._setup(client, token)
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_a_google_sign_in_can_set_up_after_the_apps_refresh(self, client: AsyncClient):
+        settings = Settings(
+            _env_file=None,
+            app_env="testing",
+            google_client_id="client-id",
+            google_client_secret="client-secret",
+        )
+        identity = {
+            "google_id": "google-new",
+            "email": "new-google@example.com",
+            "display_name": "New",
+        }
+        with (
+            patch("app.api.v1.oauth.get_settings", return_value=settings),
+            patch(
+                "app.api.v1.oauth.exchange_google_code",
+                new_callable=AsyncMock,
+                return_value=identity,
+            ),
+        ):
+            signed_in = await client.post(
+                "/api/v1/oauth/google/callback",
+                json={"code": "code", "redirect_uri": "http://test/login"},
+            )
+        assert signed_in.status_code == 200
+        refresh = signed_in.cookies.get("refresh_token")
+        assert abs(SecurityService.decode_token(refresh)["auth_time"] - time.time()) < 60
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"refresh_token={refresh}"}
+        )
+
+        response = await self._setup(client, refreshed.json()["access_token"])
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_creating_the_first_admin_can_set_up(self, client: AsyncClient):
+        created = await client.post(
+            "/api/v1/setup/admin",
+            json={"email": "first@example.com", "password": "correct-horse-battery"},
+        )
+        assert created.status_code == 200
+
+        response = await self._setup(client, created.json()["access_token"])
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_password_guessing_with_a_token_is_rate_limited(
+        self, client: AsyncClient, db_session
+    ):
+        """It would otherwise be a way around this check for a password account."""
+        user = await self._new_user(db_session)
+        user.hashed_password = SecurityService.hash_password("correct-horse-battery")
+        await db_session.commit()
+        token = SecurityService.create_access_token(user.id)
+
+        app.state.limiter.reset()
+        app.state.limiter.enabled = True
+        try:
+            codes = [
+                (
+                    await client.post(
+                        "/api/v1/auth/verify-password",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"password": "wrong-guess"},
+                    )
+                ).status_code
+                for _ in range(11)
+            ]
+        finally:
+            app.state.limiter.enabled = False
+            app.state.limiter.reset()
+
+        assert codes == [401] * 10 + [429]
 
 
 class TestBreakGlassLogin:

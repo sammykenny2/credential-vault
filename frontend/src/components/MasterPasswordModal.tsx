@@ -41,6 +41,12 @@ export { MIN_VAULT_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
 /** The upgrade prompt holds the KEK; do not leave it waiting on an unattended screen. */
 const UPGRADE_PROMPT_TIMEOUT_MS = 5 * 60 * 1000
 
+/** Creating a vault needs a recent sign-in; retrying cannot help, only signing in again. */
+function needsRecentSignIn(err: unknown): boolean {
+  const response = (err as { response?: { status?: number; data?: { detail?: unknown } } })?.response
+  return response?.status === 403 && response.data?.detail === 'recent_login_required'
+}
+
 interface MasterPasswordModalProps {
   isOpen: boolean
   onUnlock: () => void
@@ -55,11 +61,12 @@ export default function MasterPasswordModal({
   isFirstTime = false,
 }: MasterPasswordModalProps) {
   const { setKeys } = useVaultKey()
-  const { user, setUser } = useAuthStore()
+  const { user, setUser, logout } = useAuthStore()
   const [password, setPasswordInput] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [signInAgain, setSignInAgain] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [pendingUpgrade, setPendingUpgrade] = useState<{
     unlocked: UnlockedVault
@@ -98,9 +105,15 @@ export default function MasterPasswordModal({
     }
   }
 
+  const handleSignInAgain = async () => {
+    await authService.logout()
+    logout()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSignInAgain(false)
     setIsLoading(true)
 
     try {
@@ -177,6 +190,11 @@ export default function MasterPasswordModal({
       console.error('Vault operation failed:', err)
       if (err instanceof VaultKeyMismatchError || err instanceof VaultRollbackError) {
         setError(err.message)
+      } else if (needsSetup && needsRecentSignIn(err)) {
+        setSignInAgain(true)
+        setError(
+          'For your security, creating a vault needs a recent sign-in. Nothing was saved. Sign in again, then create your vault password.'
+        )
       } else if (needsSetup) {
         const detail = err instanceof Error ? err.message : String(err)
         setError(`Failed to set up vault: ${detail}`)
@@ -195,6 +213,7 @@ export default function MasterPasswordModal({
   const handleClose = () => {
     if (onClose) {
       setError('')
+      setSignInAgain(false)
       setPasswordInput('')
       setConfirmPassword('')
       setPendingUpgrade(null)
@@ -289,6 +308,15 @@ export default function MasterPasswordModal({
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
               {error}
             </div>
+          )}
+          {signInAgain && (
+            <button
+              type="button"
+              onClick={handleSignInAgain}
+              className="btn btn-primary w-full"
+            >
+              Sign In Again
+            </button>
           )}
 
           <div>

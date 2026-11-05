@@ -40,8 +40,10 @@ project-specific procedures that are too detailed for always-loaded instructions
   (RSA with the OAEP label `credential-vault/vault-proof/v1`, also stateless) only
   authorizes `POST /auth/vault/upgrade`; never add a proof that returns an RSA
   decryption for a signed vault.
-  Known gap: `POST /auth/vault/setup` needs only a session token, so a stolen token
-  on an account with no vault can install its own keys and then pass these checks.
+  `POST /auth/vault/setup` has no proof to ask for, so it needs a recent sign-in
+  (`RecentlySignedInUser`, within 10 minutes, from the token's `auth_time`). A refresh
+  keeps `auth_time`; never reset it there. Known gap: a token stolen inside that window
+  can still install keys on an account with no vault, and then pass these checks.
   Keep new destructive endpoints behind `VaultProvenUser`.
   Changes that would let a stolen token keep access need it too: adding a
   sign-in password (`PUT /users/me/password`) and every admin change to

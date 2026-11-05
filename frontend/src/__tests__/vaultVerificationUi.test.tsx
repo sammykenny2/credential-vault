@@ -320,6 +320,65 @@ describe('setting up a vault', () => {
 
     expect(container.textContent).not.toContain('This browser has unlocked a vault before')
   })
+
+  describe('when the server wants a recent sign-in', () => {
+    const NEW_PASSWORD = 'a-new-vault-password'
+
+    async function submitNewVault(onUnlock = vi.fn()) {
+      useAuthStore.setState({
+        user: { ...USER, has_vault_keys: false },
+        accessToken: 'token',
+        isAuthenticated: true,
+      })
+      await render(<MasterPasswordModal isOpen onUnlock={onUnlock} />)
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      await act(async () => {
+        for (const input of container.querySelectorAll<HTMLInputElement>('input')) {
+          setter.call(input, NEW_PASSWORD)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+      })
+      await act(async () => container.querySelector('form')!.requestSubmit())
+      await waitFor(() => container.querySelector('.bg-red-50') !== null)
+    }
+
+    const refused = { response: { status: 403, data: { detail: 'recent_login_required' } } }
+
+    it('says so, stays locked and stores no keys', async () => {
+      mockedApi.post.mockRejectedValue(refused)
+      const onUnlock = vi.fn()
+
+      await submitNewVault(onUnlock)
+
+      expect(container.textContent).toContain('needs a recent sign-in')
+      expect(container.textContent).toContain('Nothing was saved')
+      expect(buttonNamed('Sign In Again')).toBeDefined()
+      expect(onUnlock).not.toHaveBeenCalled()
+      expect(useVaultKeyStore.getState().privateKey).toBeNull()
+    }, 30000)
+
+    it('signs out when the user chooses to sign in again', async () => {
+      mockedApi.post.mockRejectedValueOnce(refused)
+      await submitNewVault()
+      mockedApi.post.mockResolvedValue({ data: {} })
+
+      await act(async () => buttonNamed('Sign In Again').click())
+
+      expect(mockedApi.post).toHaveBeenLastCalledWith('/auth/logout')
+      expect(useAuthStore.getState().isAuthenticated).toBe(false)
+    }, 30000)
+
+    it('reports any other setup failure as before, without offering to sign in', async () => {
+      mockedApi.post.mockRejectedValue({
+        response: { status: 403, data: { detail: 'Inactive user' } },
+      })
+
+      await submitNewVault()
+
+      expect(container.textContent).toContain('Failed to set up vault')
+      expect(container.textContent).not.toContain('Sign In Again')
+    }, 30000)
+  })
 })
 
 describe('the credentials page', () => {
