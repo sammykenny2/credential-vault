@@ -1,4 +1,4 @@
-import api from './api'
+import api, { exchangeRefreshCookie } from './api'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/authStore'
 import { captureOperation, OperationCancelledError, type OperationCheck } from '@/lib/operationGuard'
@@ -38,14 +38,37 @@ export const authService = {
     return response.data
   },
 
-  /** Revoke every session for this account and clear the refresh cookie. */
+  /**
+   * Revoke every session for this account and clear the refresh cookie.
+   *
+   * This device locks first, whatever the server answers. An access token lasts
+   * minutes and the cookie days, so an idle session still has to spend its cookie
+   * to get through; refused, the next page load would restore the session.
+   */
   async logout(): Promise<void> {
-    const token = useAuthStore.getState().accessToken
+    const { accessToken, user } = useAuthStore.getState()
     useAuthStore.getState().logout()
-    await axios.post(`${api.defaults.baseURL}/auth/logout`, null, {
-      headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
-      timeout: 30_000,
-    })
+    // The login page is already up, so a new sign-in can overtake these requests,
+    // and revoking now would end that new session too.
+    const assertStillSignedOut = () => {
+      if (useAuthStore.getState().isAuthenticated) throw new OperationCancelledError()
+    }
+    const revoke = (token: string | null) =>
+      axios.post(`${api.defaults.baseURL}/auth/logout`, null, {
+        headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
+        timeout: 30_000,
+      })
+    try {
+      await revoke(accessToken)
+    } catch (err) {
+      assertStillSignedOut()
+      if (!axios.isAxiosError(err) || err.response?.status !== 401) throw err
+      const { data } = await exchangeRefreshCookie(assertStillSignedOut)
+      assertStillSignedOut()
+      // Tabs share the cookie, so it may now belong to another signed-in account.
+      if (data.user_id !== user?.id) throw err
+      await revoke(data.access_token)
+    }
   },
 
   async getMe(): Promise<User> {

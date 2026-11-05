@@ -44,6 +44,22 @@ api.interceptors.request.use(
   { synchronous: true }
 )
 
+/**
+ * Spend the refresh cookie, one tab at a time: the server accepts each token once.
+ * Touches no session state, so it also works once this device has signed out.
+ */
+export function exchangeRefreshCookie(assertStillWanted?: () => void) {
+  const exchange = () => {
+    assertStillWanted?.()
+    return axios.post<{ access_token: string; user_id: string }>(`${API_BASE_URL}/auth/refresh`, null, {
+      withCredentials: true, timeout: 30_000,
+    })
+  }
+  return navigator.locks
+    ? navigator.locks.request('credential-vault:refresh', exchange)
+    : exchange()
+}
+
 let refreshRequest: { generation: number; promise: Promise<string> } | null = null
 
 /**
@@ -55,15 +71,9 @@ let refreshRequest: { generation: number; promise: Promise<string> } | null = nu
 export async function refreshAccessToken(): Promise<string> {
   const { generation, user } = useAuthStore.getState()
   if (!refreshRequest || refreshRequest.generation !== generation) {
-    const exchange = () => {
+    const promise = exchangeRefreshCookie(() => {
       if (useAuthStore.getState().generation !== generation) throw new OperationCancelledError()
-      return axios.post<{ access_token: string; user_id: string }>(`${API_BASE_URL}/auth/refresh`, null, {
-        withCredentials: true, timeout: 30_000,
-      })
-    }
-    const promise = (navigator.locks
-      ? navigator.locks.request('credential-vault:refresh', exchange)
-      : exchange())
+    })
       .then((response) => {
         if (useAuthStore.getState().generation !== generation) throw new OperationCancelledError()
         if (user && response.data.user_id !== user.id) {

@@ -37,7 +37,13 @@ this change. Multi-batch restore is not atomic; SPEC-004 staging remains pending
 3. Every security mutation commits before a successful response. Database yield
    dependencies use function scope; logout additionally commits explicitly and
    increments token_version atomically. A failure locks the local device but the
-   UI must not claim server revocation succeeded.
+   UI must not claim server revocation succeeded, and shows the failure even while
+   the server is down. A logout answered with 401 spends the refresh cookie once,
+   without restoring local state, then retries only if that cookie is the same
+   account's. Neither step starts once a sign-in has finished in this tab, and that
+   session is left uninterrupted with no warning, so earlier sessions stay unrevoked
+   until the next logout. A sign-in in another tab or still in flight can be ended by
+   the revocation, or lose its cookie to the exchange; either way it needs signing in again.
 4. The first-admin claim is unique and transactional. Configured ADMIN_EMAIL
    disables public password setup. Startup commits configured bootstrap state.
    Google subjects are immutable through login: matching email cannot silently

@@ -17,6 +17,12 @@ Isolate this work in `fix/security-review-hardening`. Preserve the separate
 its later integration must retain the independent setup authorization.
 Do not publish exploit scripts or claim deployment based on local tests.
 
+That integration has happened. It kept `X-Vault-Setup` and dropped the branch's
+`auth_time` check, which added no protection on top. It added what this plan lacked:
+logout that gets through with an expired access token, the failed-logout warning that
+never reached the screen, a password sign-in link on the login page, and tests for each
+sign-in path and the setup authorization's limits.
+
 ## Implementation phases
 
 - [x] Bind browser operations and HTTP retries to an authentication generation;

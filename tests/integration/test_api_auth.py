@@ -1,12 +1,17 @@
 """Integration tests for authentication API endpoints."""
 
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from argon2 import PasswordHasher
 from fastapi import Response
 from httpx import AsyncClient
 
+from app.config import Settings
 from app.core.security import SecurityService
 from app.core.session import issue_session
+from app.main import app
 from app.models.user import UserRole
 from app.services.user import UserService
 from tests.vault_helpers import new_signing_public_key
@@ -495,6 +500,203 @@ class TestVerifyPassword:
         )
 
         assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_guessing_with_a_stolen_token_is_rate_limited(
+        self, client: AsyncClient, db_session
+    ):
+        """A guessed password signs in for real, which issues a vault setup authorization."""
+        service = UserService(db_session)
+        user = await service.create_oauth_user(
+            email="guessed@example.com",
+            display_name="Guessed",
+            google_id="google-guessed",
+        )
+        user.hashed_password = SecurityService.hash_password("correct-horse-battery")
+        await db_session.commit()
+        token = SecurityService.create_access_token(user.id)
+
+        app.state.limiter.reset()
+        app.state.limiter.enabled = True
+        try:
+            codes = [
+                (
+                    await client.post(
+                        "/api/v1/auth/verify-password",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"password": "wrong-guess"},
+                    )
+                ).status_code
+                for _ in range(11)
+            ]
+        finally:
+            app.state.limiter.enabled = False
+            app.state.limiter.reset()
+
+        assert codes == [401] * 10 + [429]
+
+
+class TestVaultSetupAuthorization:
+    """Every kind of sign-in reaches vault setup, and an authorization works only there."""
+
+    @staticmethod
+    async def _setup(client: AsyncClient, access_token: str, authorization: str):
+        return await client.post(
+            "/api/v1/auth/vault/setup",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "X-Vault-Setup": authorization,
+            },
+            json={
+                "public_key": "synthetic-public-key",
+                "encrypted_private_key": "synthetic-bundle",
+                "key_salt": "synthetic-salt",
+                "signing_public_key": new_signing_public_key(),
+            },
+        )
+
+    @staticmethod
+    async def _signed_in_user(db_session, email="setup@example.com"):
+        user = await UserService(db_session).create_oauth_user(
+            email=email,
+            display_name="Setup",
+            google_id=f"google-{email}",
+        )
+        await db_session.commit()
+        session = await issue_session(user, Response(), db_session)
+        family = SecurityService.decode_token(session.access_token)["sid"]
+        return user, session.access_token, family
+
+    @pytest.mark.asyncio
+    async def test_a_google_sign_in_can_set_up_after_a_refresh(self, client: AsyncClient):
+        settings = Settings(
+            _env_file=None,
+            app_env="testing",
+            google_client_id="client-id",
+            google_client_secret="client-secret",
+        )
+        identity = {
+            "google_id": "google-new",
+            "email": "new-google@example.com",
+            "display_name": "New",
+            "authoritative_email": True,
+        }
+        with (
+            patch("app.api.v1.oauth.get_settings", return_value=settings),
+            patch(
+                "app.api.v1.oauth.exchange_google_code",
+                new_callable=AsyncMock,
+                return_value=identity,
+            ),
+        ):
+            signed_in = await client.post(
+                "/api/v1/oauth/google/callback",
+                json={"code": "code", "redirect_uri": "http://test/login"},
+            )
+        assert signed_in.status_code == 200
+        authorization = signed_in.json()["vault_setup_token"]
+        cookie = signed_in.cookies.get("refresh_token")
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"refresh_token={cookie}"}
+        )
+        assert refreshed.status_code == 200
+
+        response = await self._setup(client, refreshed.json()["access_token"], authorization)
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_creating_the_first_admin_can_set_up(self, client: AsyncClient):
+        created = await client.post(
+            "/api/v1/setup/admin",
+            json={"email": "first@example.com", "password": "correct-horse-battery"},
+        )
+        assert created.status_code == 200
+
+        response = await self._setup(
+            client, created.json()["access_token"], created.json()["vault_setup_token"]
+        )
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_a_password_sign_in_can_set_up_and_is_then_not_offered_it_again(
+        self, client: AsyncClient, db_session
+    ):
+        password = "correct-horse-battery"
+        user, _, _ = await self._signed_in_user(db_session, email="breakglass@example.com")
+        user.role = UserRole.ADMIN
+        user.hashed_password = SecurityService.hash_password(password)
+        await db_session.commit()
+        credentials = {"email": "breakglass@example.com", "password": password}
+
+        first = await client.post("/api/v1/auth/login", json=credentials)
+        assert first.status_code == 200
+        response = await self._setup(
+            client, first.json()["access_token"], first.json()["vault_setup_token"]
+        )
+        assert response.status_code == 200
+
+        second = await client.post("/api/v1/auth/login", json=credentials)
+        assert second.status_code == 200
+        assert second.json()["vault_setup_token"] is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("minutes_ago", "expected"), [(9, 200), (11, 403)])
+    async def test_an_authorization_lasts_ten_minutes(
+        self, client: AsyncClient, db_session, minutes_ago, expected
+    ):
+        user, access_token, family = await self._signed_in_user(db_session)
+        with patch("app.core.security.datetime") as clock:
+            clock.now.return_value = datetime.now(UTC) - timedelta(minutes=minutes_ago)
+            authorization = SecurityService.create_vault_setup_token(
+                user.id, user.token_version, family
+            )
+
+        response = await self._setup(client, access_token, authorization)
+
+        assert response.status_code == expected
+
+    @pytest.mark.asyncio
+    async def test_another_users_authorization_is_refused(self, client: AsyncClient, db_session):
+        _, access_token, family = await self._signed_in_user(db_session)
+        other, _, _ = await self._signed_in_user(db_session, email="other@example.com")
+        authorization = SecurityService.create_vault_setup_token(
+            other.id, other.token_version, family
+        )
+
+        response = await self._setup(client, access_token, authorization)
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_an_authorization_for_another_token_version_is_refused(
+        self, client: AsyncClient, db_session
+    ):
+        user, access_token, family = await self._signed_in_user(db_session)
+        authorization = SecurityService.create_vault_setup_token(
+            user.id, user.token_version - 1, family
+        )
+
+        response = await self._setup(client, access_token, authorization)
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_an_authorization_cannot_be_used_as_an_access_token(
+        self, client: AsyncClient, db_session
+    ):
+        user, _, family = await self._signed_in_user(db_session)
+        authorization = SecurityService.create_vault_setup_token(
+            user.id, user.token_version, family
+        )
+
+        response = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {authorization}"}
+        )
+
+        assert response.status_code == 401
 
 
 class TestHasGoogleLinked:

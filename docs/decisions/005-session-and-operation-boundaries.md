@@ -87,7 +87,10 @@ backups stay readable, and the planned attachment ZIP v2 is not redefined.
 Sliding, stateless refresh tokens were rejected because a copied cookie remains
 reusable. Accepting a recently consumed refresh token was rejected because that
 would also issue tokens to a replayer. Email-only account linking was rejected
-because an email is not Google's stable account identifier.
+because an email is not Google's stable account identifier. A sign-in time claim in
+the access token (`auth_time`) was built for first-vault setup and dropped before it
+shipped: the setup authorization already expires ten minutes after that login and is
+bound to its family, so the claim would add a second refusal and no protection.
 
 ## References
 

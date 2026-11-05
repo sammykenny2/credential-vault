@@ -12,7 +12,7 @@ export default function LoginPage() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { setUser, user, isAuthenticated, isBootstrapping } = useAuthStore()
-  const [error, setError] = useState<string>(location.state?.logoutError ?? '')
+  const [error, setError] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
   // No setup check while an OAuth callback is being processed
   const [isOAuthCallback] = useState(() => Boolean(searchParams.get('code')))
@@ -29,6 +29,16 @@ export default function LoginPage() {
     staleTime: 0,
   })
   const needsAdmin = setupStatus.data?.is_initialized === false
+  const hasAdmin = setupStatus.data?.is_initialized === true
+
+  // A failed logout reports here, usually after this page has already mounted:
+  // signing out locally redirects before the server answers. Take the message out
+  // of history so that reloading does not repeat it.
+  const logoutError: string | undefined = location.state?.logoutError
+  if (logoutError && error !== logoutError) setError(logoutError)
+  useEffect(() => {
+    if (logoutError) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [logoutError, location.pathname, location.search, navigate])
 
   // If already authenticated, redirect to dashboard (unless handling link callback)
   useEffect(() => {
@@ -132,9 +142,17 @@ export default function LoginPage() {
 
   const isProcessing = oauthCallbackMutation.isPending || isRedirecting
 
+  const errorNotice = error && (
+    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm mb-6">
+      {error}
+    </div>
+  )
+
   if ((!isOAuthCallback && setupStatus.isPending) || isBootstrapping) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
+        {/* A logout usually fails because the server is down: say so without waiting for it. */}
+        <div className="w-full max-w-md">{errorNotice}</div>
         <div className="text-gray-500">
           {setupStatus.failureCount > 0 ? 'Waiting for the server to start...' : 'Loading...'}
         </div>
@@ -155,11 +173,7 @@ export default function LoginPage() {
         </div>
 
         {/* Error */}
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm mb-6">
-            {error}
-          </div>
-        )}
+        {errorNotice}
 
         {/* First run: the first Google sign-in becomes the admin (app/api/v1/oauth.py) */}
         {needsAdmin && (
@@ -204,6 +218,14 @@ export default function LoginPage() {
             {isProcessing ? 'Signing in...' : 'Sign in with Google'}
           </span>
         </button>
+
+        {hasAdmin && (
+          <p className="text-sm text-center mt-4">
+            <Link to="/admin/login" className="text-gray-500 underline">
+              Administrator? Sign in with a password
+            </Link>
+          </p>
+        )}
 
         {/* Info */}
         <p className="text-xs text-gray-400 text-center mt-6">

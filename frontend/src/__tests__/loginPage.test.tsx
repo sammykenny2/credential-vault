@@ -74,6 +74,33 @@ describe('LoginPage first run', () => {
     clearOAuthFlow()
   })
 
+  it('offers a password sign-in, the only way back for a password-only admin', async () => {
+    getStatus.mockResolvedValue({ is_initialized: true, can_create_admin: false })
+    await renderLogin()
+
+    await waitForText('Sign in with Google')
+    expect(container.querySelector('a[href="/admin/login"]')).not.toBeNull()
+  })
+
+  it.each([
+    ['anyone can still create one', true],
+    ['setup is restricted', false],
+  ])('hides the password sign-in while there is no administrator and %s', async (_name, can_create_admin) => {
+    getStatus.mockResolvedValue({ is_initialized: false, can_create_admin })
+    await renderLogin()
+
+    await waitForText('Sign in with Google')
+    expect(container.querySelector('a[href="/admin/login"]')).toBeNull()
+  })
+
+  it('hides the password sign-in when a failed callback leaves it unknown whether an admin exists', async () => {
+    await renderLogin('/login?code=synthetic-code&state=not-from-this-tab')
+
+    await waitForText('Sign in with Google')
+    expect(getStatus).not.toHaveBeenCalled()
+    expect(container.querySelector('a[href="/admin/login"]')).toBeNull()
+  })
+
   it('says the first Google sign-in becomes the administrator', async () => {
     getStatus.mockResolvedValue({ is_initialized: false, can_create_admin: true })
     await renderLogin()

@@ -20,9 +20,11 @@ export default function Layout() {
 
   const handleLogout = async () => {
     try {
+      // Signing out locally has already sent PrivateRoute to the login page.
       await authService.logout()
-      navigate('/login')
     } catch {
+      // Signed in again meanwhile: that session should not be interrupted.
+      if (useAuthStore.getState().isAuthenticated) return
       navigate('/login', { state: {
         logoutError: 'This device is locked, but the server could not confirm session revocation. Sign in again and retry logout to revoke other sessions.',
       } })
