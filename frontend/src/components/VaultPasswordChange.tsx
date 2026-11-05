@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { KeyRound, Eye, EyeOff } from 'lucide-react'
 import api from '@/services/api'
 import { authService } from '@/services/authService'
-import { rewrapPrivateKey, KDF_VERSION } from '@/lib/crypto'
+import { rewrapPrivateKey, KDF_VERSION, VaultKeyMismatchError } from '@/lib/crypto'
 import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { MIN_VAULT_PASSWORD_LENGTH } from '@/components/MasterPasswordModal'
@@ -81,6 +81,8 @@ export default function VaultPasswordChange() {
     } catch (err) {
       if (err instanceof VaultLockedError) {
         setError('Unlock your vault on the Credentials page first.')
+      } else if (err instanceof VaultKeyMismatchError) {
+        setError('The server returned unexpected vault keys, so nothing was changed. Your password is not the problem.')
       } else {
         // rewrapPrivateKey throws on a wrong current password (GCM tag mismatch)
         setError('Current vault password is incorrect, or the update failed. Nothing was changed.')

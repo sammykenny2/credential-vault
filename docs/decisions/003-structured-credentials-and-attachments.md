@@ -38,7 +38,7 @@ Apple team、GCP project、Cloudflare account 等背景資訊，會對應多份�
 - Template 定義、localStorage 格式與 template 匯出格式各自升至 v2。
 - `sync_version`、資料列 `revision` 與內容格式版本分開，不混用。
 - KDF v2 保留；新 credential 使用有獨立 OAEP label 的 blob v3，collection 使用有 label 的 envelope v2。
-  舊 v1／v2 僅在盤點後的明確 legacy 模式讀取；不是任意未知資料的 fallback。
+  舊 v1／v2 只有在紀錄簽章驗證通過後才讀取，不是任意未知資料的 fallback。
 - 後端只記錄宣告的內容版本；瀏覽器負責解密後的嚴格 runtime validation。
 - 新版寫入協定要求版本能力與 revision；拒絕舊客戶端覆寫新格式。版本能力不是權限憑證。
 
@@ -77,8 +77,8 @@ operation 限 1 MiB，整批 32 MiB 是 staged 合計而非單一 JSON。逐筆�
 - 憑證與集合各有 revision，使用者另有整體 vault_revision；以 UPDATE WHERE revision = expected RETURNING 檢查 affected rows。
   配額使用條件式原子 UPDATE；需要讀後寫則 BEGIN IMMEDIATE，不以 SELECT 後無條件 UPDATE 充當 CAS。
 - 必須明確 commit 成功才回 receipt，不能依賴 flush 或 response 後的 dependency teardown。
-- 上傳、提交及破壞性操作使用 ADR-004 的 session-bound 簽章 proof v2；所有讀寫以 owner 過濾。
-  多槽 challenge 不覆寫 live proof；nonce、snapshot、上下載、batch 都有限流與只含 ID／密文大小的稽核。
+- 上傳、提交及破壞性操作使用 ADR-004 的無狀態簽章 proof v2；所有讀寫以 owner 過濾。
+  新 challenge 不使 proof 失效；snapshot、上下載、batch 都有限流與只含 ID／密文大小的稽核。
 - 提交可重試且具冪等性。衝突回傳 409，不能靜默重試覆寫其他修改。
 - 新附件在提交前不取代舊附件；被替換附件在提交後保留 24 小時，未提交 batch 亦於 24 小時過期。
   清理由明確狀態與時間判斷，不解析密文猜測引用，也不刪除目前 active 附件。
@@ -112,7 +112,7 @@ ZIP 必須在現有 CSP 下運作，不能放寬 worker／script policy；選型
 
 Alembic 採新增式 migration；既有密文不在後端轉換、不清空資料庫。
 瀏覽器將舊內容轉成一個 section，保留原始字串與 metadata；首次明確保存才寫回 payload v2。
-舊資料標為來源未驗證，不以能解密或批次重新簽署冒充原作者證明。先唯讀盤點正式 envelope，才決定是否可移除 v1 reader。
+舊資料在使用者確認的一次性升級中簽署並標 `legacy-unverified`，不冒充原作者證明；之後沒有簽章的紀錄一律拒絕。先唯讀盤點正式 envelope，才決定是否可移除 v1 reader。
 舊資料未保存的遮蔽設定無法還原，採保守遮蔽並允許調整。發布前備份與舊版寫入封鎖是必要條件。
 
 此設計不防禦解鎖中的 XSS、惡意擴充套件或遭替換的前端程式。

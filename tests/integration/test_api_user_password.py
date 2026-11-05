@@ -6,7 +6,8 @@ from httpx import AsyncClient
 from app.core.security import SecurityService
 from app.core.vault_proof import VAULT_PROOF_HEADER
 from app.models.user import UserRole
-from tests.integration.test_api_vault_proof import _obtain_proof, _user_with_vault
+from tests.vault_helpers import obtain_signed_proof as _obtain_proof
+from tests.vault_helpers import user_with_signed_vault as _user_with_vault
 
 PASSWORD = "a-long-admin-password"
 

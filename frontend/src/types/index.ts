@@ -35,28 +35,26 @@ export interface GoogleOAuthCallback {
 }
 
 // Credential types (all metadata is inside encrypted_data)
+/** Includes the signed state. None of it is trusted until verifyRecord passes. */
 export interface Credential {
   id: string
   encrypted_data: string
   is_active: boolean
   expires_at: string | null
   revoked_at: string | null
+  revision: number
+  signature: string | null
+  signature_version: number | null
+  origin: string | null
   created_at: string
   updated_at: string
 }
 
-export interface CredentialListItem {
-  id: string
-  encrypted_data: string
-  is_active: boolean
-  expires_at: string | null
-  created_at: string
-  updated_at: string
-}
+export type CredentialListItem = Credential
 
 export interface CredentialCreate {
-  /** Client-generated UUID; the ciphertext is bound to it. */
-  id?: string
+  /** Client-generated UUID; the ciphertext and signature are bound to it. */
+  id: string
   encrypted_data: string
   expires_at?: string
 }
@@ -113,6 +111,7 @@ export interface CredentialHealthSummary {
 
 // Vault setup types
 export interface VaultSetupRequest {
+  signing_public_key: string
   public_key: string
   encrypted_private_key: string
   key_salt: string

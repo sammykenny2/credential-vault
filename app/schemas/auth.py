@@ -1,8 +1,10 @@
 """Authentication schemas."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.security import MAX_PASSWORD_LENGTH
+from app.core.vault_proof import parse_signing_public_key
+from app.schemas.credential import RecordAdoption
 
 
 class Token(BaseModel):
@@ -46,22 +48,48 @@ class VaultSetupRequest(BaseModel):
     """Request to set up E2EE vault keys after initial login."""
 
     public_key: str
+    # KEK-protected key bundle (RSA private key and ECDSA signing key).
     encrypted_private_key: str
     key_salt: str
-    # Client-side KDF parameter set used to wrap the private key.
+    # Client-side KDF parameter set used to wrap the bundle.
     kdf_version: int = Field(2, ge=1, le=100)
+    signing_public_key: str
+
+    @field_validator("signing_public_key")
+    @classmethod
+    def _valid_signing_key(cls, value: str) -> str:
+        parse_signing_public_key(value)
+        return value
 
 
 class VaultRekeyRequest(BaseModel):
-    """Replace the wrapped private key after a vault password change.
+    """Replace the wrapped key bundle after a vault password change.
 
-    The public key (and therefore every stored credential) is unchanged;
-    only the wrapping of the private key is replaced.
+    The public keys (and therefore every stored credential and signature) are
+    unchanged; only the wrapping is replaced.
     """
 
     encrypted_private_key: str
     key_salt: str
     kdf_version: int = Field(2, ge=1, le=100)
+
+
+class VaultUpgradeRequest(BaseModel):
+    """One-time upgrade of an RSA-only vault to a signed one.
+
+    Atomic: the key bundle, the signing key and a signature over every existing
+    record are stored together, so no state exists with some records unsigned.
+    """
+
+    encrypted_private_key: str
+    signing_public_key: str
+    adoptions: list[RecordAdoption] = Field(max_length=10_000)
+
+    @field_validator("signing_public_key")
+    @classmethod
+    def _valid_signing_key(cls, value: str) -> str:
+        parse_signing_public_key(value)
+        return value
 
 
 class VerifyPasswordRequest(BaseModel):

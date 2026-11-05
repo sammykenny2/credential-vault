@@ -1,0 +1,26 @@
+{
+  "_comment": "Synthetic vectors shared by the Python and TypeScript tests. The private key was discarded.",
+  "proof_v1_oaep_label": "credential-vault/vault-proof/v1",
+  "proof": {
+    "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvlajpayPnd6N4zC3BwheDiuFJ6vdPzin2d10RcEUYuBYaRHKHlqrEvbacAStgksdJFWoHtscDUNZr+yFmUs3/Q==",
+    "nonce": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "message": "[\"credential-vault/vault-proof\",2,\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc\"]",
+    "signature": "knmy7GUeHebngMYAurjI9fCX2i2WTQnxbNw3dw71mIRgmT5VMHj4DFlVEV38fDDqpWjmbrOQRJoYZYivmLwHKg"
+  },
+  "record": {
+    "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvlajpayPnd6N4zC3BwheDiuFJ6vdPzin2d10RcEUYuBYaRHKHlqrEvbacAStgksdJFWoHtscDUNZr+yFmUs3/Q==",
+    "vault_id": "11111111-2222-4333-8444-555555555555",
+    "signer_id": "27eedc6b00a928df9c835256ef270f7c8f37efb7698d641b0fc53621bdbab8a5",
+    "state": {
+      "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "revision": 3,
+      "encrypted_data": "c3ludGhldGljLWNpcGhlcnRleHQ=",
+      "is_active": false,
+      "expires_at": "2027-01-01T00:00:00",
+      "revoked_at": "2026-11-05T01:02:03.456000",
+      "origin": "legacy-unverified"
+    },
+    "message": "[\"credential-vault/record-signature\",1,\"11111111-2222-4333-8444-555555555555\",\"27eedc6b00a928df9c835256ef270f7c8f37efb7698d641b0fc53621bdbab8a5\",\"credential\",\"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\",3,\"6a4764594575dc6cbc7675563e8936e6ab35ba193a53d0785f932d9d835413c8\",false,1798761600000,1793840523456,\"legacy-unverified\"]",
+    "signature": "RnKwFpxFUdToD4ab5N0SzhTBnldlGHVL5MPGlaOGM5bVLJcb/RL0JYApH/ErIkqgWGId0aSc6xVZSgdAPhTj5A=="
+  }
+}

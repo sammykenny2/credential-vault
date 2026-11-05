@@ -5,10 +5,11 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
-from app.schemas.credential import CredentialCreate
+from app.schemas.credential import CredentialCreate, CredentialRevoke
 from app.schemas.user import UserCreate
 from app.services.credential import CredentialService
 from app.services.user import UserService
+from tests.vault_helpers import new_record, signed_fields
 
 
 class TestUserService:
@@ -308,7 +309,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         credential_create = CredentialCreate(
-            encrypted_data=test_credential_data["encrypted_data"],
+            **new_record(encrypted_data=test_credential_data["encrypted_data"])
         )
 
         credential = await service.create(test_user.id, credential_create)
@@ -329,7 +330,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         credential_create = CredentialCreate(
-            encrypted_data=test_credential_data["encrypted_data"],
+            **new_record(encrypted_data=test_credential_data["encrypted_data"])
         )
 
         created = await service.create(test_user.id, credential_create)
@@ -349,7 +350,7 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         credential_create = CredentialCreate(
-            encrypted_data=test_credential_data["encrypted_data"],
+            **new_record(encrypted_data=test_credential_data["encrypted_data"])
         )
 
         created = await service.create(test_user.id, credential_create)
@@ -369,7 +370,7 @@ class TestCredentialService:
         # Create multiple credentials with opaque encrypted data
         for i in range(3):
             credential_create = CredentialCreate(
-                encrypted_data=f"opaque-encrypted-blob-{i}",
+                **new_record(encrypted_data=f"opaque-encrypted-blob-{i}")
             )
             await service.create(test_user.id, credential_create)
 
@@ -388,11 +389,40 @@ class TestCredentialService:
         service = CredentialService(db_session)
 
         credential_create = CredentialCreate(
-            encrypted_data=test_credential_data["encrypted_data"],
+            **new_record(encrypted_data=test_credential_data["encrypted_data"])
         )
 
         credential = await service.create(test_user.id, credential_create)
-        revoked = await service.revoke(credential)
+        applied = await service.revoke(
+            credential,
+            CredentialRevoke(revoked_at="2026-11-05T00:00:00Z", **signed_fields(2)),
+        )
+        assert applied is True
 
-        assert revoked.is_active is False
-        assert revoked.revoked_at is not None
+        await db_session.refresh(credential)
+        assert credential.is_active is False
+        assert credential.revoked_at is not None
+        assert credential.revision == 2
+
+    @pytest.mark.asyncio
+    async def test_revoke_with_a_stale_revision_changes_nothing(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+        test_credential_data,
+    ):
+        service = CredentialService(db_session)
+        credential = await service.create(
+            test_user.id,
+            CredentialCreate(**new_record(encrypted_data=test_credential_data["encrypted_data"])),
+        )
+
+        applied = await service.revoke(
+            credential,
+            CredentialRevoke(revoked_at="2026-11-05T00:00:00Z", **signed_fields(7)),
+        )
+        assert applied is False
+
+        await db_session.refresh(credential)
+        assert credential.is_active is True
+        assert credential.revision == 1

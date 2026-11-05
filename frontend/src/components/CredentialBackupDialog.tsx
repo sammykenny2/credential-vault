@@ -33,6 +33,8 @@ interface CredentialBackupDialogProps {
   isOpen: boolean
   onClose: () => void
   onImportComplete?: () => void
+  /** Records that failed verification; they cannot be included in a backup */
+  unverifiedCount?: number
   /** Decrypted credentials currently in memory */
   decryptedCache: Array<{
     id: string
@@ -48,6 +50,7 @@ export default function CredentialBackupDialog({
   isOpen,
   onClose,
   onImportComplete,
+  unverifiedCount = 0,
   decryptedCache,
 }: CredentialBackupDialogProps) {
   const { encrypt } = useCredentialCrypto()
@@ -268,6 +271,12 @@ export default function CredentialBackupDialog({
               <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
                 <strong>{decryptedCache.length}</strong> credential(s) will be included in the backup.
               </div>
+              {unverifiedCount > 0 && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {unverifiedCount} record(s) failed signature verification and will not be
+                  included. This backup is not complete.
+                </div>
+              )}
 
               {/* Password */}
               <div>
@@ -440,7 +449,7 @@ export default function CredentialBackupDialog({
                       <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0" />
                       <div className="text-sm text-yellow-800">
                         <p className="font-medium">Restore adds credentials</p>
-                        <p>The {parsedFile.credentialCount} credential(s) from this backup will be added to your vault. Existing credentials are not affected.</p>
+                        <p>The {parsedFile.credentialCount} credential(s) from this backup will be added to your vault, labelled origin unverified because this backup format carries no signatures. Existing credentials are not affected.</p>
                       </div>
                     </div>
                   </div>

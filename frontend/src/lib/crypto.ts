@@ -5,14 +5,19 @@
  * - RSA-OAEP (2048-bit) for wrapping per-credential AES keys
  * - AES-256-GCM for encrypting credential data
  * - Argon2id (via hash-wasm) for deriving key-encryption-key from vault password
+ * - ECDSA P-256 for signing records, because anyone holding the public RSA key
+ *   can produce a blob that decrypts cleanly (see recordSigning.ts)
  *
  * Flow:
  * 1. User creates vault password -> derive KEK via Argon2id
- * 2. Generate RSA-OAEP key pair
- * 3. Export private key, encrypt with KEK (AES-GCM) -> store on server
- * 4. Export public key -> store on server (plaintext)
+ * 2. Generate the RSA-OAEP and ECDSA key pairs
+ * 3. Encrypt both private keys and the verification key with the KEK -> key
+ *    bundle, stored on the server. The KEK is the root of trust: a server that
+ *    replaces the bundle cannot produce one that authenticates under it.
+ * 4. Export public keys -> store on server (plaintext). Browsers do not trust
+ *    these copies: they use the keys derived from the bundle.
  * 5. Encrypt credential: generate random AES key, encrypt data, wrap AES key with RSA public key
- * 6. Decrypt credential: unwrap AES key with RSA private key, decrypt data
+ * 6. Decrypt credential: verify the record signature, then unwrap and decrypt
  *
  * Credential blob formats (base64 of the bytes below):
  * - v1 (legacy, read-only): wrapped_key_len(2) | wrapped_key | iv(12) | ciphertext
@@ -33,9 +38,25 @@ const RSA_KEY_SIZE = 2048
 const RSA_ALGORITHM = 'RSA-OAEP'
 const RSA_HASH = 'SHA-256'
 
+const ECDSA_PARAMS = { name: 'ECDSA', namedCurve: 'P-256' } as const
+
 /** Current blob format: magic byte + version byte prefix. */
 const BLOB_MAGIC = 0xff
 const BLOB_VERSION_2 = 0x02
+
+/**
+ * Key bundle format, stored base64 in users.encrypted_private_key:
+ *   ASCII("CVKB") | version(1) | iv(12) | AES-GCM(KEK, plaintext)
+ * plaintext = vault_id(16) | u16 len | RSA PKCS8 | u16 len | ECDSA PKCS8 | u16 len | ECDSA SPKI
+ * A vault that has not been upgraded holds base64(iv | AES-GCM(KEK, RSA PKCS8)).
+ */
+const KEY_BUNDLE_MAGIC = [0x43, 0x56, 0x4b, 0x42]
+const KEY_BUNDLE_VERSION = 1
+const KEY_BUNDLE_HEADER_LENGTH = KEY_BUNDLE_MAGIC.length + 1
+const VAULT_ID_BYTES = 16
+const KEY_BUNDLE_AAD = new TextEncoder().encode(
+  JSON.stringify(['credential-vault/key-bundle', KEY_BUNDLE_VERSION])
+)
 
 // === Key derivation versions ===
 
@@ -195,6 +216,163 @@ function importPrivateKeyNonExtractable(pkcs8: ArrayBuffer): Promise<CryptoKey> 
   )
 }
 
+/**
+ * The server returned key material that does not match the KEK-protected keys.
+ * This is a security event, not a typo: never report it as a wrong password.
+ */
+export class VaultKeyMismatchError extends Error {
+  constructor(
+    message = 'The server returned vault keys that do not match your encrypted private key. ' +
+      'Your password is not the problem. The vault stayed locked and nothing was sent.'
+  ) {
+    super(message)
+    this.name = 'VaultKeyMismatchError'
+  }
+}
+
+/** Signs records and proofs. Held in memory only while the vault is unlocked. */
+export interface VaultSigner {
+  /** Non-extractable; usable only for signing. */
+  signingKey: CryptoKey
+  /** Comes from the KEK-protected bundle, never from the API. */
+  verifyKey: CryptoKey
+  vaultId: string
+  /** SHA-256 of the verification key (hex). */
+  signerId: string
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function formatVaultId(bytes: Uint8Array): string {
+  const hex = bytesToHex(bytes)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+interface KeyBundle {
+  vaultId: Bytes
+  rsaPkcs8: Bytes
+  signingPkcs8: Bytes
+  verifySpki: Bytes
+}
+
+function encodeKeyBundle(bundle: KeyBundle): Bytes {
+  const parts = [bundle.rsaPkcs8, bundle.signingPkcs8, bundle.verifySpki]
+  const encoded = new Uint8Array(
+    VAULT_ID_BYTES + parts.reduce((total, part) => total + 2 + part.length, 0)
+  )
+  encoded.set(bundle.vaultId, 0)
+  let offset = VAULT_ID_BYTES
+  for (const part of parts) {
+    encoded[offset] = part.length >> 8
+    encoded[offset + 1] = part.length & 0xff
+    encoded.set(part, offset + 2)
+    offset += 2 + part.length
+  }
+  return encoded
+}
+
+/** Views into `encoded`; the caller keeps it alive and wipes it when done. */
+function decodeKeyBundle(encoded: Bytes): KeyBundle {
+  if (encoded.length < VAULT_ID_BYTES) throw new VaultKeyMismatchError()
+  const read = (start: number): { part: Bytes; end: number } => {
+    if (start + 2 > encoded.length) throw new VaultKeyMismatchError()
+    const length = (encoded[start] << 8) | encoded[start + 1]
+    const end = start + 2 + length
+    if (length === 0 || end > encoded.length) throw new VaultKeyMismatchError()
+    return { part: encoded.subarray(start + 2, end), end }
+  }
+  const rsa = read(VAULT_ID_BYTES)
+  const signing = read(rsa.end)
+  const verify = read(signing.end)
+  if (verify.end !== encoded.length) throw new VaultKeyMismatchError()
+  return {
+    vaultId: encoded.subarray(0, VAULT_ID_BYTES),
+    rsaPkcs8: rsa.part,
+    signingPkcs8: signing.part,
+    verifySpki: verify.part,
+  }
+}
+
+function hasKeyBundleMagic(blob: Uint8Array): boolean {
+  return blob.length >= KEY_BUNDLE_HEADER_LENGTH &&
+    KEY_BUNDLE_MAGIC.every((byte, index) => blob[index] === byte)
+}
+
+async function wrapKeyBundle(bundle: KeyBundle, kek: CryptoKey): Promise<string> {
+  const iv = generateIV()
+  const plaintext = encodeKeyBundle(bundle)
+  try {
+    const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+      { name: AES_ALGORITHM, iv, additionalData: KEY_BUNDLE_AAD }, kek, plaintext
+    ))
+    const combined = new Uint8Array(KEY_BUNDLE_HEADER_LENGTH + iv.length + ciphertext.length)
+    combined.set(KEY_BUNDLE_MAGIC, 0)
+    combined[KEY_BUNDLE_MAGIC.length] = KEY_BUNDLE_VERSION
+    combined.set(iv, KEY_BUNDLE_HEADER_LENGTH)
+    combined.set(ciphertext, KEY_BUNDLE_HEADER_LENGTH + iv.length)
+    return arrayBufferToBase64(combined)
+  } finally {
+    plaintext.fill(0)
+  }
+}
+
+/** Throws when the KEK is wrong (GCM tag mismatch). The caller wipes the result. */
+async function unwrapKeyBundle(blob: Uint8Array, kek: CryptoKey): Promise<Bytes> {
+  if (blob[KEY_BUNDLE_MAGIC.length] !== KEY_BUNDLE_VERSION) {
+    throw new Error(`Unsupported vault key bundle version: ${blob[KEY_BUNDLE_MAGIC.length]}`)
+  }
+  const iv = blob.slice(KEY_BUNDLE_HEADER_LENGTH, KEY_BUNDLE_HEADER_LENGTH + IV_LENGTH)
+  const ciphertext = blob.slice(KEY_BUNDLE_HEADER_LENGTH + IV_LENGTH)
+  return new Uint8Array(await crypto.subtle.decrypt(
+    { name: AES_ALGORITHM, iv, additionalData: KEY_BUNDLE_AAD }, kek, ciphertext
+  ))
+}
+
+/** Import the signing keys and confirm that they belong together. */
+async function signerFromBundle(bundle: KeyBundle): Promise<VaultSigner> {
+  const signingKey = await crypto.subtle.importKey(
+    'pkcs8', bundle.signingPkcs8, ECDSA_PARAMS, false, ['sign']
+  )
+  const verifyKey = await crypto.subtle.importKey(
+    'spki', bundle.verifySpki, ECDSA_PARAMS, true, ['verify']
+  )
+
+  const probe = new TextEncoder().encode('credential-vault/key-bundle-self-test')
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: RSA_HASH }, signingKey, probe)
+  const matches = await crypto.subtle.verify(
+    { name: 'ECDSA', hash: RSA_HASH }, verifyKey, signature, probe
+  )
+  if (!matches) throw new VaultKeyMismatchError()
+
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bundle.verifySpki))
+  return {
+    signingKey,
+    verifyKey,
+    vaultId: formatVaultId(bundle.vaultId),
+    signerId: bytesToHex(digest),
+  }
+}
+
+interface NewSigningMaterial {
+  vaultId: Bytes
+  signingPkcs8: Bytes
+  verifySpki: Bytes
+  signingPublicKeyBase64: string
+}
+
+async function generateSigningMaterial(): Promise<NewSigningMaterial> {
+  const pair = await crypto.subtle.generateKey(ECDSA_PARAMS, true, ['sign', 'verify'])
+  const verifySpki = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey))
+  return {
+    vaultId: crypto.getRandomValues(new Uint8Array(VAULT_ID_BYTES)),
+    signingPkcs8: new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey)),
+    verifySpki,
+    signingPublicKeyBase64: arrayBufferToBase64(verifySpki),
+  }
+}
+
 /** Derive the public components from authenticated private-key material. */
 async function publicKeyFromPrivateKey(pkcs8: ArrayBuffer): Promise<CryptoKey> {
   // This temporary key is exportable only to obtain its public RSA components.
@@ -271,16 +449,20 @@ export async function importEncryptedPrivateKey(
 
 export interface VaultKeys {
   publicKeyBase64: string
+  /** The key bundle. */
   encryptedPrivateKeyBase64: string
   saltBase64: string
   kdfVersion: number
+  signingPublicKeyBase64: string
   /** Non-extractable; safe to keep in memory for the session. */
   privateKey: CryptoKey
   publicKey: CryptoKey
+  signer: VaultSigner
 }
 
 /**
- * Set up a new E2EE vault. Generates keypair and encrypts private key with vault password.
+ * Set up a new E2EE vault. Generates the key pairs and encrypts them with the vault password.
+ * A new vault is signed from the start, so it never holds an unsigned record.
  */
 export async function setupVault(vaultPassword: string): Promise<VaultKeys> {
   // Generate salt for Argon2id
@@ -295,24 +477,70 @@ export async function setupVault(vaultPassword: string): Promise<VaultKeys> {
   // Export public key
   const publicKeyBase64 = await exportPublicKey(keyPair.publicKey)
 
-  // Export the private key once: wrap it for the server and re-import it
+  // Export the private keys once: wrap them for the server and re-import them
   // non-extractable for the in-memory session copy.
-  const pkcs8 = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey)
-  const encryptedPrivateKeyBase64 = await wrapPkcs8(pkcs8, kek)
-  const privateKey = await importPrivateKeyNonExtractable(pkcs8)
-
-  return {
-    publicKeyBase64,
-    encryptedPrivateKeyBase64,
-    saltBase64: arrayBufferToBase64(salt),
-    kdfVersion: KDF_VERSION,
-    privateKey,
-    publicKey: keyPair.publicKey,
+  const rsaPkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', keyPair.privateKey))
+  const signing = await generateSigningMaterial()
+  const bundle: KeyBundle = {
+    vaultId: signing.vaultId,
+    rsaPkcs8,
+    signingPkcs8: signing.signingPkcs8,
+    verifySpki: signing.verifySpki,
+  }
+  try {
+    return {
+      publicKeyBase64,
+      encryptedPrivateKeyBase64: await wrapKeyBundle(bundle, kek),
+      saltBase64: arrayBufferToBase64(salt),
+      kdfVersion: KDF_VERSION,
+      signingPublicKeyBase64: signing.signingPublicKeyBase64,
+      privateKey: await importPrivateKeyNonExtractable(rsaPkcs8.buffer),
+      publicKey: keyPair.publicKey,
+      signer: await signerFromBundle(bundle),
+    }
+  } finally {
+    rsaPkcs8.fill(0)
+    signing.signingPkcs8.fill(0)
   }
 }
 
+/** Everything needed to upgrade an RSA-only vault later, without keeping private keys around. */
+export interface PendingVaultUpgrade {
+  kek: CryptoKey
+  encryptedPrivateKeyBase64: string
+}
+
+export interface UnlockedVault {
+  privateKey: CryptoKey
+  publicKey: CryptoKey
+  publicKeyBase64: string
+  /** Null until an RSA-only vault has been upgraded. */
+  signer: VaultSigner | null
+  pendingUpgrade: PendingVaultUpgrade | null
+}
+
+/** Derive the RSA public key from the private key and refuse a different advertised one. */
+async function verifiedPublicKey(
+  pkcs8: ArrayBuffer,
+  advertisedBase64: string
+): Promise<{ publicKey: CryptoKey; publicKeyBase64: string }> {
+  const publicKey = await publicKeyFromPrivateKey(pkcs8)
+  const publicKeyBase64 = await exportPublicKey(publicKey)
+  let advertised: string
+  try {
+    advertised = await exportPublicKey(await importPublicKey(advertisedBase64))
+  } catch {
+    throw new VaultKeyMismatchError()
+  }
+  if (advertised !== publicKeyBase64) throw new VaultKeyMismatchError()
+  return { publicKey, publicKeyBase64 }
+}
+
 /**
- * Unlock an existing vault by decrypting the private key with the vault password.
+ * Unlock an existing vault with the vault password.
+ *
+ * A wrong password throws an AES-GCM error. Key material that authenticates but
+ * does not match what the API advertised throws VaultKeyMismatchError.
  */
 export async function unlockVault(
   vaultPassword: string,
@@ -320,21 +548,71 @@ export async function unlockVault(
   encryptedPrivateKeyBase64: string,
   publicKeyBase64: string,
   kdfVersion: number = KDF_VERSION
-): Promise<{ privateKey: CryptoKey; publicKey: CryptoKey; publicKeyBase64: string }> {
+): Promise<UnlockedVault> {
   const salt = new Uint8Array(base64ToArrayBuffer(saltBase64))
   const kek = await deriveKEK(vaultPassword, salt, kdfVersion)
+  const blob = new Uint8Array(base64ToArrayBuffer(encryptedPrivateKeyBase64))
+
+  if (hasKeyBundleMagic(blob)) {
+    const plaintext = await unwrapKeyBundle(blob, kek)
+    try {
+      const bundle = decodeKeyBundle(plaintext)
+      const rsaPkcs8 = toBytes(bundle.rsaPkcs8)
+      try {
+        const verified = await verifiedPublicKey(rsaPkcs8.buffer, publicKeyBase64)
+        return {
+          ...verified,
+          privateKey: await importPrivateKeyNonExtractable(rsaPkcs8.buffer),
+          signer: await signerFromBundle(bundle),
+          pendingUpgrade: null,
+        }
+      } finally {
+        rsaPkcs8.fill(0)
+      }
+    } finally {
+      plaintext.fill(0)
+    }
+  }
+
   const pkcs8 = await unwrapPkcs8(encryptedPrivateKeyBase64, kek)
   try {
-    const publicKey = await publicKeyFromPrivateKey(pkcs8)
-    const derivedPublicKeyBase64 = await exportPublicKey(publicKey)
-    const advertisedPublicKey = await importPublicKey(publicKeyBase64)
-    if (await exportPublicKey(advertisedPublicKey) !== derivedPublicKeyBase64) {
-      throw new Error('Vault public key does not match the encrypted private key')
+    const verified = await verifiedPublicKey(pkcs8, publicKeyBase64)
+    return {
+      ...verified,
+      privateKey: await importPrivateKeyNonExtractable(pkcs8),
+      signer: null,
+      pendingUpgrade: { kek, encryptedPrivateKeyBase64 },
     }
-    const privateKey = await importPrivateKeyNonExtractable(pkcs8)
-    return { privateKey, publicKey, publicKeyBase64: derivedPublicKeyBase64 }
   } finally {
     new Uint8Array(pkcs8).fill(0)
+  }
+}
+
+export interface VaultUpgradeKeys {
+  encryptedPrivateKeyBase64: string
+  signingPublicKeyBase64: string
+  signer: VaultSigner
+}
+
+/** Build the key bundle for an RSA-only vault. Nothing is stored until the caller sends it. */
+export async function createVaultUpgradeKeys(pending: PendingVaultUpgrade): Promise<VaultUpgradeKeys> {
+  const rsaPkcs8 = new Uint8Array(await unwrapPkcs8(pending.encryptedPrivateKeyBase64, pending.kek))
+  const signing = await generateSigningMaterial()
+  const bundle: KeyBundle = {
+    vaultId: signing.vaultId,
+    rsaPkcs8,
+    signingPkcs8: signing.signingPkcs8,
+    verifySpki: signing.verifySpki,
+  }
+  try {
+    return {
+      encryptedPrivateKeyBase64: await wrapKeyBundle(bundle, pending.kek),
+      signingPublicKeyBase64: signing.signingPublicKeyBase64,
+      signer: await signerFromBundle(bundle),
+    }
+  } finally {
+    rsaPkcs8.fill(0)
+    signing.signingPkcs8.fill(0)
   }
 }
 
@@ -345,10 +623,12 @@ export interface RewrappedPrivateKey {
 }
 
 /**
- * Change the vault password: unwrap the private key with the current password
+ * Change the vault password: unwrap the key bundle with the current password
  * and wrap it again with a new salt, new password and the current KDF version.
- * The key pair itself does not change, so stored credentials stay readable.
- * Throws when the current password is wrong.
+ * The keys themselves do not change, so stored credentials and signatures stay
+ * valid. Throws when the current password is wrong, and for an RSA-only blob:
+ * unlocking upgrades such a vault first, so seeing one here means the server
+ * replayed old key material.
  */
 export async function rewrapPrivateKey(
   currentPassword: string,
@@ -359,14 +639,21 @@ export async function rewrapPrivateKey(
 ): Promise<RewrappedPrivateKey> {
   const currentSalt = new Uint8Array(base64ToArrayBuffer(saltBase64))
   const currentKek = await deriveKEK(currentPassword, currentSalt, kdfVersion)
-  const pkcs8 = await unwrapPkcs8(encryptedPrivateKeyBase64, currentKek)
+  const blob = new Uint8Array(base64ToArrayBuffer(encryptedPrivateKeyBase64))
+  if (!hasKeyBundleMagic(blob)) throw new VaultKeyMismatchError()
 
-  const newSalt = generateSalt()
-  const newKek = await deriveKEK(newPassword, newSalt, KDF_VERSION)
-  return {
-    encryptedPrivateKeyBase64: await wrapPkcs8(pkcs8, newKek),
-    saltBase64: arrayBufferToBase64(newSalt),
-    kdfVersion: KDF_VERSION,
+  const plaintext = await unwrapKeyBundle(blob, currentKek)
+  try {
+    const bundle = decodeKeyBundle(plaintext)
+    const newSalt = generateSalt()
+    const newKek = await deriveKEK(newPassword, newSalt, KDF_VERSION)
+    return {
+      encryptedPrivateKeyBase64: await wrapKeyBundle(bundle, newKek),
+      saltBase64: arrayBufferToBase64(newSalt),
+      kdfVersion: KDF_VERSION,
+    }
+  } finally {
+    plaintext.fill(0)
   }
 }
 
@@ -432,6 +719,30 @@ async function encryptBody(
   return combined
 }
 
+/**
+ * Decrypted content is rendered, so check its shape: a signature only proves who
+ * signed it, and a legacy-unverified record may have been planted before the upgrade.
+ */
+function assertCredentialData(value: unknown): asserts value is CredentialData {
+  const isOptionalString = (field: unknown) => field === undefined || typeof field === 'string'
+  const isPlainObject = (field: unknown): field is Record<string, unknown> =>
+    typeof field === 'object' && field !== null && !Array.isArray(field)
+
+  if (
+    !isPlainObject(value) ||
+    typeof value.name !== 'string' ||
+    !isOptionalString(value.description) ||
+    !isOptionalString(value.website_url) ||
+    !isOptionalString(value.category) ||
+    !isOptionalString(value.notes) ||
+    (value.fields !== undefined &&
+      (!isPlainObject(value.fields) ||
+        Object.values(value.fields).some((field) => typeof field !== 'string')))
+  ) {
+    throw new Error('Invalid credential content')
+  }
+}
+
 async function decryptBody(
   body: Bytes,
   privateKey: CryptoKey,
@@ -462,7 +773,9 @@ async function decryptBody(
     ciphertext
   )
 
-  return JSON.parse(new TextDecoder().decode(plaintext)) as CredentialData
+  const data: unknown = JSON.parse(new TextDecoder().decode(plaintext))
+  assertCredentialData(data)
+  return data
 }
 
 /** Blob format version of a stored credential (1 = legacy, 2 = id-bound). */
@@ -525,6 +838,12 @@ export async function decryptCredential(
         privateKey,
         new TextEncoder().encode(credentialId)
       )
+    }
+
+    // v1 starts with the wrapped key length (0x01 0x00 for RSA-2048), never this
+    // marker, so an unknown future version must not reach the unbound v1 parser.
+    if (combined.length >= 1 && combined[0] === BLOB_MAGIC) {
+      throw new Error('Unsupported credential blob version')
     }
 
     return await decryptBody(combined, privateKey)

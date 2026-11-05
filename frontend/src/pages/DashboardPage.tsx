@@ -82,7 +82,10 @@ export default function DashboardPage() {
 
       {/* Recent Credentials */}
       <div className="card">
-        <h2 className="text-lg font-semibold mb-4">Recent Credentials</h2>
+        <h2 className="text-lg font-semibold mb-1">Recent Credentials</h2>
+        <p className="text-xs text-gray-400 mb-4">
+          Dates on this page come from the server and are not verified here.
+        </p>
         {credentials?.length === 0 ? (
           <p className="text-gray-500">No credentials yet. Add your first one!</p>
         ) : (
@@ -100,7 +103,7 @@ export default function DashboardPage() {
                       new Date(cred.expires_at) < new Date()
                         ? 'bg-red-100 text-red-700'
                         : 'bg-amber-100 text-amber-700'
-                    }`}>
+                    }`} title="Reported by the server, not verified here">
                       {new Date(cred.expires_at) < new Date() ? 'Expired' : `Expires ${new Date(cred.expires_at).toLocaleDateString()}`}
                     </span>
                   )}

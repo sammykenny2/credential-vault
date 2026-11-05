@@ -26,6 +26,7 @@ import {
   encryptCredentialLegacy,
   credentialBlobVersion,
   rewrapPrivateKey,
+  VaultKeyMismatchError,
   generatePassword,
   sha256,
   KDF_VERSION,
@@ -427,14 +428,14 @@ describe('Vault Setup & Unlock', () => {
     await expect(unlockVault(
       VAULT_PASSWORD, vault.saltBase64, vault.encryptedPrivateKeyBase64,
       await exportPublicKey(other.publicKey)
-    )).rejects.toThrow('Vault public key does not match')
+    )).rejects.toBeInstanceOf(VaultKeyMismatchError)
   }, 30000)
 
   it('rejects malformed advertised public-key material', async () => {
     const vault = await setupVault(VAULT_PASSWORD)
     await expect(unlockVault(
       VAULT_PASSWORD, vault.saltBase64, vault.encryptedPrivateKeyBase64, 'not-a-public-key'
-    )).rejects.toThrow()
+    )).rejects.toBeInstanceOf(VaultKeyMismatchError)
   }, 30000)
 
   it('should fail to unlock vault with wrong password', async () => {
@@ -652,7 +653,42 @@ describe('End-to-End: Setup → Unlock → Encrypt → Decrypt', () => {
 
 // ── Blob format v2: id binding, legacy compatibility, key handling ─────────
 
+describe('Decrypted content shape', () => {
+  // A signature only proves who signed; a planted legacy record must not break rendering.
+  it.each([
+    ['an object as a name', { name: { oops: 1 }, fields: {} }],
+    ['no name', { fields: {} }],
+    ['a non-string field value', { name: 'x', fields: { a: 1 } }],
+    ['fields that are not an object', { name: 'x', fields: ['a'] }],
+    ['a non-string description', { name: 'x', fields: {}, description: 1 }],
+    ['a non-string website', { name: 'x', fields: {}, website_url: { href: 'x' } }],
+    ['a non-string category', { name: 'x', fields: {}, category: [] }],
+    ['non-string notes', { name: 'x', fields: {}, notes: true }],
+    ['an array', ['x']],
+  ])('refuses %s', async (_label, content) => {
+    const { publicKey, privateKey } = await generateKeyPair()
+    const blob = await encryptCredential(content as never, publicKey, CRED_ID)
+    await expect(decryptCredential(blob, privateKey, CRED_ID)).rejects.toThrow('Decryption failed')
+  })
+
+  it('accepts a record with only a name', async () => {
+    const { publicKey, privateKey } = await generateKeyPair()
+    const blob = await encryptCredential({ name: 'x' } as never, publicKey, CRED_ID)
+    expect((await decryptCredential(blob, privateKey, CRED_ID)).name).toBe('x')
+  })
+})
+
 describe('Credential blob format', () => {
+  it('does not treat an unknown versioned blob as an unbound v1 blob', async () => {
+    const { privateKey } = await generateKeyPair()
+    const future = new Uint8Array(300)
+    future[0] = 0xff
+    future[1] = 0x03
+    await expect(
+      decryptCredential(arrayBufferToBase64(future), privateKey, CRED_ID)
+    ).rejects.toThrow('Decryption failed')
+  })
+
   let publicKey: CryptoKey
   let privateKey: CryptoKey
 

@@ -2,11 +2,18 @@
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.api.deps import CurrentUser, DbSession, VaultProvenUser
+from app.api.deps import CurrentUser, DbSession, VaultProvenUser, VaultUpgradingUser
+from app.config import get_settings
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import DUMMY_PASSWORD_HASH, REFRESH_COOKIE_NAME, SecurityService
 from app.core.session import issue_session
-from app.core.vault_proof import PROOF_TTL_SECONDS, create_challenge
+from app.core.vault_proof import (
+    PROOF_TTL_SECONDS,
+    SIGNED_PROOF_VERSION,
+    UPGRADE_PROOF_VERSION,
+    create_signed_challenge,
+    create_upgrade_challenge,
+)
 from app.models.audit_log import AuditAction
 from app.models.user import UserRole
 from app.schemas.auth import (
@@ -14,9 +21,11 @@ from app.schemas.auth import (
     Token,
     VaultRekeyRequest,
     VaultSetupRequest,
+    VaultUpgradeRequest,
     VerifyPasswordRequest,
 )
 from app.services.audit_log import AuditLogService
+from app.services.credential import CredentialService
 from app.services.user import UserService
 
 router = APIRouter()
@@ -251,21 +260,72 @@ async def rekey_vault(
         action=AuditAction.VAULT_REKEY,
         user_id=current_user.id,
     )
+    await db.commit()
 
     return {"message": "Vault password updated"}
 
 
-@router.post("/vault/challenge")
-async def vault_challenge(
-    current_user: CurrentUser,
+@router.post("/vault/upgrade")
+async def upgrade_vault(
+    request: Request,
+    data: VaultUpgradeRequest,
+    current_user: VaultUpgradingUser,
     db: DbSession,
 ):
+    """Finish the one-time upgrade of an RSA-only vault to a signed one.
+
+    Stores the key bundle, the signing key and a signature over every existing
+    record in one transaction, committed before answering. Those signatures are
+    labelled legacy-unverified: they stop later forgeries, they do not claim the
+    old records were authentic. Requires proof v1, the only proof such a vault has.
+    """
+    if not current_user.has_vault_keys:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vault keys not configured",
+        )
+
+    # Conditional, so concurrent upgrades cannot replace a signing key. The updates
+    # in adopt_all are conditional on revision too, so no record can be overwritten.
+    user_id = current_user.id
+    claimed = await UserService(db).complete_vault_upgrade(
+        user=current_user,
+        encrypted_private_key=data.encrypted_private_key,
+        signing_public_key=data.signing_public_key,
+    )
+    if not claimed:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault is already upgraded",
+        )
+
+    if not await CredentialService(db).adopt_all(user_id, data.adoptions):
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Credentials changed during the upgrade: unlock the vault again to retry",
+        )
+
+    await AuditLogService(db).log_from_request(
+        request,
+        action=AuditAction.VAULT_UPGRADED,
+        user_id=user_id,
+        details={"adopted": len(data.adoptions)},
+    )
+    await db.commit()
+
+    return {"message": "Vault upgraded", "adopted": len(data.adoptions)}
+
+
+@router.post("/vault/challenge")
+async def vault_challenge(current_user: CurrentUser, db: DbSession):
     """Issue a proof-of-unlock challenge.
 
-    The response carries a random secret encrypted with the user's vault
-    public key. Decrypting it with the in-memory private key and sending the
-    result as `X-Vault-Proof` authorizes destructive operations for a short
-    time. Only a hash of the secret is stored server-side.
+    A signed vault gets a nonce to sign (proof v2). A vault that has not been
+    upgraded gets a secret encrypted to its RSA key under a dedicated OAEP label
+    (proof v1). Neither stores anything per challenge, so asking for one cannot
+    invalidate another.
     """
     if not current_user.has_vault_keys or not current_user.public_key:
         raise HTTPException(
@@ -273,19 +333,36 @@ async def vault_challenge(
             detail="Vault keys not configured",
         )
 
+    if current_user.signing_public_key:
+        return {
+            "version": SIGNED_PROOF_VERSION,
+            "nonce": create_signed_challenge(
+                current_user.id, current_user.token_version, get_settings().secret_key
+            ),
+            "expires_in": PROOF_TTL_SECONDS,
+        }
+
+    proof_key = await UserService(db).ensure_vault_proof_key(current_user)
     try:
-        challenge, secret_hash, expires_at = create_challenge(current_user.public_key)
+        challenge, ticket = create_upgrade_challenge(
+            current_user.public_key,
+            current_user.id,
+            current_user.token_version,
+            get_settings().secret_key,
+            proof_key,
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Stored vault public key is unusable; set up the vault again",
         ) from exc
 
-    current_user.vault_proof_hash = secret_hash
-    current_user.vault_proof_expires_at = expires_at
-    await db.flush()
-
-    return {"challenge": challenge, "expires_in": PROOF_TTL_SECONDS}
+    return {
+        "version": UPGRADE_PROOF_VERSION,
+        "challenge": challenge,
+        "ticket": ticket,
+        "expires_in": PROOF_TTL_SECONDS,
+    }
 
 
 @router.post("/vault/setup")
@@ -297,23 +374,24 @@ async def setup_vault(
 ):
     """Set up E2EE vault keys for user.
 
-    Called after first login to establish the user's keypair.
-    The private key is encrypted with the user's vault password (client-side).
+    Called after first login to establish the user's keys. The key bundle is
+    encrypted with the user's vault password (client-side); a new vault is
+    signed from the start, so it never has unsigned records.
     """
-    if current_user.has_vault_keys:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Vault keys already configured",
-        )
-
     user_service = UserService(db)
-    await user_service.setup_vault_keys(
+    configured = await user_service.setup_vault_keys(
         user=current_user,
         public_key=data.public_key,
         encrypted_private_key=data.encrypted_private_key,
         key_salt=data.key_salt,
         kdf_version=data.kdf_version,
+        signing_public_key=data.signing_public_key,
     )
+    if configured is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vault keys already configured",
+        )
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -321,5 +399,6 @@ async def setup_vault(
         action=AuditAction.VAULT_SETUP,
         user_id=current_user.id,
     )
+    await db.commit()
 
     return {"message": "Vault keys configured successfully"}

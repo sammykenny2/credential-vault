@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -54,6 +54,13 @@ class Credential(Base, TimestampMixin):
         DateTime(timezone=True),
         nullable=True,
     )
+
+    # Signed state (ADR-004). Opaque to the server: the browser signs the
+    # ciphertext hash and the status columns above, and verifies them on read.
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    signature: Mapped[str | None] = mapped_column(String(88), nullable=True)
+    signature_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # Relationships
     owner: Mapped[User] = relationship("User", back_populates="credentials")

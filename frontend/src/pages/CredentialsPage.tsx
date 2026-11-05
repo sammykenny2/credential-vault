@@ -8,7 +8,7 @@ import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialForm from '@/components/CredentialForm'
 import CredentialDetail from '@/components/CredentialDetail'
 import TemplateSelector from '@/components/TemplateSelector'
-import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive, AlertTriangle, ShieldAlert } from 'lucide-react'
 import clsx from 'clsx'
 import type { Credential, CredentialListItem, CredentialTemplate } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
@@ -16,6 +16,7 @@ import { recordTemplateUsage } from '@/lib/templateStorage'
 import CredentialBackupDialog from '@/components/CredentialBackupDialog'
 import { BACKUP_REMINDER_DAYS, daysSinceBackup, isBackupDue } from '@/lib/backupReminder'
 import { VaultLockedError } from '@/lib/vaultProof'
+import { RecordVerificationError } from '@/lib/recordSigning'
 import { lockVault } from '@/hooks/useVaultLock'
 import { privateFieldProps } from '@/lib/inputProps'
 
@@ -27,6 +28,7 @@ interface DecryptedCredentialEntry {
   expires_at: string | null
   created_at: string
   updated_at: string
+  origin: string | null
 }
 
 export default function CredentialsPage() {
@@ -63,33 +65,34 @@ export default function CredentialsPage() {
     enabled: isUnlocked,
   })
 
-  // Decrypt every credential; failures are skipped so one bad blob does not hide the rest
+  // Verify and decrypt every credential. A record that fails is reported, never
+  // hidden: a server planting or altering records must be visible to the user.
   const decryptAll = useCallback(async (creds: CredentialListItem[]) => {
     const entries: DecryptedCredentialEntry[] = []
+    const failed: string[] = []
     for (const cred of creds) {
-      try {
-        const data = await decrypt(cred.encrypted_data, cred.id)
-        if (data) {
-          entries.push({
-            id: cred.id,
-            data,
-            is_active: cred.is_active,
-            expires_at: cred.expires_at,
-            created_at: cred.created_at,
-            updated_at: cred.updated_at,
-          })
-        }
-      } catch {
-        // Skip credentials that fail to decrypt
+      const data = await decrypt(cred).catch(() => null)
+      if (data) {
+        entries.push({
+          id: cred.id,
+          data,
+          is_active: cred.is_active,
+          expires_at: cred.expires_at,
+          created_at: cred.created_at,
+          updated_at: cred.updated_at,
+          origin: cred.origin,
+        })
+      } else {
+        failed.push(cred.id)
       }
     }
-    return entries
+    return { entries, failed }
   }, [decrypt])
 
   // Plaintext lives in a query with gcTime 0: it is recomputed when the list
   // changes and dropped as soon as it is no longer observed.
   const decryptKey = useMemo(
-    () => (credentials ?? []).map((c) => `${c.id}:${c.updated_at}:${c.is_active}`),
+    () => (credentials ?? []).map((c) => `${c.id}:${c.revision}:${c.signature}`),
     [credentials]
   )
   const { data: decryptedData, isFetching: isDecrypting } = useQuery({
@@ -100,9 +103,10 @@ export default function CredentialsPage() {
     staleTime: Infinity,
   })
   const decryptedCache = useMemo<DecryptedCredentialEntry[]>(
-    () => (isUnlocked ? (decryptedData ?? []) : []),
+    () => (isUnlocked ? (decryptedData?.entries ?? []) : []),
     [isUnlocked, decryptedData]
   )
+  const failedRecordIds = isUnlocked ? (decryptedData?.failed ?? []) : []
 
   // Drop decrypted plaintext from the query cache the moment the vault locks
   useEffect(() => {
@@ -149,7 +153,9 @@ export default function CredentialsPage() {
 
   const revokeMutation = useMutation({
     mutationFn: credentialService.revoke,
-    onSuccess: () => {
+    // Also after a failure: the list may be stale, or the write may have landed
+    // even though the re-read did not confirm it.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
     },
   })
@@ -162,17 +168,40 @@ export default function CredentialsPage() {
   })
 
   const handleCredentialClick = async (entry: DecryptedCredentialEntry) => {
-    // Fetch full credential data from server
-    const fullCredential = await credentialService.get(entry.id)
-    setSelectedCredential(fullCredential)
-    setShowDetail(true)
+    setActionError('')
+    try {
+      // Fetch full credential data from server
+      const fullCredential = await credentialService.get(entry.id)
+      setSelectedCredential(fullCredential)
+      setShowDetail(true)
+    } catch (err) {
+      setActionError(
+        err instanceof RecordVerificationError ? err.message : 'Could not open this credential.'
+      )
+    }
   }
 
   const handleRevoke = async (id: string) => {
-    if (confirm('Are you sure you want to revoke this credential?')) {
-      await revokeMutation.mutateAsync(id)
-    }
     setActiveMenu(null)
+    if (!confirm('Are you sure you want to revoke this credential?')) {
+      return
+    }
+    setActionError('')
+    try {
+      // Sign from the record on screen, not from a fresh answer the server could change.
+      const record = credentials?.find((credential) => credential.id === id)
+      if (!record) throw new Error('Credential not loaded')
+      await revokeMutation.mutateAsync(record)
+    } catch (err) {
+      if (err instanceof VaultLockedError) {
+        setActionError(err.message)
+        setShowMasterPasswordModal(true)
+      } else if (err instanceof RecordVerificationError) {
+        setActionError(`${err.message} It was not revoked.`)
+      } else {
+        setActionError('Revoke could not be confirmed. The list was reloaded: check the record before trying again.')
+      }
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -293,6 +322,33 @@ export default function CredentialsPage() {
         </div>
       )}
 
+      {/* Records that failed verification are shown, not hidden */}
+      {failedRecordIds.length > 0 && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <div className="flex gap-2 mb-2">
+            <ShieldAlert className="w-5 h-5 shrink-0" />
+            <p>
+              <strong>{failedRecordIds.length} record(s) were not opened.</strong> Their signature
+              did not verify or they could not be decrypted, so they may have been planted or
+              altered on the server. Investigate the server before trusting this vault.
+            </p>
+          </div>
+          <ul className="space-y-1">
+            {failedRecordIds.map((id) => (
+              <li key={id} className="flex items-center justify-between gap-2">
+                <code className="text-xs break-all">{id}</code>
+                <button
+                  onClick={() => handleDelete(id)}
+                  className="btn btn-secondary text-xs shrink-0"
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Search */}
       <div className="mb-6">
         <div className="relative">
@@ -357,6 +413,11 @@ export default function CredentialsPage() {
                     {!entry.is_active && (
                       <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">
                         Revoked
+                      </span>
+                    )}
+                    {entry.origin === 'legacy-unverified' && (
+                      <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full">
+                        Origin unverified
                       </span>
                     )}
                   </div>
@@ -459,6 +520,11 @@ export default function CredentialsPage() {
         onClose={() => {
           setShowDetail(false)
           setSelectedCredential(null)
+          queryClient.invalidateQueries({ queryKey: ['credentials'] })
+        }}
+        onOriginConfirmed={(updated) => {
+          setSelectedCredential(updated)
+          queryClient.invalidateQueries({ queryKey: ['credentials'] })
         }}
       />
 
@@ -472,6 +538,7 @@ export default function CredentialsPage() {
           queryClient.invalidateQueries({ queryKey: ['credentials'] })
         }}
         decryptedCache={decryptedCache}
+        unverifiedCount={failedRecordIds.length}
       />
     </div>
   )

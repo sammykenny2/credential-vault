@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand'
+import type { VaultSigner } from '@/lib/crypto'
 
 interface VaultKeyState {
   // RSA key pair (in memory only, never persisted)
@@ -13,13 +14,20 @@ interface VaultKeyState {
   publicKey: CryptoKey | null
   // Locally generated or private-key-derived public key, checked at unlock.
   expectedPublicKeyBase64: string | null
+  // Signs and verifies records; its keys come from the KEK-protected bundle
+  signer: VaultSigner | null
   // Timestamp when vault was last unlocked
   lastActivity: number | null
   // Session timeout in milliseconds (default: 15 minutes)
   sessionTimeout: number
 
   // Actions
-  setKeys: (privateKey: CryptoKey, publicKey: CryptoKey, expectedPublicKeyBase64: string) => void
+  setKeys: (
+    privateKey: CryptoKey,
+    publicKey: CryptoKey,
+    expectedPublicKeyBase64: string,
+    signer?: VaultSigner | null
+  ) => void
   clearKeys: () => void
   isUnlocked: () => boolean
   updateActivity: () => void
@@ -30,14 +38,16 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
   privateKey: null,
   publicKey: null,
   expectedPublicKeyBase64: null,
+  signer: null,
   lastActivity: null,
   sessionTimeout: 15 * 60 * 1000, // 15 minutes
 
-  setKeys: (privateKey: CryptoKey, publicKey: CryptoKey, expectedPublicKeyBase64: string) => {
+  setKeys: (privateKey, publicKey, expectedPublicKeyBase64, signer = null) => {
     set({
       privateKey,
       publicKey,
       expectedPublicKeyBase64,
+      signer,
       lastActivity: Date.now(),
     })
   },
@@ -47,6 +57,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
       privateKey: null,
       publicKey: null,
       expectedPublicKeyBase64: null,
+      signer: null,
       lastActivity: null,
     })
   },
@@ -67,7 +78,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
 
     if (Date.now() - lastActivity >= sessionTimeout) {
       // Auto-lock after timeout
-      set({ privateKey: null, publicKey: null, expectedPublicKeyBase64: null })
+      set({ privateKey: null, publicKey: null, expectedPublicKeyBase64: null, signer: null })
       return true
     }
     return false
@@ -91,6 +102,12 @@ function getExpectedPublicKeyBase64(): string | null {
   return useVaultKeyStore.getState().expectedPublicKeyBase64
 }
 
+function getSigner(): VaultSigner | null {
+  const store = useVaultKeyStore.getState()
+  store.checkTimeout()
+  return useVaultKeyStore.getState().signer
+}
+
 /**
  * Hook to access vault key functionality.
  */
@@ -106,6 +123,7 @@ export function useVaultKey() {
     getPrivateKey,
     getPublicKey,
     getExpectedPublicKeyBase64,
+    getSigner,
   }
 }
 
