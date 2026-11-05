@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Implemented and independently reviewed; deployment pending |
+| Status | Implemented, independently reviewed and deployed in v0.4.2 (2026-11-06); browser verification pending |
 | Scope | Findings from the 2026-11-05 review, based on main e4dee31 |
 | Review | Independent review completed; findings resolved and rechecked |
 
@@ -65,6 +65,44 @@ sign-in path and the setup authorization's limits.
 - Deployment verification and attachment format approval remain separate. This
   commit does not bump VERSION or create a release; existing sessions must sign
   in again when the new schema/backend are deployed with the matching frontend.
+  The deployment is recorded below; attachment format approval is still pending.
+
+## Deployment record
+
+- **Release:** `v0.4.2` was cut from `f0fd0e2` (#8), carrying `f7154bd` and #7.
+  CI built, scanned and attested the images; the scan found no High or Critical
+  vulnerability with a fix.
+  - backend `sha256:478d734e6f6477b5456fde4af5841e7fd7d8f9d20531f259e4a6b1d499a7c042`
+  - frontend `sha256:ba92cfbf35e4b6035953f1b9c799efc4a14a203fc78378984fbe0367f09da1d6`
+- **Rehearsal (2026-11-06):** the published backend image ran in a container with no
+  network against a copy of a fresh production backup. Only Google's code exchange
+  was simulated, using the account's stored identity. It printed only counts,
+  booleans and status codes.
+  - Migration `7a4e1c9d2b60` to `8b5f2d0e3c71` kept every existing table's count,
+    the ciphertext and the user keys; integrity and foreign key checks were clean.
+    It wrote the first-admin claim row for the existing administrator.
+  - Signing in with the stored Google identity worked, and the vault keys and
+    credentials were readable to unlock.
+  - Another Google account with the same email got 409, and a 0.4.1 refresh cookie
+    got 401.
+  - Refresh rotated the cookie, a replay inside the race window got 409, logout
+    revoked the session, and signing in again worked.
+- **Deployment (2026-11-06):** `Deploy-CredentialVault.ps1 -Tag 0.4.2` verified both
+  build attestations, kept the previous images, took a pre-deploy backup and passed
+  its health checks.
+  - The running images are the release digests, the migration ran at startup, and
+    neither container restarted.
+  - Read-only checks of the live database matched the pre-deploy backup's
+    ciphertext and user keys, and integrity was clean.
+  - On the tailnet, health reports 0.4.2 at `f0fd0e2`. The served bundle contains
+    the new logout and setup code. Refresh, logout and vault setup without
+    credentials return 401.
+- **Not yet verified:** signing in, unlocking, the one-time ADR-004 upgrade and logout
+  after an idle session, in a real browser. When this was recorded, no one had
+  signed in since the deployment.
+- **Rollback:** the migration cannot be downgraded. `Deploy-CredentialVault.ps1
+  -Rollback` restores the pre-deploy backup and loses anything written after the
+  deployment.
 
 ## Testing strategy
 

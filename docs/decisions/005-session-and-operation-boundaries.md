@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted and implemented; independent review completed, deployment pending.
+Accepted and implemented; independent review completed. Deployed in v0.4.2 on
+2026-11-06 and verified on the server; sign-in in a real browser is not yet verified
+([deployment record](../plans/PLAN-005-security-review-hardening.md#deployment-record)).
 
 ## Context
 
