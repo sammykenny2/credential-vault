@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # 64 raw bytes (r||s) in standard base64.
 SIGNATURE_PATTERN = r"^[A-Za-z0-9+/]{86}==$"
@@ -113,15 +113,24 @@ class CredentialExport(SignedRecordFields):
     id: UUID
     encrypted_data: str = Field(min_length=1, max_length=1_000_000)
     expires_at: datetime | None = None
+    is_active: bool = True
+    revoked_at: datetime | None = None
     revision: Literal[1] = 1
 
     _utc_expires_at = field_validator("expires_at")(_as_utc)
+    _utc_revoked_at = field_validator("revoked_at")(_as_utc)
+
+    @model_validator(mode="after")
+    def _consistent_status(self) -> CredentialExport:
+        if self.is_active != (self.revoked_at is None):
+            raise ValueError("Active and revoked status must agree")
+        return self
 
 
 class CredentialImportRequest(BaseModel):
     """Schema for importing credentials."""
 
-    credentials: list[CredentialExport]
+    credentials: list[CredentialExport] = Field(max_length=500)
     format: str = "json"
 
 

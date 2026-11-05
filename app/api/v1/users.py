@@ -1,12 +1,13 @@
 """User management endpoints."""
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from sqlalchemy import update
 
 from app.api.deps import AdminUser, CurrentUser, DbSession, VaultProvenAdmin, VaultProvenUser
-from app.core.security import SecurityService
+from app.core.security import SecurityService, hash_password_async
 from app.models.audit_log import AuditAction
-from app.models.user import UserRole
-from app.schemas.auth import GoogleOAuthCallback
+from app.models.user import User, UserRole
+from app.schemas.auth import GoogleLinkCallback
 from app.schemas.user import (
     PasswordSet,
     UserAdminRead,
@@ -70,8 +71,17 @@ async def set_my_password(
             detail="A password is already set for this account",
         )
 
-    current_user.hashed_password = SecurityService.hash_password(data.password)
-    await db.flush()
+    hashed = await hash_password_async(data.password)
+    result = await db.execute(
+        update(User)
+        .where(
+            User.id == current_user.id,
+            User.hashed_password.is_(None),
+        )
+        .values(hashed_password=hashed)
+    )
+    if result.rowcount != 1:  # type: ignore[attr-defined]
+        raise HTTPException(409, "A password is already set for this account")
 
     await AuditLogService(db).log_from_request(
         request,
@@ -87,7 +97,7 @@ async def set_my_password(
 @router.post("/me/link-google", response_model=UserRead)
 async def link_google_account(
     request: Request,
-    data: GoogleOAuthCallback,
+    data: GoogleLinkCallback,
     current_user: CurrentUser,
     db: DbSession,
 ):
@@ -97,6 +107,17 @@ async def link_google_account(
     to bind their real Google account for OAuth login.
     """
     from app.api.v1.oauth import exchange_google_code
+
+    authorization = SecurityService.decode_token(data.link_token)
+    if (
+        not authorization
+        or authorization.get("type") != "google-link"
+        or authorization.get("sub") != current_user.id
+        or authorization.get("ver") != current_user.token_version
+    ):
+        raise HTTPException(403, "Verify your account password again before linking Google")
+    if current_user.has_google_linked:
+        raise HTTPException(409, "A Google identity is already linked")
 
     # Exchange the OAuth code for Google user info
     google_info = await exchange_google_code(data.code, data.redirect_uri)
@@ -120,14 +141,27 @@ async def link_google_account(
         )
 
     # Link the account
-    await user_service.link_google_account(current_user, google_id)
+    result = await db.execute(
+        update(User)
+        .where(
+            User.id == current_user.id,
+            User.google_id == current_user.google_id
+            if current_user.google_id
+            else User.google_id.is_(None),
+            User.token_version == authorization["ver"],
+        )
+        .values(google_id=google_id)
+    )
+    if result.rowcount != 1:  # type: ignore[attr-defined]
+        raise HTTPException(409, "Account changed; sign in again before linking")
+    await db.refresh(current_user)
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
         request,
         action=AuditAction.GOOGLE_ACCOUNT_LINKED,
         user_id=current_user.id,
-        details={"google_id": google_id},
+        details={"provider": "google"},
     )
 
     await db.commit()

@@ -17,6 +17,7 @@ import {
 } from './crypto'
 import { RECORD_SIGNATURE_VERSION, signRecord, type StoredRecord } from './recordSigning'
 import { upgradeProofHeaders } from './vaultProof'
+import type { OperationCheck } from './operationGuard'
 
 const SIGNED_VAULT_MARKER_PREFIX = 'credential-vault:signed-vault:'
 
@@ -80,12 +81,14 @@ export function hasSeenAnySignedVault(): boolean {
 /** Sign every existing record and store the new key bundle, all or nothing. */
 export async function performVaultUpgrade(
   unlocked: UnlockedVault,
-  records: StoredRecord[]
+  records: StoredRecord[],
+  assertActive: OperationCheck = () => {}
 ): Promise<VaultSigner> {
   if (!unlocked.pendingUpgrade) throw new Error('This vault does not need an upgrade.')
   if (records.some((record) => record.signature !== null)) throw new VaultRollbackError()
 
   const keys = await createVaultUpgradeKeys(unlocked.pendingUpgrade)
+  assertActive()
   const adoptions = await Promise.all(records.map(async (record) => {
     const revision = record.revision + 1
     const { signature } = await signRecord(
@@ -100,6 +103,9 @@ export async function performVaultUpgrade(
       origin: 'legacy-unverified',
     }
   }))
+  assertActive()
+  const headers = await upgradeProofHeaders(unlocked.privateKey)
+  assertActive()
 
   await api.post(
     '/auth/vault/upgrade',
@@ -108,7 +114,8 @@ export async function performVaultUpgrade(
       signing_public_key: keys.signingPublicKeyBase64,
       adoptions,
     },
-    { headers: await upgradeProofHeaders(unlocked.privateKey) }
+    { headers, assertOperation: assertActive }
   )
+  assertActive()
   return keys.signer
 }

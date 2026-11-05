@@ -29,7 +29,12 @@ def _oauth_settings(**overrides) -> Settings:
 
 
 async def _google_sign_in(client: AsyncClient, email: str, settings: Settings | None = None):
-    google_info = {"google_id": f"g-{email}", "email": email, "display_name": "Someone"}
+    google_info = {
+        "google_id": f"g-{email}",
+        "email": email,
+        "display_name": "Someone",
+        "authoritative_email": True,
+    }
     with (
         patch("app.api.v1.oauth.get_settings", return_value=settings or _oauth_settings()),
         patch(
@@ -139,7 +144,12 @@ class TestExchangeGoogleCode:
             patch("app.api.v1.oauth.httpx.AsyncClient", return_value=fake),
         ):
             info = await exchange_google_code("code", "http://test/login")
-        assert info == {"google_id": "g-1", "email": "someone@example.com", "display_name": "S"}
+        assert info == {
+            "google_id": "g-1",
+            "email": "someone@example.com",
+            "display_name": "S",
+            "authoritative_email": False,
+        }
 
 
 class TestGoogleCallback:

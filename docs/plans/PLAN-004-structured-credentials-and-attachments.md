@@ -42,7 +42,7 @@
 - [x] Task 0.4a：實作 ADR-004 的 key bundle、紀錄簽章、proof v2 與 RSA-only vault 的一次性升級（既有 credential）。
 - [ ] Task 0.4b：上述實作與 4 KiB padding 設計獲獨立重審，記錄意見及解決狀態。
   2026-11-05 已有兩輪獨立審查，提出的問題已修正，最後一批小修正未再審；padding 尚未審閱。
-- [ ] Task 0.4c：決定 `POST /auth/vault/setup` 的 step-up。目前只要 session token，偷到 token 的人可在沒有 vault 的帳號上安裝自己的金鑰，再通過 `VaultProvenAdmin`。
+- [x] Task 0.4c：由 [ADR-005](../decisions/005-session-and-operation-boundaries.md) 決定並實作獨立的首次設定授權：互動登入才核發 `X-Vault-Setup`，綁定 user、token_version、session family，十分鐘有效；refresh 不核發，安裝金鑰以條件式寫入消耗空 vault 狀態。已完成本地 regression 與獨立複查；部署證據仍屬 Task 0.6，不因此開放格式定案 gate。
 - [ ] Task 0.5：先盤點正式 envelope 版本、DB foreign_key_check 與 journal／FK 預設，只讀取得結果。
   沒有證據不能刪 v1 reader；有 FK 違規時另提修復，禁止清空或自動刪 row。
 - [ ] Task 0.6：記錄修補 release／部署版本與瀏覽器重載證據；未部署的利用流程與 PoC 留在本機，

@@ -635,7 +635,9 @@ export async function rewrapPrivateKey(
   newPassword: string,
   saltBase64: string,
   encryptedPrivateKeyBase64: string,
-  kdfVersion: number = KDF_VERSION
+  kdfVersion: number = KDF_VERSION,
+  expectedPublicKey?: string,
+  expectedSigner?: VaultSigner,
 ): Promise<RewrappedPrivateKey> {
   const currentSalt = new Uint8Array(base64ToArrayBuffer(saltBase64))
   const currentKek = await deriveKEK(currentPassword, currentSalt, kdfVersion)
@@ -645,6 +647,17 @@ export async function rewrapPrivateKey(
   const plaintext = await unwrapKeyBundle(blob, currentKek)
   try {
     const bundle = decodeKeyBundle(plaintext)
+    if (expectedPublicKey) {
+      const rsaPkcs8 = toBytes(bundle.rsaPkcs8)
+      try { await verifiedPublicKey(rsaPkcs8.buffer, expectedPublicKey) }
+      finally { rsaPkcs8.fill(0) }
+    }
+    if (expectedSigner) {
+      const restored = await signerFromBundle(bundle)
+      if (restored.vaultId !== expectedSigner.vaultId || restored.signerId !== expectedSigner.signerId) {
+        throw new VaultKeyMismatchError()
+      }
+    }
     const newSalt = generateSalt()
     const newKek = await deriveKEK(newPassword, newSalt, KDF_VERSION)
     return {
@@ -723,7 +736,7 @@ async function encryptBody(
  * Decrypted content is rendered, so check its shape: a signature only proves who
  * signed it, and a legacy-unverified record may have been planted before the upgrade.
  */
-function assertCredentialData(value: unknown): asserts value is CredentialData {
+export function assertCredentialData(value: unknown): asserts value is CredentialData {
   const isOptionalString = (field: unknown) => field === undefined || typeof field === 'string'
   const isPlainObject = (field: unknown): field is Record<string, unknown> =>
     typeof field === 'object' && field !== null && !Array.isArray(field)

@@ -23,6 +23,8 @@ export interface UserCreate {
 
 // Auth types
 export interface TokenResponse {
+  user_id: string
+  vault_setup_token?: string | null
   access_token: string
   token_type: string
   /** Access token lifetime in seconds. The refresh token is an HttpOnly cookie. */

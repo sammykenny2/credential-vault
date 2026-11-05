@@ -10,6 +10,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
 PREVIOUS = "6d8f2b0c3e55"
+SIGNING_REVISION = "7a4e1c9d2b60"
 CREDENTIAL_ID = "7a1d2c3b-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
 USER_ID = "2f9c1b7e-4a5d-4c3e-9b8a-1d2e3f4a5b6c"
 
@@ -77,7 +78,7 @@ def test_models_match_the_migrated_schema(database: Path):
 
 
 def test_downgrade_keeps_rows_when_no_vault_is_signed(database: Path):
-    assert _alembic(database, "upgrade", "head").returncode == 0
+    assert _alembic(database, "upgrade", SIGNING_REVISION).returncode == 0
 
     result = _alembic(database, "downgrade", PREVIOUS)
 
@@ -89,7 +90,7 @@ def test_downgrade_keeps_rows_when_no_vault_is_signed(database: Path):
 
 
 def test_downgrade_refuses_when_a_vault_is_signed(database: Path):
-    assert _alembic(database, "upgrade", "head").returncode == 0
+    assert _alembic(database, "upgrade", SIGNING_REVISION).returncode == 0
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE users SET signing_public_key = 'key'")
 
@@ -98,3 +99,20 @@ def test_downgrade_refuses_when_a_vault_is_signed(database: Path):
     assert result.returncode != 0
     assert "signed vaults exist" in result.stderr
     assert _query(database, "SELECT signing_public_key FROM users") == [("key",)]
+
+
+def test_session_migration_closes_bootstrap_for_existing_admin(database: Path):
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET role = 'ADMIN'")
+    assert _alembic(database, "upgrade", "head").returncode == 0
+    assert _query(database, "SELECT id FROM admin_bootstrap_claim") == [(1,)]
+    assert _query(database, "SELECT COUNT(*) FROM auth_sessions") == [(0,)]
+    assert _query(database, "SELECT encrypted_data FROM credentials") == [("Y2lwaGVy",)]
+
+
+def test_session_migration_refuses_unsafe_downgrade(database: Path):
+    assert _alembic(database, "upgrade", "head").returncode == 0
+    result = _alembic(database, "downgrade", SIGNING_REVISION)
+    assert result.returncode != 0
+    assert "Auth sessions cannot be downgraded safely" in result.stderr
+    assert _query(database, "SELECT encrypted_data FROM credentials") == [("Y2lwaGVy",)]

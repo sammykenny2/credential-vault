@@ -14,6 +14,8 @@ import { authService } from '@/services/authService'
 import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { OperationCancelledError } from '@/lib/operationGuard'
 
 // Same rule as the /admin/setup page and the backend (app/schemas/user.py)
 const MIN_PASSWORD_LENGTH = 8
@@ -21,12 +23,22 @@ const MAX_PASSWORD_BYTES = 72
 
 export default function AdminPasswordSetup() {
   const { isUnlocked } = useVaultKey()
+  const { begin } = useOperationGuard()
   const setUser = useAuthStore((state) => state.setUser)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPasswords, setShowPasswords] = useState(false)
   const [error, setError] = useState('')
   const [isBusy, setIsBusy] = useState(false)
+  const [wasUnlocked, setWasUnlocked] = useState(isUnlocked)
+  if (wasUnlocked !== isUnlocked) {
+    setWasUnlocked(isUnlocked)
+    if (!isUnlocked) {
+      setPassword('')
+      setConfirmPassword('')
+      setShowPasswords(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,18 +58,27 @@ export default function AdminPasswordSetup() {
     }
 
     setIsBusy(true)
+    let operation: ReturnType<typeof begin> | undefined
     try {
+      operation = begin()
       // Proof first: it needs the unlocked private key and fails fast when locked.
       const headers = await vaultProofHeaders()
+      operation.assertActive()
       // The updated user has has_password set, which hides this form.
-      setUser(await authService.setPassword(password, headers))
+      const user = await authService.setPassword(password, headers, operation.assertActive)
+      operation.assertActive()
+      setUser(user)
     } catch (err) {
+      if (err instanceof OperationCancelledError) return
       setError(
         err instanceof VaultLockedError
           ? 'Unlock your vault on the Credentials page first.'
-          : 'The password could not be saved. Nothing was changed.'
+          : 'The password update could not be confirmed. Check your account before retrying.'
       )
     } finally {
+      operation?.finish()
+      setPassword('')
+      setConfirmPassword('')
       setIsBusy(false)
     }
   }

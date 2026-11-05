@@ -84,7 +84,7 @@ async def exchange_google_code(code: str, redirect_uri: str) -> dict:
         )
 
     if token_response.status_code != 200:
-        logger.warning("Google token exchange failed: %s", token_response.text)
+        logger.warning("Google token exchange failed (status %s)", token_response.status_code)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Failed to authenticate with Google",
@@ -117,15 +117,19 @@ async def exchange_google_code(code: str, redirect_uri: str) -> dict:
             detail="Invalid Google user info",
         )
 
-    # Accounts are matched and auto-linked by email, so an unverified address
-    # must never be trusted as proof of ownership.
+    # Email is profile data, never a replacement for the stable Google subject.
     if google_user.get("verified_email") is not True:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Google account email is not verified",
         )
 
-    return {"google_id": google_id, "email": email, "display_name": display_name}
+    return {
+        "google_id": google_id,
+        "email": email,
+        "display_name": display_name,
+        "authoritative_email": email.lower().endswith("@gmail.com") or bool(google_user.get("hd")),
+    }
 
 
 @router.post("/google/callback", response_model=Token)
@@ -146,11 +150,7 @@ async def google_callback(
     try:
         google_info = await exchange_google_code(data.code, data.redirect_uri)
     except HTTPException:
-        await audit_service.log_from_request(
-            request,
-            action=AuditAction.LOGIN_FAILURE,
-            details={"reason": "google_token_exchange_failed"},
-        )
+        await audit_service.log_failure(request, "google_token_exchange_failed")
         raise
 
     google_id = google_info["google_id"]
@@ -159,15 +159,21 @@ async def google_callback(
 
     user_service = UserService(db)
 
-    # Look up user by google_id first, then by email
+    # A different subject must never inherit an existing account by matching email.
     user = await user_service.get_by_google_id(google_id)
 
     if not user:
-        # Try matching by email (first-time OAuth link)
         user = await user_service.get_by_email(email)
         if user:
-            # Link Google account to existing user
-            await user_service.link_google_account(user, google_id)
+            claimed = google_info.get("authoritative_email") is True and (
+                await user_service.claim_empty_oauth_invitation(user, google_id)
+            )
+            if not claimed:
+                await audit_service.log_failure(request, "google_identity_conflict")
+                raise HTTPException(
+                    409,
+                    "Email is already registered; sign in to the existing account to link Google",
+                )
         else:
             user = await user_service.create_oauth_user(
                 email=email,
@@ -188,10 +194,16 @@ async def google_callback(
     # when set, limits this to that address. Applies to existing accounts too,
     # so a user who signed in before any admin existed is promoted next time.
     promoted_from: UserRole | None = None
-    if user.role != UserRole.ADMIN and (not settings.admin_email or email == settings.admin_email):
+    if user.role != UserRole.ADMIN and (
+        not settings.admin_email
+        or (
+            email.lower() == settings.admin_email.lower()
+            and google_info.get("authoritative_email") is True
+        )
+    ):
         from app.services.bootstrap import BootstrapService
 
-        if not await BootstrapService(db).has_any_admin():
+        if await BootstrapService(db).claim_first_admin():
             promoted_from = user.role
             user.role = UserRole.ADMIN
             logger.info("No admin exists: promoting user %s to admin", user.id)
@@ -199,9 +211,6 @@ async def google_callback(
     # Update last login
     await user_service.update_last_login(user)
     await db.commit()
-
-    # Access token in the body, refresh token as an HttpOnly cookie
-    token = issue_session(user, response)
 
     await audit_service.log_from_request(
         request,
@@ -224,4 +233,4 @@ async def google_callback(
         )
     await db.commit()
 
-    return token
+    return await issue_session(user, response, db)

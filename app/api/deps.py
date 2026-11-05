@@ -18,7 +18,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/oauth/google/callback")
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db, scope="function")],
 ) -> User:
     """Get current authenticated user from JWT token."""
     credentials_exception = HTTPException(
@@ -53,6 +53,20 @@ async def get_current_user(
     # Logout bumps token_version; anything issued before that is revoked.
     if payload.get("ver", 0) != user.token_version:
         raise credentials_exception
+
+    if "sid" in payload:
+        import time
+
+        from app.models.auth_session import AuthSession
+
+        session = await db.get(AuthSession, payload["sid"])
+        if (
+            session is None
+            or session.user_id != user.id
+            or session.revoked_at is not None
+            or session.expires_at <= int(time.time())
+        ):
+            raise credentials_exception
 
     return user
 
@@ -168,4 +182,4 @@ VaultProvenUser = Annotated[User, Depends(get_vault_proven_user)]
 VaultSigningUser = Annotated[User, Depends(get_vault_signing_user)]
 VaultUpgradingUser = Annotated[User, Depends(get_vault_upgrading_user)]
 VaultProvenAdmin = Annotated[User, Depends(get_vault_proven_admin_user)]
-DbSession = Annotated[AsyncSession, Depends(get_db)]
+DbSession = Annotated[AsyncSession, Depends(get_db, scope="function")]

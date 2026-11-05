@@ -8,7 +8,7 @@ import { Shield } from 'lucide-react'
 
 export default function AdminSetupPage() {
   const navigate = useNavigate()
-  const { setAccessToken, setUser, isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -28,7 +28,7 @@ export default function AdminSetupPage() {
     setupService
       .getStatus()
       .then((status) => {
-        if (status.is_initialized) {
+        if (status.is_initialized || !status.can_create_admin) {
           navigate('/login', { replace: true })
         } else {
           setCheckingStatus(false)
@@ -44,9 +44,7 @@ export default function AdminSetupPage() {
     mutationFn: () =>
       setupService.createAdmin(email, password, displayName || undefined),
     onSuccess: async (data) => {
-      setAccessToken(data.access_token)
-      const user = await authService.getMe()
-      setUser(user)
+      await authService.acceptSession(data)
       navigate('/dashboard')
     },
     onError: (err: unknown) => {

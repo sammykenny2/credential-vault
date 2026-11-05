@@ -112,9 +112,9 @@ export default function SettingsPage() {
       {showPasswordModal && (
         <PasswordVerifyModal
           onClose={() => setShowPasswordModal(false)}
-          onVerified={async () => {
+          onVerified={async (linkToken) => {
             setShowPasswordModal(false)
-            const state = beginOAuthFlow('link')
+            const state = beginOAuthFlow('link', linkToken)
             try {
               const redirectUri = `${window.location.origin}/login`
               const authUrl = await authService.getGoogleAuthUrl(redirectUri, state)

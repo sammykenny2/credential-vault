@@ -19,6 +19,7 @@ import { VaultLockedError } from '@/lib/vaultProof'
 import { RecordVerificationError } from '@/lib/recordSigning'
 import { lockVault } from '@/hooks/useVaultLock'
 import { privateFieldProps } from '@/lib/inputProps'
+import { captureOperation } from '@/lib/operationGuard'
 
 // Decrypted credential cache entry
 interface DecryptedCredentialEntry {
@@ -60,18 +61,20 @@ export default function CredentialsPage() {
 
   // Fetch all credentials (including encrypted_data for client-side search)
   const { data: credentials, isLoading } = useQuery({
-    queryKey: ['credentials'],
-    queryFn: () => credentialService.list(),
+    queryKey: ['credentials', user?.id],
+    queryFn: () => credentialService.listAll(),
     enabled: isUnlocked,
   })
 
   // Verify and decrypt every credential. A record that fails is reported, never
   // hidden: a server planting or altering records must be visible to the user.
   const decryptAll = useCallback(async (creds: CredentialListItem[]) => {
+    const operation = captureOperation()
     const entries: DecryptedCredentialEntry[] = []
     const failed: string[] = []
     for (const cred of creds) {
       const data = await decrypt(cred).catch(() => null)
+      operation.assertActive()
       if (data) {
         entries.push({
           id: cred.id,
@@ -96,7 +99,7 @@ export default function CredentialsPage() {
     [credentials]
   )
   const { data: decryptedData, isFetching: isDecrypting } = useQuery({
-    queryKey: ['credentials-decrypted', decryptKey],
+    queryKey: ['credentials-decrypted', user?.id, decryptKey],
     queryFn: () => decryptAll(credentials ?? []),
     enabled: isUnlocked && credentials !== undefined,
     gcTime: 0,
@@ -125,6 +128,8 @@ export default function CredentialsPage() {
       setSelectedCredential(null)
       setShowCredentialForm(false)
       setSelectedTemplate(null)
+      setShowBackupDialog(false)
+      setSearchQuery('')
     }
   }
 
@@ -145,14 +150,14 @@ export default function CredentialsPage() {
   }, [decryptedCache, searchQuery])
 
   const createMutation = useMutation({
-    mutationFn: credentialService.create,
+    mutationFn: ({ data, assertActive }: { data: Parameters<typeof credentialService.create>[0]; assertActive?: Parameters<typeof credentialService.create>[1] }) => credentialService.create(data, assertActive),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
     },
   })
 
   const revokeMutation = useMutation({
-    mutationFn: credentialService.revoke,
+    mutationFn: (record: Credential) => credentialService.revoke(record),
     // Also after a failure: the list may be stale, or the write may have landed
     // even though the re-read did not confirm it.
     onSettled: () => {
@@ -161,7 +166,7 @@ export default function CredentialsPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: credentialService.delete,
+    mutationFn: (id: string) => credentialService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
     },
@@ -503,8 +508,9 @@ export default function CredentialsPage() {
         key={showCredentialForm ? (selectedTemplate?.id ?? 'blank') : 'closed'}
         isOpen={showCredentialForm}
         onClose={handleCredentialFormClose}
-        onSave={async (data, templateId) => {
-          const result = await createMutation.mutateAsync(data)
+        onSave={async (data, templateId, assertActive) => {
+          const result = await createMutation.mutateAsync({ data, assertActive })
+          assertActive?.()
           // Record template usage if a template was used
           if (templateId) {
             recordTemplateUsage(templateId, result?.id)
@@ -529,6 +535,7 @@ export default function CredentialsPage() {
       />
 
       <CredentialBackupDialog
+        key={showBackupDialog ? 'open' : 'closed'}
         isOpen={showBackupDialog}
         onClose={() => {
           setShowBackupDialog(false)

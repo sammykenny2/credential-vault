@@ -1,12 +1,19 @@
 """Authentication endpoints."""
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from sqlalchemy import update
 
 from app.api.deps import CurrentUser, DbSession, VaultProvenUser, VaultUpgradingUser
 from app.config import get_settings
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
-from app.core.security import DUMMY_PASSWORD_HASH, REFRESH_COOKIE_NAME, SecurityService
-from app.core.session import issue_session
+from app.core.security import (
+    DUMMY_PASSWORD_HASH,
+    REFRESH_COOKIE_NAME,
+    SecurityService,
+    hash_password_async,
+    verify_password_async,
+)
+from app.core.session import issue_session, rotate_session
 from app.core.vault_proof import (
     PROOF_TTL_SECONDS,
     SIGNED_PROOF_VERSION,
@@ -15,7 +22,7 @@ from app.core.vault_proof import (
     create_upgrade_challenge,
 )
 from app.models.audit_log import AuditAction
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.schemas.auth import (
     LocalLoginRequest,
     Token,
@@ -51,10 +58,11 @@ async def local_login(
     # neither timing nor wording reveals whether the address has an account,
     # a password, or admin rights.
     stored_hash = user.hashed_password if user and user.hashed_password else DUMMY_PASSWORD_HASH
-    password_ok = SecurityService.verify_password(data.password, stored_hash)
+    password_ok = await verify_password_async(data.password, stored_hash)
     eligible = bool(user and user.hashed_password and user.role == UserRole.ADMIN)
 
     if not (eligible and password_ok):
+        await AuditLogService(db).log_failure(request, "invalid_local_credentials")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -62,6 +70,7 @@ async def local_login(
     assert user is not None and user.hashed_password is not None  # narrowed by `eligible`
 
     if not user.is_active:
+        await AuditLogService(db).log_failure(request, "inactive_local_account")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated",
@@ -70,12 +79,10 @@ async def local_login(
     # A hash made with weaker Argon2 parameters is upgraded while the password
     # is at hand; saved with the last-login update below.
     if SecurityService.password_needs_rehash(user.hashed_password):
-        user.hashed_password = SecurityService.hash_password(data.password)
+        user.hashed_password = await hash_password_async(data.password)
 
     # Update last login
     await user_service.update_last_login(user)
-
-    token = issue_session(user, response)
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -85,7 +92,7 @@ async def local_login(
         details={"method": "local_breakglass"},
     )
 
-    return token
+    return await issue_session(user, response, db)
 
 
 @router.post("/refresh", response_model=Token)
@@ -137,15 +144,13 @@ async def refresh_session(
             detail="Session has been revoked",
         )
 
-    token = issue_session(user, response)
-
-    audit_service = AuditLogService(db)
-    await audit_service.log_from_request(
+    token = await rotate_session(user, response, db, payload)
+    await AuditLogService(db).log_from_request(
         request,
         action=AuditAction.TOKEN_REFRESH,
         user_id=user.id,
     )
-
+    await db.commit()
     return token
 
 
@@ -161,8 +166,9 @@ async def logout(
     Bumping `token_version` invalidates all outstanding access and refresh
     tokens for this account, including those on other devices.
     """
-    current_user.token_version += 1
-    await db.flush()
+    await db.execute(
+        update(User).where(User.id == current_user.id).values(token_version=User.token_version + 1)
+    )
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -171,6 +177,7 @@ async def logout(
         user_id=current_user.id,
     )
 
+    await db.commit()
     SecurityService.clear_refresh_cookie(response)
     return {"message": "Logged out"}
 
@@ -190,7 +197,9 @@ async def get_current_user_info(current_user: CurrentUser):
 
 
 @router.post("/verify-password")
+@limiter.limit(AUTH_RATE_LIMIT)
 async def verify_password(
+    request: Request,
     data: VerifyPasswordRequest,
     current_user: CurrentUser,
     db: DbSession,
@@ -202,13 +211,19 @@ async def verify_password(
             detail="No password set for this account",
         )
 
-    if not SecurityService.verify_password(data.password, current_user.hashed_password):
+    if not await verify_password_async(data.password, current_user.hashed_password):
+        await AuditLogService(db).log_failure(request, "password_verification_failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid password",
         )
 
-    return {"verified": True}
+    return {
+        "verified": True,
+        "link_token": SecurityService.create_link_token(
+            current_user.id, current_user.token_version
+        ),
+    }
 
 
 @router.get("/vault/keys")
@@ -378,6 +393,20 @@ async def setup_vault(
     encrypted with the user's vault password (client-side); a new vault is
     signed from the start, so it never has unsigned records.
     """
+    authorization = SecurityService.decode_token(request.headers.get("X-Vault-Setup", ""))
+    access = SecurityService.decode_token(
+        request.headers.get("Authorization", "").partition(" ")[2]
+    )
+    if (
+        not authorization
+        or authorization.get("type") != "vault-setup"
+        or authorization.get("sub") != current_user.id
+        or authorization.get("ver") != current_user.token_version
+        or not authorization.get("sid")
+        or not access
+        or authorization["sid"] != access.get("sid")
+    ):
+        raise HTTPException(403, "vault_setup_authorization_required")
     user_service = UserService(db)
     configured = await user_service.setup_vault_keys(
         user=current_user,

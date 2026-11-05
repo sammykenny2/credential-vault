@@ -40,13 +40,29 @@ project-specific procedures that are too detailed for always-loaded instructions
   (RSA with the OAEP label `credential-vault/vault-proof/v1`, also stateless) only
   authorizes `POST /auth/vault/upgrade`; never add a proof that returns an RSA
   decryption for a signed vault.
-  Known gap: `POST /auth/vault/setup` needs only a session token, so a stolen token
-  on an account with no vault can install its own keys and then pass these checks.
+  `POST /auth/vault/setup` also needs a ten-minute `X-Vault-Setup` authorization
+  issued only after interactive login, bound to the user, token_version and login
+  family. Refresh never issues one. A token-only client cannot install new keys.
   Keep new destructive endpoints behind `VaultProvenUser`.
   Changes that would let a stolen token keep access need it too: adding a
   sign-in password (`PUT /users/me/password`) and every admin change to
   accounts (create, update, role, reactivate, delete) use `VaultProvenAdmin`,
   so an admin manages users only with the vault unlocked.
+- Session/operation boundaries: ADR-005 and SPEC-005. Refresh families are stored
+  and rotated with CAS and absolute expiry; logout commits revocation before success.
+  Every asynchronous plaintext operation captures account and unlock generations,
+  and checks them before later side effects. Closing/unmounting cancels dialog work.
+  Never replace these checks with reading the current global keys after an await.
+- Backups fetch/verify every page including revoked rows, then compare the snapshot
+  again. The new text-only JSON type is `credential-record-backup` v1, distinct
+  from both legacy `credential-backup` v1 and planned ZIP v2. Restore preserves
+  revocation but labels origin unverified; completed batches can remain on failure.
+- FastAPI 0.162 uses included-router objects that stock SlowAPI middleware misses.
+  `RequestLimitMiddleware` enforces the shared API budget before reading bodies,
+  using SlowAPI's public backend. Test real HTTP 429s, not just decorator presence.
+- Database dependencies use `scope="function"` so their commit precedes response
+  delivery. Security-sensitive commit endpoints also commit explicitly. Do not
+  move commits back to request teardown or claim success after a commit failure.
 - Not implemented despite older docs: TOTP MFA and WebAuthn/passkeys (both
   `/api/v1/totp/*` and `/api/v1/webauthn/*` return 503), credential sharing,
   emergency access, server-side backup. The `webauthn_credentials` table remains
@@ -65,7 +81,7 @@ project-specific procedures that are too detailed for always-loaded instructions
   backend image install `uv export --frozen` output with `pip --require-hashes`.
 - Frontend: `frontend/` (Vite 8 + React 19 + TypeScript 6, Node 24+). `npm install`,
   `npm run dev` (port 3000, proxies `/api` to 8000), `npm run build`.
-- Tests: `pytest` at the root (210 tests, coverage configured in `pyproject.toml`);
+- Tests: `pytest` at the root (coverage configured in `pyproject.toml`);
   `cd frontend && npm run test:run`.
 - Lint/type: `ruff check . && ruff format --check .`, `mypy app/`,
   `cd frontend && npm run lint`.

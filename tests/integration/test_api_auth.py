@@ -2,9 +2,11 @@
 
 import pytest
 from argon2 import PasswordHasher
+from fastapi import Response
 from httpx import AsyncClient
 
 from app.core.security import SecurityService
+from app.core.session import issue_session
 from app.models.user import UserRole
 from app.services.user import UserService
 from tests.vault_helpers import new_signing_public_key
@@ -28,8 +30,9 @@ class TestAuthAPI:
         )
         await db_session.commit()
 
-        access_token = SecurityService.create_access_token(user.id)
-        return access_token, user.id
+        session = await issue_session(user, Response(), db_session)
+        self.setup_authorization = session.vault_setup_token
+        return session.access_token, user.id
 
     @pytest.mark.asyncio
     async def test_get_me_authenticated(self, client: AsyncClient, db_session, test_user_data):
@@ -66,7 +69,9 @@ class TestAuthAPI:
         )
         await db_session.commit()
 
-        refresh_token = SecurityService.create_refresh_token(user.id)
+        issued = Response()
+        await issue_session(user, issued, db_session)
+        refresh_token = issued.headers["set-cookie"].split(";", 1)[0].split("=", 1)[1]
 
         response = await client.post(
             "/api/v1/auth/refresh",
@@ -127,7 +132,9 @@ class TestAuthAPI:
         )
         assert response.status_code == 401
 
-        current = SecurityService.create_refresh_token(user.id, token_version=3)
+        issued = Response()
+        await issue_session(user, issued, db_session)
+        current = issued.headers["set-cookie"].split(";", 1)[0].split("=", 1)[1]
         response = await client.post(
             "/api/v1/auth/refresh",
             headers={"Cookie": f"refresh_token={current}"},
@@ -191,7 +198,7 @@ class TestAuthAPI:
 
         response = await client.post(
             "/api/v1/auth/vault/setup",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Vault-Setup": self.setup_authorization},
             json={
                 "public_key": "test-public-key-base64",
                 "encrypted_private_key": "test-encrypted-private-key-base64",
@@ -251,7 +258,7 @@ class TestAuthAPI:
         # First setup should succeed
         response = await client.post(
             "/api/v1/auth/vault/setup",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Vault-Setup": self.setup_authorization},
             json=vault_data,
         )
         assert response.status_code == 200
@@ -259,7 +266,7 @@ class TestAuthAPI:
         # Second setup should fail
         response = await client.post(
             "/api/v1/auth/vault/setup",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Vault-Setup": self.setup_authorization},
             json=vault_data,
         )
         assert response.status_code == 400

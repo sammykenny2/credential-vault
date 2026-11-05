@@ -4,7 +4,8 @@ import { deriveKEK, generateSalt, arrayBufferToBase64 } from '@/lib/crypto'
 import { MIN_BACKUP_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
 
 const entries = [{ data: { name: 'Synthetic backup', fields: { password: 'synthetic-value' } },
-  expires_at: null, created_at: '2026-11-05T00:00:00Z' }]
+  expires_at: null, created_at: '2026-11-05T00:00:00Z',
+  is_active: false, revoked_at: '2026-11-05T00:00:00Z', source_origin: 'authored' as const }]
 
 describe('credential backup password policy', () => {
   it('provides a strong generated recovery password', () => {

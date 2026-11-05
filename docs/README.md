@@ -19,6 +19,7 @@ These important documents live in the project root:
 | [requirements.md](./requirements.md) | Template | Requirements specification |
 | [architecture.md](./architecture.md) | Template | System architecture |
 | [api.md](./api.md) | Template | API specification (REST/WebSocket) |
+| [api-security.md](./api-security.md) | Complete | 已實作的登入、session、初次設定與還原 API 契約 |
 
 ## Development Guides
 
@@ -42,6 +43,9 @@ The following documents describe proposed behavior and have not been implemented
 | [ADR-004](./decisions/004-vault-authenticity-and-key-trust.md) | Accepted; 簽章與 proof 已實作未發版 | 金鑰信任、簽章、proof 及 padding；格式定案前置條件 |
 | [SPEC-004](./specs/SPEC-004-structured-credentials-and-attachments.md) | Draft; gate closed | 型別化欄位、來源簽章、安全保存、完整備份與 36 項驗收條件 |
 | [PLAN-004](./plans/PLAN-004-structured-credentials-and-attachments.md) | Draft; gate closed | Phase 0 前置修補與八個後續階段、16 項審閱處置及部署計畫 |
+| [ADR-005](./decisions/005-session-and-operation-boundaries.md) | Accepted; review pending | Session 輪替、操作生命週期、穩定身分與提交邊界 |
+| [SPEC-005](./specs/SPEC-005-security-boundaries.md) | Implemented in branch | 安全修補行為、備份相容性與驗收要求 |
+| [PLAN-005](./plans/PLAN-005-security-review-hardening.md) | In Progress | 2026-11-05 審查修補與驗證進度 |
 
 ## Scripts
 

@@ -14,16 +14,19 @@ import {
 import clsx from 'clsx'
 
 export default function Layout() {
-  const { user, logout } = useAuthStore()
+  const { user, generation } = useAuthStore()
   const navigate = useNavigate()
   useAutoLock()
 
   const handleLogout = async () => {
-    // Server-side revocation first (invalidates every token for this account),
-    // then clear local state and the in-memory vault keys.
-    await authService.logout()
-    logout()
-    navigate('/login')
+    try {
+      await authService.logout()
+      navigate('/login')
+    } catch {
+      navigate('/login', { state: {
+        logoutError: 'This device is locked, but the server could not confirm session revocation. Sign in again and retry logout to revoke other sessions.',
+      } })
+    }
   }
 
   const navItems = [
@@ -90,7 +93,7 @@ export default function Layout() {
       {/* Main content */}
       <main className="flex-1 bg-gray-50 overflow-y-auto">
         <div className="p-8">
-          <Outlet />
+          <Outlet key={generation} />
         </div>
       </main>
     </div>

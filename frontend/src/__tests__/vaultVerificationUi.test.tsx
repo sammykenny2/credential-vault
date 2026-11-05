@@ -28,6 +28,8 @@ import api from '@/services/api'
 import { credentialService } from '@/services/credentialService'
 import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialDetail from '@/components/CredentialDetail'
+import VaultPasswordChange from '@/components/VaultPasswordChange'
+import { authService } from '@/services/authService'
 import CredentialsPage from '@/pages/CredentialsPage'
 import { useVaultKeyStore } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
@@ -97,6 +99,14 @@ async function submitPassword(password: string) {
   await act(async () => container.querySelector('form')!.requestSubmit())
 }
 
+async function typeInto(selector: string, value: string) {
+  const input = container.querySelector<HTMLInputElement>(selector)!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
 function buttonNamed(text: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll('button')).find((b) =>
     b.textContent?.includes(text)
@@ -133,7 +143,6 @@ beforeEach(() => {
   localStorage.clear()
   mockedApi.get.mockReset()
   mockedApi.post.mockReset()
-  vi.mocked(credentialService.list).mockReset()
   vi.mocked(credentialService.listAll).mockReset()
   vi.mocked(credentialService.confirmOrigin).mockReset()
   useVaultKeyStore.getState().clearKeys()
@@ -144,9 +153,32 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   useVaultKeyStore.getState().clearKeys()
+  vi.restoreAllMocks()
 })
 
 describe('unlocking', () => {
+  it.each(['close', 'account change', 'lock'])('cancels delayed unlock after %s', async (event) => {
+    let resolve!: (value: unknown) => void
+    mockedApi.get.mockReturnValue(new Promise((done) => { resolve = done }))
+    const onUnlock = vi.fn()
+    await render(<MasterPasswordModal isOpen onUnlock={onUnlock} onClose={vi.fn()} />)
+    await submitPassword(PASSWORD)
+    await waitFor(() => mockedApi.get.mock.calls.length > 0)
+    await act(async () => {
+      if (event === 'close') container.querySelector('button')!.click()
+      else if (event === 'lock') useVaultKeyStore.getState().clearKeys()
+      else {
+        useAuthStore.getState().logout()
+        useAuthStore.getState().setUser({ ...USER, id: 'user-2' })
+      }
+      resolve({ data: { public_key: vault.publicKeyBase64,
+        encrypted_private_key: vault.encryptedPrivateKeyBase64, key_salt: vault.saltBase64, kdf_version: 2 } })
+    })
+    await waitFor(() => !container.textContent!.includes('Processing...'))
+    expect(onUnlock).not.toHaveBeenCalled()
+    expect(useVaultKeyStore.getState().privateKey).toBeNull()
+  })
+
   function serveKeys(keys: Record<string, unknown>) {
     mockedApi.get.mockResolvedValue({ data: keys })
   }
@@ -259,6 +291,17 @@ describe('unlocking', () => {
       )
     }, 30000)
 
+    it('drops the pending upgrade prompt and keys when the vault locks', async () => {
+      await serveLegacyVault()
+      vi.mocked(credentialService.listAll).mockResolvedValue([])
+      await render(<MasterPasswordModal isOpen onUnlock={vi.fn()} />)
+      await submitPassword(PASSWORD)
+      await waitFor(() => container.textContent!.includes('Upgrade Your Vault'))
+      await act(async () => useVaultKeyStore.getState().clearKeys())
+      expect(container.textContent).not.toContain('Upgrade Your Vault')
+      expect(mockedApi.post).not.toHaveBeenCalled()
+    }, 30000)
+
     it('stays locked and says so when the upgrade fails', async () => {
       const pair = await serveLegacyVault()
       vi.mocked(credentialService.listAll).mockResolvedValue([])
@@ -278,7 +321,7 @@ describe('unlocking', () => {
       await submitPassword(PASSWORD)
       await waitFor(() => container.textContent!.includes('Upgrade Your Vault'))
       await act(async () => buttonNamed('Upgrade and Unlock').click())
-      await waitFor(() => container.textContent!.includes('did not complete'))
+      await waitFor(() => container.textContent!.includes('could not be confirmed'))
 
       expect(onUnlock).not.toHaveBeenCalled()
       expect(useVaultKeyStore.getState().privateKey).toBeNull()
@@ -304,6 +347,16 @@ describe('unlocking', () => {
 })
 
 describe('setting up a vault', () => {
+  it('requires signing in again when only an access token remains', async () => {
+    useAuthStore.setState({ user: { ...USER, has_vault_keys: false }, vaultSetupToken: null })
+    await render(<MasterPasswordModal isOpen onUnlock={vi.fn()} />)
+    await typeInto('#vault-password', PASSWORD)
+    await typeInto('#confirm-password', PASSWORD)
+    await act(async () => container.querySelector('form')!.requestSubmit())
+    expect(container.textContent).toContain('Sign in again')
+    expect(mockedApi.post).not.toHaveBeenCalled()
+  })
+
   it('warns when this browser has already unlocked a vault', async () => {
     await rememberSignedVault('some-public-key')
     useAuthStore.setState({ user: { ...USER, has_vault_keys: false } })
@@ -322,11 +375,60 @@ describe('setting up a vault', () => {
   })
 })
 
+describe('vault password changes', () => {
+  beforeEach(() => {
+    useVaultKeyStore.getState().setKeys(vault.privateKey, vault.publicKey, vault.publicKeyBase64, vault.signer)
+  })
+
+  it('clears idle visible passwords when the vault locks', async () => {
+    await render(<VaultPasswordChange />)
+    await typeInto('#current-vault-password', PASSWORD)
+    await typeInto('#new-vault-password', 'new-synthetic-password')
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Show passwords"]')!.click())
+    expect(container.querySelector<HTMLInputElement>('#current-vault-password')!.type).toBe('text')
+    await act(async () => useVaultKeyStore.getState().clearKeys())
+    for (const input of container.querySelectorAll('input')) {
+      expect(input.value).toBe('')
+      expect(input.type).toBe('password')
+    }
+  })
+
+  it('reports an uncertain outcome when a password update completes after lock', async () => {
+    mockedApi.get.mockResolvedValue({ data: {
+      key_salt: vault.saltBase64, encrypted_private_key: vault.encryptedPrivateKeyBase64, kdf_version: 2,
+    } })
+    mockedApi.post.mockResolvedValue({ data: { version: 2, nonce: 'a'.repeat(32), expires_in: 300 } })
+    let release!: () => void
+    const rekey = vi.spyOn(authService, 'rekeyVault').mockImplementation(() => new Promise<void>((done) => { release = done }))
+    await render(<VaultPasswordChange />)
+    await typeInto('#current-vault-password', PASSWORD)
+    await typeInto('#new-vault-password', 'new-synthetic-password')
+    await typeInto('#confirm-vault-password', 'new-synthetic-password')
+    await act(async () => container.querySelector('form')!.requestSubmit())
+    await waitFor(() => rekey.mock.calls.length === 1)
+    await act(async () => { useVaultKeyStore.getState().clearKeys(); release() })
+    expect(container.textContent).toContain('may already have changed')
+    expect(container.textContent).not.toContain('Nothing was changed')
+  }, 30000)
+})
+
 describe('the credentials page', () => {
   beforeEach(() => {
     useVaultKeyStore.getState().setKeys(
       vault.privateKey, vault.publicKey, vault.publicKeyBase64, vault.signer
     )
+  })
+
+  it('closes backup on lock and does not retain its password after unlocking', async () => {
+    vi.mocked(credentialService.listAll).mockResolvedValue([])
+    await render(<CredentialsPage />)
+    await act(async () => buttonNamed('Backup').click())
+    await typeInto('input[placeholder^="Enter a strong password"]', 'synthetic-backup-password')
+    await act(async () => useVaultKeyStore.getState().clearKeys())
+    expect(container.textContent).not.toContain('Backup / Restore Credentials')
+    await act(async () => useVaultKeyStore.getState().setKeys(vault.privateKey, vault.publicKey, vault.publicKeyBase64, vault.signer))
+    await act(async () => buttonNamed('Backup').click())
+    expect(container.querySelector<HTMLInputElement>('input[placeholder^="Enter a strong password"]')!.value).toBe('')
   })
 
   it('reports forged records instead of hiding them, and never shows their contents', async () => {
@@ -342,7 +444,7 @@ describe('the credentials page', () => {
       signature_version: null,
       origin: null,
     }
-    vi.mocked(credentialService.list).mockResolvedValue([good, forged])
+    vi.mocked(credentialService.listAll).mockResolvedValue([good, forged])
 
     await render(<CredentialsPage />)
     await waitFor(() => container.textContent!.includes('Genuine record'))
@@ -355,7 +457,7 @@ describe('the credentials page', () => {
   it('reports a record whose status was changed on the server', async () => {
     const good = await signedRow(ID_GOOD, 'Genuine record', 'authored')
     const revokedByServer = await signedRow(ID_FORGED, 'Altered status', 'authored')
-    vi.mocked(credentialService.list).mockResolvedValue([
+    vi.mocked(credentialService.listAll).mockResolvedValue([
       good,
       { ...revokedByServer, is_active: false },
     ])
@@ -372,7 +474,7 @@ describe('the credentials page', () => {
     const malformed = await signedRow(
       ID_FORGED, { oops: 1 } as unknown as string, 'legacy-unverified'
     )
-    vi.mocked(credentialService.list).mockResolvedValue([good, malformed])
+    vi.mocked(credentialService.listAll).mockResolvedValue([good, malformed])
 
     await render(<CredentialsPage />)
     await waitFor(() => container.textContent!.includes('Genuine record'))
@@ -405,7 +507,7 @@ describe('the credentials page', () => {
     it('signs from the row on screen for the chosen record, with no fresh read', async () => {
       const first = await signedRow(ID_GOOD, 'First record', 'authored')
       const second = await signedRow(ID_LEGACY, 'Second record', 'authored')
-      vi.mocked(credentialService.list).mockResolvedValue([first, second])
+      vi.mocked(credentialService.listAll).mockResolvedValue([first, second])
       vi.mocked(credentialService.revoke).mockResolvedValue({ ...second, is_active: false })
 
       await render(<CredentialsPage />)
@@ -418,19 +520,19 @@ describe('the credentials page', () => {
 
     it('reloads the list after a failed revoke, so a stale row does not keep failing', async () => {
       const row = await signedRow(ID_GOOD, 'Stale record', 'authored')
-      vi.mocked(credentialService.list).mockResolvedValue([row])
+      vi.mocked(credentialService.listAll).mockResolvedValue([row])
       vi.mocked(credentialService.revoke).mockRejectedValue(new Error('409'))
 
       await render(<CredentialsPage />)
       await openRevokeFor('Stale record')
       await waitFor(() => container.textContent!.includes('could not be confirmed'))
-      await waitFor(() => vi.mocked(credentialService.list).mock.calls.length >= 2)
+      await waitFor(() => vi.mocked(credentialService.listAll).mock.calls.length >= 2)
     }, 30000)
   })
 
   it('says so when the server answers an open request with another record', async () => {
     const row = await signedRow(ID_GOOD, 'Genuine record', 'authored')
-    vi.mocked(credentialService.list).mockResolvedValue([row])
+    vi.mocked(credentialService.listAll).mockResolvedValue([row])
     vi.mocked(credentialService.get).mockRejectedValue(new RecordVerificationError())
 
     await render(<CredentialsPage />)
@@ -444,7 +546,7 @@ describe('the credentials page', () => {
   }, 30000)
 
   it('labels records of unverified origin', async () => {
-    vi.mocked(credentialService.list).mockResolvedValue([
+    vi.mocked(credentialService.listAll).mockResolvedValue([
       await signedRow(ID_LEGACY, 'Old record', 'legacy-unverified'),
     ])
 
@@ -477,7 +579,7 @@ describe('the credential detail view', () => {
     await waitFor(() => onOriginConfirmed.mock.calls.length > 0)
 
     // The record the user read is what gets signed, so it is passed whole.
-    expect(credentialService.confirmOrigin).toHaveBeenCalledWith(row)
+    expect(credentialService.confirmOrigin).toHaveBeenCalledWith(row, expect.any(Function))
     expect(onOriginConfirmed).toHaveBeenCalledWith(confirmed)
   }, 30000)
 

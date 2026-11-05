@@ -16,6 +16,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Prevent MIME type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
 
         # Enable XSS protection (legacy browsers)
         response.headers["X-XSS-Protection"] = "1; mode=block"

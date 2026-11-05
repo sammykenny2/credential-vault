@@ -17,6 +17,8 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    user_id: str
+    vault_setup_token: str | None = None
 
 
 class TokenPayload(BaseModel):
@@ -33,6 +35,12 @@ class GoogleOAuthCallback(BaseModel):
 
     code: str
     redirect_uri: str
+
+
+class GoogleLinkCallback(GoogleOAuthCallback):
+    """Proof of independent password verification before the OAuth redirect."""
+
+    link_token: str = Field(max_length=2048)
 
 
 class GoogleUserInfo(BaseModel):

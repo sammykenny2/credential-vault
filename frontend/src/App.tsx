@@ -12,6 +12,7 @@ import CredentialsPage from '@/pages/CredentialsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import AdminUsersPage from '@/pages/AdminUsersPage'
 import OfflineIndicator from '@/components/OfflineIndicator'
+import { peekOAuthFlow } from '@/lib/oauthState'
 
 function LoadingScreen() {
   return (
@@ -44,15 +45,20 @@ function App() {
   // so the only way to get an access token back is to ask the server.
   useEffect(() => {
     let cancelled = false
+    const generation = useAuthStore.getState().generation
 
     const restoreSession = async () => {
+      if (new URLSearchParams(window.location.search).has('code') && peekOAuthFlow()?.action === 'login') {
+        finishBootstrap()
+        return
+      }
       try {
         await refreshAccessToken()
         const me = await authService.getMe()
-        if (!cancelled) setUser(me)
+        if (!cancelled && generation === useAuthStore.getState().generation) setUser(me)
       } catch {
         // No valid session cookie: stay signed out.
-        if (!cancelled) useAuthStore.getState().logout()
+        if (!cancelled && generation === useAuthStore.getState().generation) useAuthStore.getState().logout()
       } finally {
         if (!cancelled) finishBootstrap()
       }

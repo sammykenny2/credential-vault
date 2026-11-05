@@ -7,6 +7,8 @@
 import { useState } from 'react'
 import { Eye, EyeOff, RefreshCw, X, Plus, Trash2 } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { OperationCancelledError, type OperationCheck } from '@/lib/operationGuard'
 import type { CredentialData } from '@/lib/crypto'
 import type { CredentialTemplate } from '@/types/template'
 import { CATEGORY_LABELS } from '@/data/templates'
@@ -24,7 +26,8 @@ interface CredentialFormProps {
   onClose: () => void
   onSave: (
     data: { id: string; encrypted_data: string; expires_at?: string },
-    templateId?: string
+    templateId?: string,
+    assertActive?: OperationCheck
   ) => Promise<void>
   initialData?: {
     name: string
@@ -124,6 +127,8 @@ export default function CredentialForm({
   template,
 }: CredentialFormProps) {
   const { encrypt, generatePassword, isProcessing, error, clearError } = useCredentialCrypto()
+  const { begin, cancel } = useOperationGuard(isOpen)
+  const close = () => { cancel(); onClose() }
 
   // Initial values come from the props at mount time. The parent remounts this
   // component (via `key`) whenever it is opened with a different template or
@@ -211,8 +216,9 @@ export default function CredentialForm({
     }
 
     setIsSaving(true)
-
+    let operation: ReturnType<typeof begin> | undefined
     try {
+      operation = begin()
       // Build credential data — all metadata goes into the encrypted blob
       const credentialData: CredentialData = {
         name: name.trim(),
@@ -245,6 +251,7 @@ export default function CredentialForm({
       // The id is chosen here so the ciphertext can be bound to it.
       const credentialId = crypto.randomUUID()
       const encryptedData = await encrypt(credentialData, credentialId)
+      operation.assertActive()
 
       if (!encryptedData) {
         setFormError(error || 'Encryption failed')
@@ -255,14 +262,17 @@ export default function CredentialForm({
       await onSave({
         id: credentialId,
         encrypted_data: encryptedData,
-      }, template?.id)
+      }, template?.id, operation.assertActive)
+      operation.assertActive()
 
       // Reset form and close
       onClose()
     } catch (err) {
+      if (err instanceof OperationCancelledError) return
       setFormError('Failed to save credential')
       console.error('Save error:', err)
     } finally {
+      operation?.finish()
       setIsSaving(false)
     }
   }
@@ -284,7 +294,7 @@ export default function CredentialForm({
               </p>
             )}
           </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
+          <button onClick={close} className="p-2 text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -462,7 +472,7 @@ export default function CredentialForm({
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               className="btn btn-secondary flex-1"
               disabled={isSaving}
             >

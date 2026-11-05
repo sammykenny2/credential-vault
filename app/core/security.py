@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import anyio
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -31,8 +32,60 @@ REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
 
 
+async def hash_password_async(password: str) -> str:
+    """At most two 64 MiB Argon2 jobs, off the event loop."""
+    return await anyio.to_thread.run_sync(
+        SecurityService.hash_password, password, limiter=_password_limiter()
+    )
+
+
+async def verify_password_async(password: str, hashed: str) -> bool:
+    return await anyio.to_thread.run_sync(
+        SecurityService.verify_password, password, hashed, limiter=_password_limiter()
+    )
+
+
+_limiter: anyio.CapacityLimiter | None = None
+
+
+def _password_limiter() -> anyio.CapacityLimiter:
+    global _limiter
+    if _limiter is None:
+        _limiter = anyio.CapacityLimiter(2)
+    return _limiter
+
+
 class SecurityService:
     """Security service for JWT, password and cookie operations."""
+
+    @staticmethod
+    def create_vault_setup_token(user_id: str, token_version: int, session_id: str) -> str:
+        """Independent, short-lived authorization issued only after interactive login."""
+        return jwt.encode(
+            {
+                "sub": user_id,
+                "ver": token_version,
+                "type": "vault-setup",
+                "sid": session_id,
+                "exp": datetime.now(UTC) + timedelta(minutes=10),
+            },
+            settings.secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+    @staticmethod
+    def create_link_token(user_id: str, token_version: int) -> str:
+        """Only issued after password verification; never usable as an access token."""
+        return jwt.encode(
+            {
+                "sub": user_id,
+                "ver": token_version,
+                "type": "google-link",
+                "exp": datetime.now(UTC) + timedelta(minutes=5),
+            },
+            settings.secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -64,27 +117,41 @@ class SecurityService:
         return password_hasher.check_needs_rehash(hashed)
 
     @staticmethod
-    def create_access_token(user_id: str, token_version: int = 0) -> str:
+    def create_access_token(
+        user_id: str, token_version: int = 0, session_id: str | None = None
+    ) -> str:
         """Create a JWT access token bound to the user's current token version."""
         expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-        payload = {
+        payload: dict = {
             "sub": user_id,
             "exp": expire,
             "type": "access",
             "ver": token_version,
         }
+        if session_id is not None:
+            payload["sid"] = session_id
         return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
     @staticmethod
-    def create_refresh_token(user_id: str, token_version: int = 0) -> str:
+    def create_refresh_token(
+        user_id: str,
+        token_version: int = 0,
+        *,
+        session_id: str | None = None,
+        token_id: str | None = None,
+        expires_at: int | None = None,
+    ) -> str:
         """Create a JWT refresh token bound to the user's current token version."""
         expire = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
-        payload = {
+        payload: dict = {
             "sub": user_id,
-            "exp": expire,
+            "exp": expires_at if expires_at is not None else expire,
             "type": "refresh",
             "ver": token_version,
         }
+        if session_id is not None:
+            payload["sid"] = session_id
+            payload["jti"] = token_id
         return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
     @staticmethod

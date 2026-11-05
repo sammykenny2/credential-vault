@@ -3,10 +3,12 @@
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.security import SecurityService
+from app.core.security import hash_password_async
+from app.models.auth_session import AdminBootstrapClaim
 from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,15 @@ class BootstrapService:
         """Check if any admin user exists."""
         result = await self.db.execute(select(User).where(User.role == UserRole.ADMIN).limit(1))
         return result.scalar_one_or_none() is not None
+
+    async def claim_first_admin(self) -> bool:
+        """A unique claim serializes setup, OAuth promotion and startup bootstrap."""
+        if await self.has_any_admin():
+            return False
+        result = await self.db.execute(
+            insert(AdminBootstrapClaim).values(id=1).on_conflict_do_nothing()
+        )
+        return result.rowcount == 1  # type: ignore[attr-defined,no-any-return]
 
     async def check_admin_bootstrap(self) -> None:
         """Log bootstrap status and create break-glass admin on startup.
@@ -41,13 +52,15 @@ class BootstrapService:
         if self.settings.admin_email:
             if self.settings.admin_password:
                 # Create admin with hashed password for break-glass login
-                hashed = SecurityService.hash_password(self.settings.admin_password)
+                hashed = await hash_password_async(self.settings.admin_password)
+                if not await self.claim_first_admin():
+                    return
                 admin = User(
                     email=self.settings.admin_email,
                     display_name=self.settings.admin_display_name,
                     hashed_password=hashed,
                     role=UserRole.ADMIN,
-                    google_id=f"bootstrap-{self.settings.admin_email}",
+                    google_id=None,
                 )
                 self.db.add(admin)
                 await self.db.flush()

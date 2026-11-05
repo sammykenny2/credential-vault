@@ -1,6 +1,7 @@
 """Database models."""
 
 from app.models.audit_log import AuditLog
+from app.models.auth_session import AdminBootstrapClaim, AuthSession
 from app.models.base import Base
 from app.models.credential import Credential
 from app.models.template import Template
@@ -9,6 +10,8 @@ from app.models.user import User
 from app.models.webauthn_credential import WebAuthnCredential
 
 __all__ = [
+    "AdminBootstrapClaim",
+    "AuthSession",
     "Base",
     "User",
     "Credential",

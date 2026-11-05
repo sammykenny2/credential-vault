@@ -76,6 +76,37 @@ class UserService:
         logger.info("Google account linked for user: %s", user.email)
         return user
 
+    async def claim_empty_oauth_invitation(self, user: User, google_id: str) -> bool:
+        """Claim only an unused, ordinary account; caller verifies email authority.
+
+        The conditional write prevents a concurrent claim or vault initialization
+        from turning first enrollment into replacement of an existing identity.
+        """
+        result = await self.db.execute(
+            update(User)
+            .where(
+                User.id == user.id,
+                User.google_id.is_(None),
+                User.hashed_password.is_(None),
+                User.role == UserRole.USER,
+                User.is_active.is_(True),
+                User.last_login_at.is_(None),
+                User.token_version == 0,
+                User.public_key.is_(None),
+                User.encrypted_private_key.is_(None),
+                User.key_salt.is_(None),
+                User.signing_public_key.is_(None),
+                User.vault_proof_key.is_(None),
+                User.vault_proof_expires_at.is_(None),
+                ~select(Credential.id).where(Credential.owner_id == User.id).exists(),
+            )
+            .values(google_id=google_id)
+        )
+        if result.rowcount != 1:  # type: ignore[attr-defined]
+            return False
+        await self.db.refresh(user)
+        return True
+
     async def setup_vault_keys(
         self,
         user: User,
@@ -194,6 +225,11 @@ class UserService:
         """Permanently delete user and all their data from database."""
         # Credentials are deleted via cascade, but let's be explicit
         await self.delete_user_credentials(user.id)
+        from sqlalchemy import delete
+
+        from app.models.auth_session import AuthSession
+
+        await self.db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
         await self.db.delete(user)
         await self.db.flush()
 

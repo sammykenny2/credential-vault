@@ -14,6 +14,7 @@ export interface PendingOAuthFlow {
   state: string
   action: OAuthAction
   createdAt: number
+  linkToken?: string
 }
 
 const STORAGE_KEY = 'oauth_flow'
@@ -49,8 +50,8 @@ function readFlow(): PendingOAuthFlow | null {
 }
 
 /** Start a flow: remember a fresh state for this tab and return it. */
-export function beginOAuthFlow(action: OAuthAction): string {
-  const flow: PendingOAuthFlow = { state: randomState(), action, createdAt: Date.now() }
+export function beginOAuthFlow(action: OAuthAction, linkToken?: string): string {
+  const flow: PendingOAuthFlow = { state: randomState(), action, createdAt: Date.now(), linkToken }
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(flow))
   } catch {

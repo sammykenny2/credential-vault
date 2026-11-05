@@ -8,8 +8,11 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Lock, Eye, EyeOff, X, ShieldCheck } from 'lucide-react'
 import { useVaultKey } from '@/hooks/useVaultKey'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import api from '@/services/api'
@@ -55,45 +58,65 @@ export default function MasterPasswordModal({
   isFirstTime = false,
 }: MasterPasswordModalProps) {
   const { setKeys } = useVaultKey()
+  const navigate = useNavigate()
+  const { begin, cancel } = useOperationGuard(isOpen)
   const { user, setUser } = useAuthStore()
   const [password, setPasswordInput] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [needsSignIn, setNeedsSignIn] = useState(false)
   const [pendingUpgrade, setPendingUpgrade] = useState<{
     unlocked: UnlockedVault
     records: CredentialListItem[]
+    operation: ReturnType<typeof begin>
   } | null>(null)
 
   const needsSetup = isFirstTime || !user?.has_vault_keys
 
   useEffect(() => {
     if (!pendingUpgrade) return
-    const timer = setTimeout(() => setPendingUpgrade(null), UPGRADE_PROMPT_TIMEOUT_MS)
-    return () => clearTimeout(timer)
-  }, [pendingUpgrade])
+    const clear = () => setPendingUpgrade(null)
+    if (pendingUpgrade.operation.assertActive.signal?.aborted) {
+      clear()
+      return
+    }
+    pendingUpgrade.operation.assertActive.signal?.addEventListener('abort', clear, { once: true })
+    const timer = setTimeout(() => { cancel(); setPendingUpgrade(null) }, UPGRADE_PROMPT_TIMEOUT_MS)
+    return () => {
+      clearTimeout(timer)
+      pendingUpgrade.operation.assertActive.signal?.removeEventListener('abort', clear)
+    }
+  }, [pendingUpgrade, cancel])
 
   const handleUpgrade = async () => {
     if (!pendingUpgrade) return
     setError('')
     setIsLoading(true)
+    const operation = pendingUpgrade.operation
     try {
+      operation.assertActive()
       const { unlocked, records } = pendingUpgrade
-      const signer = await performVaultUpgrade(unlocked, records)
+      const signer = await performVaultUpgrade(unlocked, records, operation.assertActive)
+      operation.assertActive()
       await rememberSignedVault(unlocked.publicKeyBase64)
+      operation.assertActive()
       setKeys(unlocked.privateKey, unlocked.publicKey, unlocked.publicKeyBase64, signer)
       setPendingUpgrade(null)
       onUnlock()
     } catch (err) {
+      if (err instanceof OperationCancelledError) return
       console.error('Vault upgrade failed:', err)
       setPendingUpgrade(null)
       setError(
         err instanceof VaultRollbackError
           ? err.message
-          : 'The upgrade did not complete and nothing was changed. Unlock again to retry.'
+          : 'The upgrade could not be confirmed. Unlock again to check its status.'
       )
     } finally {
+      operation.finish()
+      setPendingUpgrade(null)
       setIsLoading(false)
     }
   }
@@ -102,9 +125,15 @@ export default function MasterPasswordModal({
     e.preventDefault()
     setError('')
     setIsLoading(true)
-
+    let operation: ReturnType<typeof begin> | undefined
+    let pending = false
     try {
+      operation = begin(false)
       if (needsSetup) {
+        if (!useAuthStore.getState().vaultSetupToken) {
+          setNeedsSignIn(true)
+          return
+        }
         // Setting up new vault
         if (password.length < MIN_VAULT_PASSWORD_LENGTH) {
           setError(`Vault password must be at least ${MIN_VAULT_PASSWORD_LENGTH} characters`)
@@ -117,6 +146,7 @@ export default function MasterPasswordModal({
 
         // Generate key pair and encrypt private key
         const vaultKeys = await setupVault(password)
+        operation.assertActive()
 
         // Send public key and encrypted private key to server
         await authService.setupVault({
@@ -125,20 +155,17 @@ export default function MasterPasswordModal({
           key_salt: vaultKeys.saltBase64,
           kdf_version: vaultKeys.kdfVersion,
           signing_public_key: vaultKeys.signingPublicKeyBase64,
-        })
-
-        // Store the locally generated, matching keys in memory.
-        setKeys(
-          vaultKeys.privateKey,
-          vaultKeys.publicKey,
-          vaultKeys.publicKeyBase64,
-          vaultKeys.signer
-        )
+        }, operation.assertActive)
+        operation.assertActive()
 
         // Update user state to reflect vault setup
         const updatedUser = await authService.getMe()
+        operation.assertActive()
+        if (updatedUser.id !== user?.id) throw new OperationCancelledError()
         setUser(updatedUser)
         await rememberSignedVault(vaultKeys.publicKeyBase64)
+        operation.assertActive()
+        setKeys(vaultKeys.privateKey, vaultKeys.publicKey, vaultKeys.publicKeyBase64, vaultKeys.signer)
 
         onUnlock()
       } else {
@@ -149,7 +176,8 @@ export default function MasterPasswordModal({
         }
 
         // Fetch vault key material (uses axios with auto token refresh)
-        const { data: keyData } = await api.get<VaultKeyMaterial>('/auth/vault/keys')
+        const { data: keyData } = await api.get<VaultKeyMaterial>('/auth/vault/keys', { assertOperation: operation.assertActive })
+        operation.assertActive()
 
         // Try to decrypt the private key with the KDF parameters it was wrapped with
         const keys = await unlockVault(
@@ -159,21 +187,33 @@ export default function MasterPasswordModal({
           keyData.public_key,
           keyData.kdf_version ?? KDF_VERSION,
         )
+        operation.assertActive()
 
         if (!keys.signer) {
           // No signing key yet: finish the upgrade first, unless this browser has
           // seen this vault signed, which means the server replayed old keys.
           if (await hasSeenSignedVault(keys.publicKeyBase64)) throw new VaultRollbackError()
-          setPendingUpgrade({ unlocked: keys, records: await credentialService.listAll() })
+          operation.assertActive()
+          const records = await credentialService.listAll(operation.assertActive)
+          operation.assertActive()
+          pending = true
+          setPendingUpgrade({ unlocked: keys, records, operation })
           return
         }
 
         // Only retain the public key derived from the authenticated private key.
         await rememberSignedVault(keys.publicKeyBase64)
+        operation.assertActive()
         setKeys(keys.privateKey, keys.publicKey, keys.publicKeyBase64, keys.signer)
         onUnlock()
       }
     } catch (err) {
+      if (err instanceof OperationCancelledError) return
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+      if (detail === 'vault_setup_authorization_required') {
+        setNeedsSignIn(true)
+        return
+      }
       console.error('Vault operation failed:', err)
       if (err instanceof VaultKeyMismatchError || err instanceof VaultRollbackError) {
         setError(err.message)
@@ -184,6 +224,7 @@ export default function MasterPasswordModal({
         setError('Incorrect vault password or corrupted data.')
       }
     } finally {
+      if (!pending) operation?.finish()
       setIsLoading(false)
       setPasswordInput('')
       setConfirmPassword('')
@@ -193,6 +234,7 @@ export default function MasterPasswordModal({
   if (!isOpen) return null
 
   const handleClose = () => {
+    cancel()
     if (onClose) {
       setError('')
       setPasswordInput('')
@@ -284,6 +326,16 @@ export default function MasterPasswordModal({
         )}
 
         {/* Form */}
+        {needsSignIn && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            Sign in again to authorize creating your vault. Restoring a session alone cannot authorize new keys.
+            <button type="button" className="btn btn-secondary w-full mt-2" onClick={() => {
+              cancel()
+              useAuthStore.getState().logout()
+              navigate('/login')
+            }}>Sign in again</button>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">

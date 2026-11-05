@@ -65,6 +65,13 @@ Before committing, verify:
   streaming, quotas and durability rules for attachments (not implemented).
   Those future requirements must not be described as already implemented.
 
+- See [ADR-005](decisions/005-session-and-operation-boundaries.md) and
+  [API contracts](api-security.md) for independent first-vault setup authorization,
+  stable Google identities, refresh rotation and browser operation cancellation.
+- Treat export completeness as a separate check from record authenticity. Never
+  mark a partial/failed export as a completed backup, and preserve revocation on
+  restoration. New JSON text backups do not implement attachment ZIP v2.
+
 ### Dependencies
 
 - Keep dependencies updated
