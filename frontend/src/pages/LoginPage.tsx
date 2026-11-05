@@ -12,7 +12,7 @@ export default function LoginPage() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { setUser, user, isAuthenticated, isBootstrapping } = useAuthStore()
-  const [error, setError] = useState<string>(location.state?.logoutError ?? '')
+  const [error, setError] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
   // No setup check while an OAuth callback is being processed
   const [isOAuthCallback] = useState(() => Boolean(searchParams.get('code')))
@@ -29,6 +29,15 @@ export default function LoginPage() {
     staleTime: 0,
   })
   const needsAdmin = setupStatus.data?.is_initialized === false
+
+  // A failed logout reports here, usually after this page has already mounted:
+  // signing out locally redirects before the server answers. Take the message out
+  // of history so that reloading does not repeat it.
+  const logoutError: string | undefined = location.state?.logoutError
+  if (logoutError && error !== logoutError) setError(logoutError)
+  useEffect(() => {
+    if (logoutError) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [logoutError, location.pathname, location.search, navigate])
 
   // If already authenticated, redirect to dashboard (unless handling link callback)
   useEffect(() => {
@@ -205,11 +214,13 @@ export default function LoginPage() {
           </span>
         </button>
 
-        <p className="text-sm text-center mt-4">
-          <Link to="/admin/login" className="text-gray-500 underline">
-            Administrator? Sign in with a password
-          </Link>
-        </p>
+        {!needsAdmin && !isProcessing && (
+          <p className="text-sm text-center mt-4">
+            <Link to="/admin/login" className="text-gray-500 underline">
+              Administrator? Sign in with a password
+            </Link>
+          </p>
+        )}
 
         {/* Info */}
         <p className="text-xs text-gray-400 text-center mt-6">

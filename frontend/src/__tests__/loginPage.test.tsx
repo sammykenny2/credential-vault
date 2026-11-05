@@ -82,6 +82,17 @@ describe('LoginPage first run', () => {
     expect(container.querySelector('a[href="/admin/login"]')).not.toBeNull()
   })
 
+  it.each([
+    ['anyone can still create one', true],
+    ['setup is restricted', false],
+  ])('hides the password sign-in while there is no administrator and %s', async (_name, can_create_admin) => {
+    getStatus.mockResolvedValue({ is_initialized: false, can_create_admin })
+    await renderLogin()
+
+    await waitForText('Sign in with Google')
+    expect(container.querySelector('a[href="/admin/login"]')).toBeNull()
+  })
+
   it('says the first Google sign-in becomes the administrator', async () => {
     getStatus.mockResolvedValue({ is_initialized: false, can_create_admin: true })
     await renderLogin()

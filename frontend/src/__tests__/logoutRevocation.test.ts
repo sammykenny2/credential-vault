@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import { authService } from '@/services/authService'
 import { useAuthStore } from '@/stores/authStore'
 import type { User } from '@/types'
@@ -21,22 +22,28 @@ function refused(status: number) {
   })
 }
 
+const signInAgain = () =>
+  useAuthStore.setState({ accessToken: 'new-session', user: OWNER, isAuthenticated: true })
+
 /** A server that accepts one bearer token and hands `refreshTo` out for the cookie. */
-function serve({ accepts, refreshTo, refreshAs = OWNER.id, logoutFailure }: {
+function serve({ accepts, refreshTo, refreshAs = OWNER.id, logoutFailure, during }: {
   accepts: string
   refreshTo?: string
   refreshAs?: string
   logoutFailure?: Error
+  during?: (route: 'logout' | 'refresh') => void
 }) {
   const calls: string[] = []
   vi.spyOn(axios, 'post').mockImplementation(async (url: string, _body, config?: AxiosRequestConfig) => {
     if (url.endsWith('/auth/refresh')) {
       calls.push('refresh')
+      during?.('refresh')
       if (!refreshTo) throw refused(401)
       return { data: { access_token: refreshTo, user_id: refreshAs } }
     }
     const authorization = String(config?.headers?.Authorization)
     calls.push(`logout ${authorization}`)
+    during?.('logout')
     if (logoutFailure) throw logoutFailure
     if (authorization !== `Bearer ${accepts}`) throw refused(401)
     return { data: {} }
@@ -125,5 +132,60 @@ describe('authService.logout', () => {
 
     expect(request).toHaveBeenCalledOnce()
     expect(request.mock.calls[0][0]).toBe('credential-vault:refresh')
+  })
+
+  it('sends the cookie with every request, including across origins in development', async () => {
+    serve({ accepts: 'fresh', refreshTo: 'fresh' })
+
+    await authService.logout()
+
+    const sent = vi.mocked(axios.post).mock.calls.map(([, , config]) => config?.withCredentials)
+    expect(sent).toEqual([true, true, true])
+  })
+})
+
+describe('authService.logout after signing in again', () => {
+  it('does not spend the cookie of a sign-in that arrived while it waited for the lock', async () => {
+    let takeTurn = () => {}
+    const turn = new Promise<void>((resolve) => { takeTurn = resolve })
+    const request = vi.fn(async (_name: string, exchange: () => unknown) => {
+      await turn
+      return exchange()
+    })
+    vi.stubGlobal('navigator', { ...navigator, locks: { request } })
+    const calls = serve({ accepts: 'fresh', refreshTo: 'fresh' })
+
+    const pending = authService.logout()
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce())
+    signInAgain()
+    takeTurn()
+
+    await expect(pending).rejects.toBeInstanceOf(OperationCancelledError)
+    expect(calls).toEqual(['logout Bearer expired'])
+  })
+
+  it('does not end a sign-in that arrived during the exchange', async () => {
+    const calls = serve({
+      accepts: 'fresh',
+      refreshTo: 'fresh',
+      during: (route) => { if (route === 'refresh') signInAgain() },
+    })
+
+    await expect(authService.logout()).rejects.toBeInstanceOf(OperationCancelledError)
+
+    expect(calls).toEqual(['logout Bearer expired', 'refresh'])
+  })
+
+  it('does not report the old failure to the new session', async () => {
+    const calls = serve({
+      accepts: 'expired',
+      logoutFailure: refused(500),
+      during: signInAgain,
+    })
+
+    await expect(authService.logout()).rejects.toBeInstanceOf(OperationCancelledError)
+
+    expect(calls).toEqual(['logout Bearer expired'])
+    expect(useAuthStore.getState().accessToken).toBe('new-session')
   })
 })

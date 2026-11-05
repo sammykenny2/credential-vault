@@ -48,6 +48,11 @@ export const authService = {
   async logout(): Promise<void> {
     const { accessToken, user } = useAuthStore.getState()
     useAuthStore.getState().logout()
+    // The login page is already up, so a new sign-in can overtake these requests,
+    // and revoking now would end that new session too.
+    const assertStillSignedOut = () => {
+      if (useAuthStore.getState().isAuthenticated) throw new OperationCancelledError()
+    }
     const revoke = (token: string | null) =>
       axios.post(`${api.defaults.baseURL}/auth/logout`, null, {
         headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
@@ -56,8 +61,10 @@ export const authService = {
     try {
       await revoke(accessToken)
     } catch (err) {
+      assertStillSignedOut()
       if (!axios.isAxiosError(err) || err.response?.status !== 401) throw err
-      const { data } = await exchangeRefreshCookie()
+      const { data } = await exchangeRefreshCookie(assertStillSignedOut)
+      assertStillSignedOut()
       // Tabs share the cookie, so it may now belong to another signed-in account.
       if (data.user_id !== user?.id) throw err
       await revoke(data.access_token)

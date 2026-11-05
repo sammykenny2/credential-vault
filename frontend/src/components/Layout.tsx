@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { useAutoLock } from '@/hooks/useVaultLock'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import VersionInfo from '@/components/VersionInfo'
 import {
   LayoutDashboard,
@@ -20,9 +21,11 @@ export default function Layout() {
 
   const handleLogout = async () => {
     try {
+      // Signing out locally has already sent PrivateRoute to the login page.
       await authService.logout()
-      navigate('/login')
-    } catch {
+    } catch (err) {
+      // Signed in again meanwhile: that session should not be interrupted.
+      if (err instanceof OperationCancelledError) return
       navigate('/login', { state: {
         logoutError: 'This device is locked, but the server could not confirm session revocation. Sign in again and retry logout to revoke other sessions.',
       } })

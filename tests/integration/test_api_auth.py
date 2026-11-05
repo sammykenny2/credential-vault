@@ -671,7 +671,7 @@ class TestVaultSetupAuthorization:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_an_authorization_from_before_a_revocation_is_refused(
+    async def test_an_authorization_for_another_token_version_is_refused(
         self, client: AsyncClient, db_session
     ):
         user, access_token, family = await self._signed_in_user(db_session)
@@ -682,6 +682,21 @@ class TestVaultSetupAuthorization:
         response = await self._setup(client, access_token, authorization)
 
         assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_an_authorization_cannot_be_used_as_an_access_token(
+        self, client: AsyncClient, db_session
+    ):
+        user, _, family = await self._signed_in_user(db_session)
+        authorization = SecurityService.create_vault_setup_token(
+            user.id, user.token_version, family
+        )
+
+        response = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {authorization}"}
+        )
+
+        assert response.status_code == 401
 
 
 class TestHasGoogleLinked:
