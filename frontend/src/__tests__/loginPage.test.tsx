@@ -93,6 +93,14 @@ describe('LoginPage first run', () => {
     expect(container.querySelector('a[href="/admin/login"]')).toBeNull()
   })
 
+  it('hides the password sign-in when a failed callback leaves it unknown whether an admin exists', async () => {
+    await renderLogin('/login?code=synthetic-code&state=not-from-this-tab')
+
+    await waitForText('Sign in with Google')
+    expect(getStatus).not.toHaveBeenCalled()
+    expect(container.querySelector('a[href="/admin/login"]')).toBeNull()
+  })
+
   it('says the first Google sign-in becomes the administrator', async () => {
     getStatus.mockResolvedValue({ is_initialized: false, can_create_admin: true })
     await renderLogin()

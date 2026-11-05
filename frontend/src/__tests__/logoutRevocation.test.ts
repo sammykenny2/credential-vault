@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
 import { OperationCancelledError } from '@/lib/operationGuard'
+import { refreshAccessToken } from '@/services/api'
 import { authService } from '@/services/authService'
 import { useAuthStore } from '@/stores/authStore'
 import type { User } from '@/types'
@@ -141,6 +142,27 @@ describe('authService.logout', () => {
 
     const sent = vi.mocked(axios.post).mock.calls.map(([, , config]) => config?.withCredentials)
     expect(sent).toEqual([true, true, true])
+  })
+})
+
+describe('a refresh still waiting for the lock when the user logs out', () => {
+  it('does not spend the cookie', async () => {
+    let takeTurn = () => {}
+    const turn = new Promise<void>((resolve) => { takeTurn = resolve })
+    const request = vi.fn(async (_name: string, exchange: () => unknown) => {
+      await turn
+      return exchange()
+    })
+    vi.stubGlobal('navigator', { ...navigator, locks: { request } })
+    const calls = serve({ accepts: 'expired', refreshTo: 'fresh' })
+
+    const refresh = refreshAccessToken()
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce())
+    useAuthStore.getState().logout()
+    takeTurn()
+
+    await expect(refresh).rejects.toBeInstanceOf(OperationCancelledError)
+    expect(calls).toEqual([])
   })
 })
 

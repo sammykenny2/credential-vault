@@ -37,20 +37,32 @@ function refused(status: number) {
   })
 }
 
-/** Scripted statuses. The first refresh restores the session when the page loads. */
-function serve({ logout, refresh = [], logoutDelayMs = 10 }: {
+/**
+ * Scripted statuses. The first refresh restores the session when the page loads;
+ * `holdLogout` and `holdExchange` keep later replies back until they resolve.
+ */
+function serve({ logout, refresh = [], holdLogout, holdExchange }: {
   logout: number[]
   refresh?: number[]
-  logoutDelayMs?: number
+  holdLogout?: Promise<void>
+  holdExchange?: Promise<void>
 }) {
   const replies = { logout: [...logout], refresh: [200, ...refresh] }
+  let restored = false
   vi.spyOn(axios, 'post').mockImplementation(async (url: string) => {
     const route = url.endsWith('/auth/logout') ? 'logout' : 'refresh'
-    await new Promise((resolve) => setTimeout(resolve, route === 'logout' ? logoutDelayMs : 10))
+    await (route === 'logout' ? holdLogout : restored ? holdExchange : undefined)
+    restored = true
     const status = replies[route].shift()
     if (status !== 200) throw refused(status ?? 500)
     return { data: { access_token: 'synthetic-token', user_id: OWNER.id } }
   })
+}
+
+function heldReply() {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => { release = resolve })
+  return { held, release }
 }
 
 let container: HTMLDivElement
@@ -85,9 +97,13 @@ async function openDashboard() {
   await waitUntil(() => shows('Dashboard'), 'the dashboard')
 }
 
-async function clickLogout() {
+async function pressLogout() {
   const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Logout'))
   await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+}
+
+async function clickLogout() {
+  await pressLogout()
   await waitUntil(() => shows('Sign in with Google'), 'the login page')
 }
 
@@ -105,6 +121,7 @@ async function settle() {
 }
 
 beforeEach(() => {
+  useAuthStore.setState({ isBootstrapping: true }) // as on every real page load
   vi.mocked(setupService.getStatus).mockResolvedValue({ is_initialized: true, can_create_admin: false })
   vi.spyOn(authService, 'getMe').mockResolvedValue(OWNER)
 })
@@ -132,6 +149,17 @@ describe('a logout the server did not confirm', () => {
     expect(shows('Sign in with Google')).toBe(true)
   })
 
+  it('warns without waiting for a server that is down', async () => {
+    serve({ logout: [502] })
+    await openDashboard()
+    vi.mocked(setupService.getStatus).mockRejectedValue(new Error('Request failed with status code 502'))
+
+    await pressLogout()
+    await waitUntil(() => shows(WARNING), 'the warning')
+
+    expect(shows('Sign in with Google')).toBe(false)
+  })
+
   it('does not repeat the warning after a reload', async () => {
     serve({ logout: [500] })
     await openDashboard()
@@ -142,11 +170,13 @@ describe('a logout the server did not confirm', () => {
   })
 
   it('still warns a user who already moved on to the password page', async () => {
-    serve({ logout: [500], logoutDelayMs: 100 })
+    const { held, release } = heldReply()
+    serve({ logout: [500], holdLogout: held })
     await openDashboard()
 
     await clickLogout()
     await goToPasswordSignIn()
+    release()
     await waitUntil(() => shows(WARNING), 'the warning')
 
     expect(window.location.pathname).toBe('/login')
@@ -166,11 +196,13 @@ describe('a logout the server confirmed', () => {
   })
 
   it('does not pull a user back from the password page', async () => {
-    serve({ logout: [200], logoutDelayMs: 100 })
+    const { held, release } = heldReply()
+    serve({ logout: [200], holdLogout: held })
     await openDashboard()
 
     await clickLogout()
     await goToPasswordSignIn()
+    release()
     await settle()
 
     expect(window.location.pathname).toBe('/admin/login')
@@ -178,19 +210,42 @@ describe('a logout the server confirmed', () => {
 })
 
 describe('signing in again before the logout finishes', () => {
-  it('leaves the new session where it is', async () => {
-    serve({ logout: [500], logoutDelayMs: 100 })
-    await openDashboard()
-
-    await clickLogout()
+  async function signInAgain() {
     await act(async () => {
       useAuthStore.setState({ accessToken: 'new-session', user: OWNER, isAuthenticated: true })
     })
     await waitUntil(() => window.location.pathname === '/dashboard', 'the dashboard again')
+  }
+
+  async function expectUninterrupted(release: () => void) {
     const entries = window.history.length
+    release()
     await settle()
 
     expect(window.location.pathname).toBe('/dashboard')
     expect(window.history.length).toBe(entries)
+  }
+
+  it('is not interrupted when the logout then fails', async () => {
+    const { held, release } = heldReply()
+    serve({ logout: [500], holdLogout: held })
+    await openDashboard()
+
+    await clickLogout()
+    await signInAgain()
+
+    await expectUninterrupted(release)
+  })
+
+  it('is not interrupted when the cookie exchange then fails', async () => {
+    const { held, release } = heldReply()
+    serve({ logout: [401], refresh: [401], holdExchange: held })
+    await openDashboard()
+
+    await clickLogout()
+    await waitUntil(() => vi.mocked(axios.post).mock.calls.length === 3, 'the exchange being sent')
+    await signInAgain()
+
+    await expectUninterrupted(release)
   })
 })
