@@ -25,6 +25,10 @@ RUN npm run build
 # ============================================
 FROM nginx:1.31.8-alpine@sha256:1ef7ca94d7879df82421428ce13bd1eaa412404953859cf7a5b6512c25e67a60
 
+# A base image can lag behind Alpine's security updates, and the release scan
+# fails on any High or Critical issue that has a fix.
+RUN apk upgrade --no-cache
+
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
