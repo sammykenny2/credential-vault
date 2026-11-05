@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api.v1.router import api_router
 from app.config import get_settings
 from app.core.logging_config import setup_logging
-from app.core.rate_limit import limiter
+from app.core.rate_limit import RequestLimitMiddleware, limiter
 from app.core.request_logging import RequestLoggingMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.tailscale import TailscaleMiddleware
@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSessionLocal() as db:
         await run_bootstrap(db)
+        await db.commit()
 
     yield
     # Shutdown
@@ -52,6 +53,7 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+app.add_middleware(RequestLimitMiddleware)
 
 # Request logging
 app.add_middleware(RequestLoggingMiddleware)
@@ -87,6 +89,7 @@ app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/health")
+@limiter.exempt
 async def health_check():
     """Health check endpoint for Docker."""
     import time

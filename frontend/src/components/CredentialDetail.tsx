@@ -7,6 +7,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Eye, EyeOff, Copy, ExternalLink, X, Check, ShieldAlert } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import { credentialService } from '@/services/credentialService'
 import type { Credential } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
@@ -35,6 +37,7 @@ export default function CredentialDetail({
   onOriginConfirmed,
 }: CredentialDetailProps) {
   const { decrypt, isProcessing, error } = useCredentialCrypto()
+  const { begin, cancel } = useOperationGuard(isOpen)
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [isConfirming, setIsConfirming] = useState(false)
@@ -77,13 +80,19 @@ export default function CredentialDetail({
     if (!credential) return
     setConfirmError('')
     setIsConfirming(true)
+    let operation: ReturnType<typeof begin> | undefined
     try {
+      operation = begin()
       // Pass the record the user just read: what gets signed is what they reviewed.
-      onOriginConfirmed?.(await credentialService.confirmOrigin(credential))
+      const updated = await credentialService.confirmOrigin(credential, operation.assertActive)
+      operation.assertActive()
+      onOriginConfirmed?.(updated)
     } catch (err) {
+      if (err instanceof OperationCancelledError) return
       console.error('Confirming the record failed:', err)
       setConfirmError('Could not confirm this record. Close this view and check it before trying again.')
     } finally {
+      operation?.finish()
       setIsConfirming(false)
     }
   }
@@ -108,7 +117,7 @@ export default function CredentialDetail({
               </span>
             )}
           </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
+          <button onClick={() => { cancel(); onClose() }} className="p-2 text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
         </div>

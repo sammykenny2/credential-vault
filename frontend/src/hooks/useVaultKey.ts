@@ -9,6 +9,7 @@ import { create } from 'zustand'
 import type { VaultSigner } from '@/lib/crypto'
 
 interface VaultKeyState {
+  generation: number
   // RSA key pair (in memory only, never persisted)
   privateKey: CryptoKey | null
   publicKey: CryptoKey | null
@@ -35,6 +36,7 @@ interface VaultKeyState {
 }
 
 export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
+  generation: 0,
   privateKey: null,
   publicKey: null,
   expectedPublicKeyBase64: null,
@@ -44,6 +46,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
 
   setKeys: (privateKey, publicKey, expectedPublicKeyBase64, signer = null) => {
     set({
+      generation: get().generation + 1,
       privateKey,
       publicKey,
       expectedPublicKeyBase64,
@@ -54,6 +57,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
 
   clearKeys: () => {
     set({
+      generation: get().generation + 1,
       privateKey: null,
       publicKey: null,
       expectedPublicKeyBase64: null,
@@ -78,7 +82,7 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
 
     if (Date.now() - lastActivity >= sessionTimeout) {
       // Auto-lock after timeout
-      set({ privateKey: null, publicKey: null, expectedPublicKeyBase64: null, signer: null })
+      get().clearKeys()
       return true
     }
     return false
@@ -89,13 +93,13 @@ export const useVaultKeyStore = create<VaultKeyState>((set, get) => ({
 function getPrivateKey(): CryptoKey | null {
   const store = useVaultKeyStore.getState()
   store.checkTimeout()
-  return store.privateKey
+  return useVaultKeyStore.getState().privateKey
 }
 
 function getPublicKey(): CryptoKey | null {
   const store = useVaultKeyStore.getState()
   store.checkTimeout()
-  return store.publicKey
+  return useVaultKeyStore.getState().publicKey
 }
 
 function getExpectedPublicKeyBase64(): string | null {

@@ -50,7 +50,7 @@ describe('AdminPasswordSetup', () => {
   beforeEach(() => {
     vi.mocked(authService.setPassword).mockReset()
     vi.mocked(vaultProofHeaders).mockReset().mockResolvedValue({ 'X-Vault-Proof': 'proof' })
-    useVaultKeyStore.getState().setKeys({} as CryptoKey, {} as CryptoKey, 'pk')
+    useVaultKeyStore.getState().setKeys({} as CryptoKey, {} as CryptoKey, 'pk', {} as never)
   })
 
   afterEach(() => {
@@ -77,6 +77,19 @@ describe('AdminPasswordSetup', () => {
     await typeInto('#admin-password-confirm', PASSWORD)
     await submit()
 
-    expect(authService.setPassword).toHaveBeenCalledWith(PASSWORD, { 'X-Vault-Proof': 'proof' })
+    expect(authService.setPassword).toHaveBeenCalledWith(PASSWORD, { 'X-Vault-Proof': 'proof' }, expect.any(Function))
+  })
+
+  it('clears visible passwords before submission when locked', async () => {
+    await render()
+    await typeInto('#admin-password', PASSWORD)
+    await typeInto('#admin-password-confirm', PASSWORD)
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Show passwords"]')!.click())
+    await act(async () => useVaultKeyStore.getState().clearKeys())
+    for (const input of container.querySelectorAll('input')) {
+      expect(input.value).toBe('')
+      expect(input.type).toBe('password')
+    }
+    expect(authService.setPassword).not.toHaveBeenCalled()
   })
 })

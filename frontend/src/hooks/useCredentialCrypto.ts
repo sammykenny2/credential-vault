@@ -17,6 +17,7 @@ import {
   type CredentialData,
 } from '@/lib/crypto'
 import { RecordVerificationError, verifyRecord, type StoredRecord } from '@/lib/recordSigning'
+import { captureOperation } from '@/lib/operationGuard'
 
 interface UseCredentialCryptoResult {
   // Encrypt credential data for the credential with this id
@@ -54,6 +55,7 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
       setError(null)
 
       try {
+        const operation = captureOperation()
         // Verify the in-memory public key still matches the key checked at unlock.
         const expectedBase64 = getExpectedPublicKeyBase64()
         if (expectedBase64) {
@@ -66,7 +68,10 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
           }
         }
 
-        return await encryptCredential(data, publicKey, credentialId)
+        operation.assertActive()
+        const encrypted = await encryptCredential(data, publicKey, credentialId)
+        operation.assertActive()
+        return encrypted
       } catch (err) {
         setError('Encryption failed. Please try again.')
         console.error('Encryption error:', err)
@@ -92,8 +97,12 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
       setError(null)
 
       try {
+        const operation = captureOperation()
         await verifyRecord(record, signer)
-        return await decryptCredential(record.encrypted_data, privateKey, record.id)
+        operation.assertActive()
+        const decrypted = await decryptCredential(record.encrypted_data, privateKey, record.id)
+        operation.assertActive()
+        return decrypted
       } catch (err) {
         if (err instanceof RecordVerificationError) {
           setError(err.message)

@@ -188,9 +188,11 @@ Copy-Item .env.production.example .env.production
 `.env.production` 不必放任何管理員資料。還沒有管理員時，登入頁會提示，兩種方式擇一：
 
 - 直接用 Google 登入：第一個登入的 Google 帳號就是管理員。之後可在設定頁的「Sign in with Password」補上密碼（需先解鎖 vault），就能在 `/admin/login` 用 email 加密碼登入。
-- 點登入頁上的連結到 `/admin/setup`，輸入 email 與密碼建立管理員（伺服器只存 Argon2id 雜湊），之後用同一個 email 的 Google 帳號登入會自動綁定。
+- 點登入頁上的連結到 `/admin/setup`，輸入 email 與密碼建立管理員（伺服器只存 Argon2id 雜湊）。之後先用密碼登入，在設定頁驗證密碼並連結相同 email 的 Google 帳號；系統不會僅憑 email 相同就自動綁定或替換 Google 身分。
 
-兩種方式最後的帳號狀態相同：Google 與 email 加密碼都能登入。管理使用者（Users 頁的升降級、停用、重新啟用）也需要先解鎖 vault，只偷到登入 token 的人無法變更帳號。例外是還沒建立 vault 的帳號：建立 vault 只要求 10 分鐘內登入過，這段時間內被偷的 token 仍可搶先建立，所以請一登入就完成。Credentials 頁右上角 Backup 旁的 Lock 可隨時手動鎖定。部署完請立刻完成這一步：在管理員建立之前，tailnet 上任何人打開網站都能搶先成為管理員。設了 `ADMIN_EMAIL` 時，只有那個 Google 帳號能成為第一位管理員；`ADMIN_EMAIL` 加 `ADMIN_PASSWORD` 則在啟動時直接建立管理員。
+兩種方式最後的帳號狀態相同：Google 與 email 加密碼都能登入。管理使用者（Users 頁的升降級、停用、重新啟用）也需要先解鎖 vault，只偷到登入 token 的人無法變更帳號。Credentials 頁右上角 Backup 旁的 Lock 可隨時手動鎖定。部署完請立刻完成這一步：未設定管理員限制時，tailnet 上能到達網站的人都能搶先成為管理員。設定 `ADMIN_EMAIL` 會關閉公開的 `/admin/setup`，Google 首次升級還要求 Google 對該地址具權威性（Gmail 或 Workspace）。其他郵件服務請一起設定 `ADMIN_PASSWORD`，啟動時會提交建立管理員，先以密碼登入再明確連結 Google。
+
+首次建立 vault 需要互動登入取得的十分鐘設定授權；重新整理後只靠 refresh cookie 恢復登入不足以建立金鑰，畫面會要求再次登入。Session 輪替升級會使舊 refresh cookie 失效，需要重新登入。新備份包含撤銷資料，會完整取得並驗證所有頁面；任何驗證失敗或期間變動都會停止下載。還原維持撤銷狀態，但來源仍需自行確認。大型還原會分批進行，受限流時可能等待；失敗後先檢查已存入的資料再重試。
 
 `config/tailscale/serve.json` 已在 repo 中，`${TS_CERT_DOMAIN}` 由 Tailscale 容器在執行時自動代入，不需要修改。
 

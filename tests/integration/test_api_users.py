@@ -88,7 +88,11 @@ class TestLinkGoogleAccountAPI:
             response = await client.post(
                 "/api/v1/users/me/link-google",
                 headers={"Authorization": f"Bearer {token}"},
-                json={"code": "fake-code", "redirect_uri": "http://test/login"},
+                json={
+                    "code": "fake-code",
+                    "redirect_uri": "http://test/login",
+                    "link_token": SecurityService.create_link_token(user.id, user.token_version),
+                },
             )
 
         assert response.status_code == 200
@@ -123,7 +127,11 @@ class TestLinkGoogleAccountAPI:
             response = await client.post(
                 "/api/v1/users/me/link-google",
                 headers={"Authorization": f"Bearer {token}"},
-                json={"code": "fake-code", "redirect_uri": "http://test/login"},
+                json={
+                    "code": "fake-code",
+                    "redirect_uri": "http://test/login",
+                    "link_token": SecurityService.create_link_token(user.id, user.token_version),
+                },
             )
 
         assert response.status_code == 400
@@ -165,7 +173,11 @@ class TestLinkGoogleAccountAPI:
             response = await client.post(
                 "/api/v1/users/me/link-google",
                 headers={"Authorization": f"Bearer {token}"},
-                json={"code": "fake-code", "redirect_uri": "http://test/login"},
+                json={
+                    "code": "fake-code",
+                    "redirect_uri": "http://test/login",
+                    "link_token": SecurityService.create_link_token(user.id, user.token_version),
+                },
             )
 
         assert response.status_code == 409

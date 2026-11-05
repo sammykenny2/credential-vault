@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { authService } from '@/services/authService'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import { Lock, X } from 'lucide-react'
 
 interface PasswordVerifyModalProps {
-  onVerified: () => void
+  onVerified: (linkToken: string) => void
   onClose: () => void
 }
 
 export default function PasswordVerifyModal({ onVerified, onClose }: PasswordVerifyModalProps) {
+  const { begin, cancel } = useOperationGuard()
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
@@ -16,11 +19,14 @@ export default function PasswordVerifyModal({ onVerified, onClose }: PasswordVer
     e.preventDefault()
     setError('')
     setIsVerifying(true)
-
+    let operation: ReturnType<typeof begin> | undefined
     try {
-      await authService.verifyPassword(password)
-      onVerified()
+      operation = begin(false)
+      const result = await authService.verifyPassword(password, operation.assertActive)
+      operation.assertActive()
+      onVerified(result.link_token)
     } catch (err: unknown) {
+      if (err instanceof OperationCancelledError) return
       const axiosErr = err as { response?: { status?: number } }
       if (axiosErr.response?.status === 401) {
         setError('Incorrect password. Please try again.')
@@ -28,6 +34,8 @@ export default function PasswordVerifyModal({ onVerified, onClose }: PasswordVer
         setError('Verification failed. Please try again.')
       }
     } finally {
+      operation?.finish()
+      setPassword('')
       setIsVerifying(false)
     }
   }
@@ -40,7 +48,7 @@ export default function PasswordVerifyModal({ onVerified, onClose }: PasswordVer
             <Lock className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold">Verify Password</h3>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={() => { cancel(); onClose() }} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -69,7 +77,7 @@ export default function PasswordVerifyModal({ onVerified, onClose }: PasswordVer
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => { cancel(); onClose() }}
               className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
             >
               Cancel

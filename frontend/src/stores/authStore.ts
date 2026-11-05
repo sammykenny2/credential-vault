@@ -16,6 +16,9 @@ interface AuthState {
   accessToken: string | null
   isAuthenticated: boolean
   isBootstrapping: boolean
+  generation: number
+  vaultSetupToken: string | null
+  setVaultSetupToken: (token: string | null) => void
 
   setAccessToken: (accessToken: string) => void
   setUser: (user: User) => void
@@ -31,20 +34,47 @@ try {
   // Storage unavailable (private mode, etc.): nothing to clean up.
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
+function tokenIdentity(token: string): string | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return JSON.stringify([payload.sub, payload.sid, payload.ver])
+  } catch { return null }
+}
+
+export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   accessToken: null,
   isAuthenticated: false,
   isBootstrapping: true,
+  generation: 0,
+  vaultSetupToken: null,
+  setVaultSetupToken: (vaultSetupToken) => set({ vaultSetupToken }),
 
-  setAccessToken: (accessToken) => set({ accessToken, isAuthenticated: true }),
+  setAccessToken: (accessToken) => {
+    const previous = get().accessToken
+    // Claims here only detect a change; API authentication still validates the JWT.
+    if (previous && previous !== accessToken &&
+        (!tokenIdentity(previous) || tokenIdentity(previous) !== tokenIdentity(accessToken))) {
+      useVaultKeyStore.getState().clearKeys()
+      set({ user: null, accessToken, vaultSetupToken: null, isAuthenticated: true, generation: get().generation + 1 })
+    } else {
+      set({ accessToken, isAuthenticated: true })
+    }
+  },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    if (get().user?.id !== user.id) {
+      useVaultKeyStore.getState().clearKeys()
+      set({ user, generation: get().generation + 1 })
+    } else {
+      set({ user })
+    }
+  },
 
   finishBootstrap: () => set({ isBootstrapping: false }),
 
   logout: () => {
     useVaultKeyStore.getState().clearKeys()
-    set({ user: null, accessToken: null, isAuthenticated: false })
+    set({ user: null, accessToken: null, vaultSetupToken: null, isAuthenticated: false, generation: get().generation + 1 })
   },
 }))

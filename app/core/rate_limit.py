@@ -1,9 +1,14 @@
 """Rate limiting middleware using slowapi."""
 
+import math
+import time
+
+from limits import RateLimitItemPerMinute
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from app.config import get_settings
 from app.core.client_ip import get_client_ip
@@ -20,8 +25,31 @@ settings = get_settings()
 # Dockerfile) or every worker keeps its own count.
 limiter = Limiter(
     key_func=_rate_limit_key,
-    default_limits=[f"{settings.rate_limit_per_minute}/minute"],
 )
+
+
+class RequestLimitMiddleware(BaseHTTPMiddleware):
+    """Aggregate all API requests by trusted client IP, before parsing any body.
+
+    SlowAPI's route discovery misses FastAPI's included-router objects. Use its
+    public storage backend directly so new/nested endpoints cannot bypass limits.
+    Decorated auth endpoints retain their additional stricter counters.
+    """
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        active = request.app.state.limiter
+        if active.enabled and request.url.path.startswith("/api/"):
+            limit = RateLimitItemPerMinute(get_settings().rate_limit_per_minute)
+            identifiers = ("all-api", _rate_limit_key(request))
+            if not active.limiter.hit(limit, *identifiers):
+                window = active.limiter.get_window_stats(limit, *identifiers)
+                retry = max(1, math.ceil(window.reset_time - time.time()))
+                return JSONResponse(
+                    {"detail": "Too many requests. Please try again later."},
+                    status_code=429,
+                    headers={"Retry-After": str(retry)},
+                )
+        return await call_next(request)
 
 
 # Stricter limits for auth endpoints

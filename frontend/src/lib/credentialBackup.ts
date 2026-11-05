@@ -11,6 +11,7 @@ import {
   arrayBufferToBase64,
   base64ToArrayBuffer,
   generatePassword,
+  assertCredentialData,
 } from './crypto'
 import type { CredentialData } from './crypto'
 import { MIN_BACKUP_PASSWORD_LENGTH } from './passwordPolicy'
@@ -21,6 +22,9 @@ export interface CredentialBackupEntry {
   data: CredentialData
   expires_at: string | null
   created_at: string
+  is_active?: boolean
+  revoked_at?: string | null
+  source_origin?: 'authored' | 'legacy-unverified'
 }
 
 export interface CredentialBackupPayload {
@@ -28,7 +32,7 @@ export interface CredentialBackupPayload {
 }
 
 export interface CredentialBackupFile {
-  type: 'credential-backup'
+  type: 'credential-backup' | 'credential-record-backup'
   version: 1
   exportedAt: string
   credentialCount: number
@@ -41,6 +45,9 @@ export interface CredentialBackupFile {
 
 const AES_ALGORITHM = 'AES-GCM'
 const IV_LENGTH = 12
+export const MAX_BACKUP_FILE_BYTES = 32 * 1024 * 1024
+const MAX_BACKUP_RECORDS = 10_000
+const RECORD_BACKUP_AAD = new TextEncoder().encode('credential-vault/record-backup/1')
 
 // === Core Functions ===
 
@@ -63,6 +70,7 @@ export async function encryptBackup(
   if (password.length < MIN_BACKUP_PASSWORD_LENGTH) {
     throw new Error(`Backup password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters.`)
   }
+  validatePayload({ credentials }, true)
   const salt = generateSalt()
   const iv = generateIV()
   const key = await deriveKEK(password, salt)
@@ -71,13 +79,13 @@ export async function encryptBackup(
   const plaintext = new TextEncoder().encode(JSON.stringify(payload))
 
   const ciphertext = await crypto.subtle.encrypt(
-    { name: AES_ALGORITHM, iv },
+    { name: AES_ALGORITHM, iv, additionalData: RECORD_BACKUP_AAD },
     key,
     plaintext
   )
 
   return {
-    type: 'credential-backup',
+    type: 'credential-record-backup',
     version: 1,
     exportedAt: new Date().toISOString(),
     credentialCount: credentials.length,
@@ -102,12 +110,21 @@ export async function decryptBackup(
     const key = await deriveKEK(password, salt)
 
     const plaintext = await crypto.subtle.decrypt(
-      { name: AES_ALGORITHM, iv },
+      file.type === 'credential-record-backup'
+        ? { name: AES_ALGORITHM, iv, additionalData: RECORD_BACKUP_AAD }
+        : { name: AES_ALGORITHM, iv },
       key,
       ciphertext
     )
 
-    return JSON.parse(new TextDecoder().decode(plaintext)) as CredentialBackupPayload
+    try {
+      const payload: unknown = JSON.parse(new TextDecoder().decode(plaintext))
+      validatePayload(payload, file.type === 'credential-record-backup')
+      if (payload.credentials.length !== file.credentialCount) throw new Error('Count mismatch')
+      return payload
+    } finally {
+      new Uint8Array(plaintext).fill(0)
+    }
   } catch {
     throw new Error('Decryption failed. Wrong password or corrupted file.')
   }
@@ -117,18 +134,19 @@ export async function decryptBackup(
  * Read and validate a .cvault backup file from a File object.
  */
 export async function readBackupFile(file: File): Promise<CredentialBackupFile> {
+  if (file.size > MAX_BACKUP_FILE_BYTES) throw new Error('Backup exceeds the 32 MiB file limit.')
   const text = await file.text()
 
   try {
     const parsed = JSON.parse(text)
 
     // Reject template .cvault files
-    if (parsed.type && parsed.type !== 'credential-backup') {
+    if (parsed.type && parsed.type !== 'credential-backup' && parsed.type !== 'credential-record-backup') {
       throw new Error('This is not a credential backup file.')
     }
 
     // Must have the credential-backup type marker
-    if (parsed.type !== 'credential-backup') {
+    if (parsed.type !== 'credential-backup' && parsed.type !== 'credential-record-backup') {
       // Legacy check: if it has version but no type, it's a template export
       if (parsed.version && !parsed.type) {
         throw new Error(
@@ -151,10 +169,16 @@ export async function readBackupFile(file: File): Promise<CredentialBackupFile> 
       throw new Error('Invalid credential backup file structure.')
     }
 
-    if (parsed.version > 1) {
+    if (parsed.version !== 1) {
       throw new Error(
         `Backup version ${parsed.version} is not supported. Please update the application.`
       )
+    }
+    if (!Number.isInteger(parsed.credentialCount) || parsed.credentialCount < 0 ||
+        parsed.credentialCount > MAX_BACKUP_RECORDS ||
+        base64ToArrayBuffer(parsed.iv).byteLength !== IV_LENGTH ||
+        base64ToArrayBuffer(parsed.salt).byteLength !== 32) {
+      throw new Error('Invalid credential backup parameters.')
     }
 
     return parsed as CredentialBackupFile
@@ -172,6 +196,7 @@ export async function readBackupFile(file: File): Promise<CredentialBackupFile> 
 export function downloadBackupFile(backupFile: CredentialBackupFile): void {
   const json = JSON.stringify(backupFile, null, 2)
   const blob = new Blob([json], { type: 'application/json' })
+  if (blob.size > MAX_BACKUP_FILE_BYTES) throw new Error('Backup exceeds the 32 MiB file limit.')
   const url = URL.createObjectURL(blob)
 
   const a = document.createElement('a')
@@ -182,4 +207,26 @@ export function downloadBackupFile(backupFile: CredentialBackupFile): void {
   document.body.removeChild(a)
 
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function validatePayload(value: unknown, requireStatus: boolean): asserts value is CredentialBackupPayload {
+  if (!value || typeof value !== 'object' || !('credentials' in value) ||
+      !Array.isArray(value.credentials) || value.credentials.length > MAX_BACKUP_RECORDS) {
+    throw new Error('Invalid backup payload')
+  }
+  for (const entry of value.credentials) {
+    if (!entry || typeof entry !== 'object') throw new Error('Invalid backup entry')
+    assertCredentialData(entry.data)
+    const validDate = (v: unknown) => typeof v === 'string' && Number.isFinite(Date.parse(v))
+    if (!validDate(entry.created_at) || (entry.expires_at !== null && !validDate(entry.expires_at))) {
+      throw new Error('Invalid backup dates')
+    }
+    if (requireStatus && (typeof entry.is_active !== 'boolean' ||
+        (entry.revoked_at !== null && !validDate(entry.revoked_at)) ||
+        (entry.is_active && entry.revoked_at !== null) ||
+        (!entry.is_active && entry.revoked_at === null) ||
+        !['authored', 'legacy-unverified'].includes(entry.source_origin))) {
+      throw new Error('Invalid backup status')
+    }
+  }
 }

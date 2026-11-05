@@ -18,7 +18,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/oauth/google/callback")
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db, scope="function")],
 ) -> User:
     """Get current authenticated user from JWT token."""
     credentials_exception = HTTPException(
@@ -54,6 +54,20 @@ async def get_current_user(
     if payload.get("ver", 0) != user.token_version:
         raise credentials_exception
 
+    if "sid" in payload:
+        import time
+
+        from app.models.auth_session import AuthSession
+
+        session = await db.get(AuthSession, payload["sid"])
+        if (
+            session is None
+            or session.user_id != user.id
+            or session.revoked_at is not None
+            or session.expires_at <= int(time.time())
+        ):
+            raise credentials_exception
+
     return user
 
 
@@ -65,25 +79,6 @@ async def get_current_active_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user",
-        )
-    return current_user
-
-
-# The frontend matches this to offer signing in again, so keep it stable. It is a
-# 403, not a 401: a 401 would make the client refresh, which cannot help.
-RECENT_LOGIN_REQUIRED = "recent_login_required"
-
-
-async def get_recently_signed_in_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
-) -> User:
-    """Ensure this session signed in recently, for actions a stale token must not take."""
-    payload = SecurityService.decode_token(token)
-    if payload is None or not SecurityService.is_recent_login(payload):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=RECENT_LOGIN_REQUIRED,
         )
     return current_user
 
@@ -182,10 +177,9 @@ async def get_vault_proven_admin_user(
 
 # Type aliases for cleaner dependency injection
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
-RecentlySignedInUser = Annotated[User, Depends(get_recently_signed_in_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 VaultProvenUser = Annotated[User, Depends(get_vault_proven_user)]
 VaultSigningUser = Annotated[User, Depends(get_vault_signing_user)]
 VaultUpgradingUser = Annotated[User, Depends(get_vault_upgrading_user)]
 VaultProvenAdmin = Annotated[User, Depends(get_vault_proven_admin_user)]
-DbSession = Annotated[AsyncSession, Depends(get_db)]
+DbSession = Annotated[AsyncSession, Depends(get_db, scope="function")]

@@ -46,7 +46,9 @@ class CredentialService:
         if not include_revoked:
             query = query.where(Credential.is_active == True)  # noqa: E712
 
-        query = query.offset(skip).limit(limit).order_by(Credential.created_at.desc())
+        query = (
+            query.offset(skip).limit(limit).order_by(Credential.created_at.desc(), Credential.id)
+        )
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
@@ -78,12 +80,17 @@ class CredentialService:
         return result.scalar_one_or_none() is not None
 
     async def export_all(self, owner_id: str) -> list[dict]:
-        """Export all active credentials for a user."""
-        credentials = await self.list_by_owner(owner_id, limit=10000)
+        """Export complete signed states; fail instead of silently truncating."""
+        credentials = await self.list_by_owner(owner_id, limit=10001, include_revoked=True)
+        if len(credentials) > 10000:
+            raise ValueError("Too many credentials to export; use paginated listing")
         return [
             {
                 "id": c.id,
                 "encrypted_data": c.encrypted_data,
+                "is_active": c.is_active,
+                "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
+                "created_at": c.created_at.isoformat(),
                 "expires_at": c.expires_at.isoformat() if c.expires_at else None,
                 "revision": c.revision,
                 "signature": c.signature,
@@ -114,6 +121,8 @@ class CredentialService:
                         owner_id=owner_id,
                         encrypted_data=cred_data["encrypted_data"],
                         expires_at=cred_data.get("expires_at"),
+                        is_active=cred_data.get("is_active", True),
+                        revoked_at=cred_data.get("revoked_at"),
                         revision=1,
                         signature=cred_data["signature"],
                         signature_version=cred_data["signature_version"],

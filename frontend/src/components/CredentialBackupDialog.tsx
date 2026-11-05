@@ -15,16 +15,15 @@ import {
   EyeOff,
   Loader2,
 } from 'lucide-react'
-import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
-import { credentialService } from '@/services/credentialService'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { createCompleteBackup, restoreCompleteBackup } from '@/lib/backupWorkflow'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import {
-  encryptBackup,
-  decryptBackup,
   readBackupFile,
   downloadBackupFile,
   generateBackupPassword,
 } from '@/lib/credentialBackup'
-import type { CredentialBackupFile, CredentialBackupEntry } from '@/lib/credentialBackup'
+import type { CredentialBackupFile } from '@/lib/credentialBackup'
 import { recordBackupCompleted } from '@/lib/backupReminder'
 import { secretFieldProps } from '@/lib/inputProps'
 import { MIN_BACKUP_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
@@ -51,9 +50,8 @@ export default function CredentialBackupDialog({
   onClose,
   onImportComplete,
   unverifiedCount = 0,
-  decryptedCache,
 }: CredentialBackupDialogProps) {
-  const { encrypt } = useCredentialCrypto()
+  const { begin, cancel } = useOperationGuard(isOpen)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Tab state
@@ -78,6 +76,7 @@ export default function CredentialBackupDialog({
   const [importProgress, setImportProgress] = useState('')
 
   const handleClose = () => {
+    cancel()
     setActiveTab('export')
     setExportPassword('')
     setExportPasswordConfirm('')
@@ -112,27 +111,21 @@ export default function CredentialBackupDialog({
       setExportError('Passwords do not match.')
       return
     }
-    if (decryptedCache.length === 0) {
-      setExportError('No credentials to export.')
-      return
-    }
-
     setIsExporting(true)
+    let operation: ReturnType<typeof begin> | undefined
     try {
-      const entries: CredentialBackupEntry[] = decryptedCache.map((c) => ({
-        data: c.data,
-        expires_at: c.expires_at,
-        created_at: c.created_at,
-      }))
-
-      const backupFile = await encryptBackup(entries, exportPassword)
+      operation = begin()
+      const backupFile = await createCompleteBackup(exportPassword, operation)
+      operation.assertActive()
       downloadBackupFile(backupFile)
       recordBackupCompleted()
       setExportSuccess(true)
     } catch (error) {
-      setExportError('Failed to create backup.')
+      if (error instanceof OperationCancelledError) return
+      setExportError(error instanceof Error ? error.message : 'Failed to create backup.')
       console.error('Backup export error:', error)
     } finally {
+      operation?.finish()
       setIsExporting(false)
     }
   }
@@ -150,12 +143,17 @@ export default function CredentialBackupDialog({
     setImportSuccess(false)
     setParsedFile(null)
     setImportProgress('')
-
+    let operation: ReturnType<typeof begin> | undefined
     try {
+      operation = begin()
       const parsed = await readBackupFile(file)
+      operation.assertActive()
       setParsedFile(parsed)
     } catch (error) {
+      if (error instanceof OperationCancelledError) return
       setImportError(error instanceof Error ? error.message : 'Failed to read file')
+    } finally {
+      operation?.finish()
     }
   }
 
@@ -171,40 +169,11 @@ export default function CredentialBackupDialog({
     setImportSuccess(false)
     setIsImporting(true)
     setImportProgress('Decrypting backup...')
-
+    let operation: ReturnType<typeof begin> | undefined
     try {
-      // 1. Decrypt the backup
-      const payload = await decryptBackup(parsedFile, importPassword)
-
-      if (!payload.credentials || payload.credentials.length === 0) {
-        setImportError('Backup contains no credentials.')
-        return
-      }
-
-      // 2. Re-encrypt each credential with user's RSA public key
-      setImportProgress(`Re-encrypting ${payload.credentials.length} credentials...`)
-      const encryptedCredentials: Array<{
-        id: string
-        encrypted_data: string
-        expires_at?: string | null
-      }> = []
-
-      for (const entry of payload.credentials) {
-        const id = crypto.randomUUID()
-        const encryptedData = await encrypt(entry.data, id)
-        if (!encryptedData) {
-          throw new Error('Vault is locked. Please unlock your vault and try again.')
-        }
-        encryptedCredentials.push({
-          id,
-          encrypted_data: encryptedData,
-          expires_at: entry.expires_at,
-        })
-      }
-
-      // 3. Upload all via batch import
-      setImportProgress('Uploading credentials...')
-      const result = await credentialService.importBatch(encryptedCredentials)
+      operation = begin()
+      const result = await restoreCompleteBackup(parsedFile, importPassword, operation, setImportProgress)
+      operation.assertActive()
 
       if (result.errors.length > 0) {
         setImportError(`Imported ${result.imported}, but ${result.errors.length} errors occurred.`)
@@ -214,9 +183,12 @@ export default function CredentialBackupDialog({
         onImportComplete?.()
       }
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'Import failed.')
+      if (error instanceof OperationCancelledError) return
+      setImportError((error instanceof Error ? error.message : 'Import failed.') +
+        ' Some batches may already be saved; inspect the vault before retrying.')
       console.error('Backup import error:', error)
     } finally {
+      operation?.finish()
       setIsImporting(false)
     }
   }
@@ -269,12 +241,12 @@ export default function CredentialBackupDialog({
             <div className="space-y-4">
               {/* Credential count */}
               <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
-                <strong>{decryptedCache.length}</strong> credential(s) will be included in the backup.
+                All credentials, including revoked ones, will be fetched and verified before download.
               </div>
               {unverifiedCount > 0 && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                  {unverifiedCount} record(s) failed signature verification and will not be
-                  included. This backup is not complete.
+                  {unverifiedCount} record(s) on this page failed signature verification.
+                  Backup will stop if any record cannot be verified; nothing will be silently omitted.
                 </div>
               )}
 
@@ -449,7 +421,7 @@ export default function CredentialBackupDialog({
                       <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0" />
                       <div className="text-sm text-yellow-800">
                         <p className="font-medium">Restore adds credentials</p>
-                        <p>The {parsedFile.credentialCount} credential(s) from this backup will be added to your vault, labelled origin unverified because this backup format carries no signatures. Existing credentials are not affected.</p>
+                        <p>The {parsedFile.credentialCount} credential(s) will be added and labelled origin unverified. {parsedFile.type === 'credential-record-backup' ? 'Revoked records stay revoked.' : 'This legacy backup has no revocation status; restored records will be active.'} Large restores use multiple batches; a failed restore may leave completed batches in your vault.</p>
                       </div>
                     </div>
                   </div>

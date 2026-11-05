@@ -29,6 +29,8 @@ class AuditAction(enum.StrEnum):
     # Credential
     CREDENTIAL_CREATED = "credential_created"
     CREDENTIAL_READ = "credential_read"
+    CREDENTIAL_LISTED = "credential_listed"
+    CREDENTIAL_EXPORTED = "credential_exported"
     CREDENTIAL_UPDATED = "credential_updated"
     CREDENTIAL_REVOKED = "credential_revoked"
     CREDENTIAL_DELETED = "credential_deleted"

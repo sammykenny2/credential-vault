@@ -33,6 +33,7 @@ import {
   type SignedRecordState,
 } from '@/lib/recordSigning'
 import { VaultLockedError } from '@/lib/vaultProof'
+import { captureOperation, OperationCancelledError } from '@/lib/operationGuard'
 import type { Credential } from '@/types'
 
 const mockedApi = api as unknown as {
@@ -123,12 +124,12 @@ describe('create()', () => {
 
     const [url, body, config] = mockedApi.post.mock.calls[0]
     expect(url).toBe('/credentials/')
-    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(config).toEqual({ headers: PROOF_HEADERS, assertOperation: expect.any(Function) })
     expect(body.revision).toBe(1)
     expect(body.origin).toBe('authored')
     expect(body.signature_version).toBe(1)
     expect(await verifyRecord(result, signer)).toBe('authored')
-    expect(mockedApi.get).toHaveBeenCalledWith(`/credentials/${ID}`)
+    expect(mockedApi.get).toHaveBeenCalledWith(`/credentials/${ID}`, { assertOperation: expect.any(Function) })
   })
 
   it('signs the expiry it sends', async () => {
@@ -151,7 +152,7 @@ describe('create()', () => {
     expect(mockedApi.post).not.toHaveBeenCalled()
   })
 
-  it('removes the record and reports it when the re-read blob differs', async () => {
+  it('reports a differing re-read without sending a destructive cleanup request', async () => {
     mockedApi.post.mockResolvedValue({ data: {} })
     mockedApi.get.mockResolvedValue({ data: await storedRow({ encrypted_data: OTHER_BLOB }) })
     mockedApi.delete.mockResolvedValue({})
@@ -160,10 +161,10 @@ describe('create()', () => {
       credentialService.create({ id: ID, encrypted_data: BLOB })
     ).rejects.toThrow('Storage integrity check failed')
 
-    expect(mockedApi.delete).toHaveBeenCalledWith(`/credentials/${ID}`, { headers: PROOF_HEADERS })
+    expect(mockedApi.delete).not.toHaveBeenCalled()
   })
 
-  it('removes the record when the re-read is not what was signed', async () => {
+  it('leaves the stored record alone when the re-read is not what was signed', async () => {
     mockedApi.post.mockResolvedValue({ data: {} })
     mockedApi.get.mockResolvedValue({ data: await storedRow({}, await newSigner()) })
     mockedApi.delete.mockResolvedValue({})
@@ -172,7 +173,7 @@ describe('create()', () => {
       credentialService.create({ id: ID, encrypted_data: BLOB })
     ).rejects.toThrow('Storage integrity check failed')
 
-    expect(mockedApi.delete).toHaveBeenCalledTimes(1)
+    expect(mockedApi.delete).not.toHaveBeenCalled()
   })
 
   it('refuses a read-back of another record', async () => {
@@ -295,7 +296,7 @@ describe('confirmOrigin()', () => {
 
     const [url, body, config] = mockedApi.patch.mock.calls[0]
     expect(url).toBe(`/credentials/${ID}`)
-    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(config).toEqual({ headers: PROOF_HEADERS, assertOperation: expect.any(Function) })
     expect(body).not.toHaveProperty('encrypted_data')
     expect(body.revision).toBe(2)
     expect(body.origin).toBe('authored')
@@ -317,7 +318,7 @@ describe('revoke()', () => {
 
     const [url, body, config] = mockedApi.post.mock.calls[0]
     expect(url).toBe(`/credentials/${ID}/revoke`)
-    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(config).toEqual({ headers: PROOF_HEADERS, assertOperation: expect.any(Function) })
     expect(body.revision).toBe(2)
     expect(body.origin).toBe('legacy-unverified')
     expect(typeof body.revoked_at).toBe('string')
@@ -326,14 +327,32 @@ describe('revoke()', () => {
 })
 
 describe('importBatch()', () => {
+  it('stops later batches when the originating dialog closes during an upload', async () => {
+    let release!: (value: unknown) => void
+    mockedApi.post.mockImplementation(() => new Promise((resolve) => { release = resolve }))
+    const operation = captureOperation()
+    const entries = Array.from({ length: 501 }, () => ({ id: crypto.randomUUID(), encrypted_data: BLOB }))
+    const result = expect(credentialService.importBatch(entries, 'legacy-unverified', operation.assertActive))
+      .rejects.toBeInstanceOf(OperationCancelledError)
+    await vi.waitFor(() => expect(mockedApi.post).toHaveBeenCalledTimes(1))
+    operation.cancel()
+    release({ data: { imported: 500, skipped: 0, errors: [] } })
+    await result
+    expect(mockedApi.post).toHaveBeenCalledTimes(1)
+    expect(mockedApi.get).not.toHaveBeenCalled()
+  })
+
   it('signs restored records as legacy-unverified: a backup cannot prove authorship', async () => {
-    mockedApi.post.mockResolvedValue({ data: { imported: 1, skipped: 0, errors: [] } })
+    mockedApi.post.mockImplementation(async (_url, body) => {
+      mockedApi.get.mockResolvedValue({ data: body.credentials })
+      return { data: { imported: 1, skipped: 0, errors: [] } }
+    })
 
     await credentialService.importBatch([{ id: ID, encrypted_data: BLOB, expires_at: null }])
 
     const [url, body, config] = mockedApi.post.mock.calls[0]
     expect(url).toBe('/credentials/import')
-    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(config).toEqual({ headers: PROOF_HEADERS, assertOperation: expect.any(Function) })
     const [sent] = body.credentials
     expect(sent.origin).toBe('legacy-unverified')
     expect(sent.revision).toBe(1)
@@ -346,8 +365,8 @@ describe('importBatch()', () => {
 
 describe('listAll()', () => {
   it('reads every page, including revoked records', async () => {
-    const page = (count: number) => ({ data: Array.from({ length: count }, () => ({})) })
-    mockedApi.get.mockResolvedValueOnce(page(500)).mockResolvedValueOnce(page(3))
+    const page = (count: number, start: number) => ({ data: Array.from({ length: count }, (_, i) => ({ id: `${start + i}` })) })
+    mockedApi.get.mockResolvedValueOnce(page(500, 0)).mockResolvedValueOnce(page(3, 500))
 
     const records = await credentialService.listAll()
 

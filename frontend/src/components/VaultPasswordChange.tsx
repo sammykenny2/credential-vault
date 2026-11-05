@@ -15,12 +15,15 @@ import { authService } from '@/services/authService'
 import { rewrapPrivateKey, KDF_VERSION, VaultKeyMismatchError } from '@/lib/crypto'
 import { vaultProofHeaders, VaultLockedError } from '@/lib/vaultProof'
 import { useVaultKey } from '@/hooks/useVaultKey'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { OperationCancelledError } from '@/lib/operationGuard'
 import { MIN_VAULT_PASSWORD_LENGTH } from '@/components/MasterPasswordModal'
 import type { VaultKeyMaterial } from '@/types'
 import { secretFieldProps } from '@/lib/inputProps'
 
 export default function VaultPasswordChange() {
   const { isUnlocked } = useVaultKey()
+  const { begin } = useOperationGuard()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -28,6 +31,16 @@ export default function VaultPasswordChange() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
+  const [wasUnlocked, setWasUnlocked] = useState(isUnlocked)
+  if (wasUnlocked !== isUnlocked) {
+    setWasUnlocked(isUnlocked)
+    if (!isUnlocked) {
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setShowPasswords(false)
+    }
+  }
 
   const reset = () => {
     setCurrentPassword('')
@@ -54,32 +67,47 @@ export default function VaultPasswordChange() {
     }
 
     setIsBusy(true)
+    let operation: ReturnType<typeof begin> | undefined
+    let updateSent = false
     try {
+      operation = begin()
       // Proof first: it needs the unlocked private key and fails fast when locked.
       const headers = await vaultProofHeaders()
+      operation.assertActive()
 
-      const { data: keys } = await api.get<VaultKeyMaterial>('/auth/vault/keys')
+      const { data: keys } = await api.get<VaultKeyMaterial>('/auth/vault/keys', { assertOperation: operation.assertActive })
+      operation.assertActive()
       const rewrapped = await rewrapPrivateKey(
         currentPassword,
         newPassword,
         keys.key_salt,
         keys.encrypted_private_key,
-        keys.kdf_version ?? KDF_VERSION
+        keys.kdf_version ?? KDF_VERSION,
+        operation.vault.expectedPublicKeyBase64 ?? undefined,
+        operation.vault.signer ?? undefined,
       )
+      operation.assertActive()
 
+      updateSent = true
       await authService.rekeyVault(
         {
           encrypted_private_key: rewrapped.encryptedPrivateKeyBase64,
           key_salt: rewrapped.saltBase64,
           kdf_version: rewrapped.kdfVersion,
         },
-        headers
+        headers,
+        operation.assertActive
       )
+      operation.assertActive()
 
       setSuccess(true)
       reset()
     } catch (err) {
-      if (err instanceof VaultLockedError) {
+      if (updateSent) {
+        setError('The update could not be confirmed. Your vault password may already have changed; try unlocking with the new password first.')
+      } else if (err instanceof OperationCancelledError) {
+        return
+      } else if (err instanceof VaultLockedError) {
         setError('Unlock your vault on the Credentials page first.')
       } else if (err instanceof VaultKeyMismatchError) {
         setError('The server returned unexpected vault keys, so nothing was changed. Your password is not the problem.')
@@ -88,6 +116,8 @@ export default function VaultPasswordChange() {
         setError('Current vault password is incorrect, or the update failed. Nothing was changed.')
       }
     } finally {
+      operation?.finish()
+      reset()
       setIsBusy(false)
     }
   }

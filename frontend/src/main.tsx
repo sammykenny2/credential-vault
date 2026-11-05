@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
+import { useAuthStore } from '@/stores/authStore'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -13,6 +14,10 @@ const queryClient = new QueryClient({
       retry: 1,
     },
   },
+})
+
+useAuthStore.subscribe((state, previous) => {
+  if (state.generation !== previous.generation) queryClient.clear()
 })
 
 createRoot(document.getElementById('root')!).render(

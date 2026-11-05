@@ -1,5 +1,16 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from '@/stores/authStore'
+import { OperationCancelledError, type OperationCheck } from '@/lib/operationGuard'
+import { useVaultKeyStore } from '@/hooks/useVaultKey'
+
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    authGeneration?: number
+    vaultGeneration?: number
+    rateRetries?: number
+    assertOperation?: OperationCheck
+  }
+}
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
@@ -11,21 +22,45 @@ export const api = axios.create({
   // Send the HttpOnly refresh cookie on auth routes even when the API lives
   // on another origin during development.
   withCredentials: true,
+  timeout: 30_000,
 })
 
 // Request interceptor - add auth token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().accessToken
+    config.assertOperation?.()
+    config.signal ??= config.assertOperation?.signal
+    const { accessToken: token, generation } = useAuthStore.getState()
+    config.authGeneration ??= generation
+    config.vaultGeneration ??= useVaultKeyStore.getState().generation
+    if (config.authGeneration !== generation ||
+        config.vaultGeneration !== useVaultKeyStore.getState().generation) throw new OperationCancelledError()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
-  (error) => Promise.reject(error)
+  (error) => { throw error },
+  { synchronous: true }
 )
 
-let refreshPromise: Promise<string> | null = null
+/**
+ * Spend the refresh cookie, one tab at a time: the server accepts each token once.
+ * Touches no session state, so it also works once this device has signed out.
+ */
+export function exchangeRefreshCookie(assertStillWanted?: () => void) {
+  const exchange = () => {
+    assertStillWanted?.()
+    return axios.post<{ access_token: string; user_id: string }>(`${API_BASE_URL}/auth/refresh`, null, {
+      withCredentials: true, timeout: 30_000,
+    })
+  }
+  return navigator.locks
+    ? navigator.locks.request('credential-vault:refresh', exchange)
+    : exchange()
+}
+
+let refreshRequest: { generation: number; promise: Promise<string> } | null = null
 
 /**
  * Exchange the HttpOnly refresh cookie for a new access token.
@@ -34,36 +69,62 @@ let refreshPromise: Promise<string> | null = null
  * valid session, in which case the caller decides what to do.
  */
 export async function refreshAccessToken(): Promise<string> {
-  if (!refreshPromise) {
-    refreshPromise = axios
-      .post<{ access_token: string }>(`${API_BASE_URL}/auth/refresh`, null, {
-        withCredentials: true,
-      })
+  const { generation, user } = useAuthStore.getState()
+  if (!refreshRequest || refreshRequest.generation !== generation) {
+    const promise = exchangeRefreshCookie(() => {
+      if (useAuthStore.getState().generation !== generation) throw new OperationCancelledError()
+    })
       .then((response) => {
+        if (useAuthStore.getState().generation !== generation) throw new OperationCancelledError()
+        if (user && response.data.user_id !== user.id) {
+          useAuthStore.getState().logout()
+          throw new OperationCancelledError()
+        }
         const token = response.data.access_token
         useAuthStore.getState().setAccessToken(token)
         return token
       })
       .finally(() => {
-        refreshPromise = null
+        if (refreshRequest?.promise === promise) refreshRequest = null
       })
+    refreshRequest = { generation, promise }
   }
-  return refreshPromise
+  return refreshRequest.promise
 }
 
-// Requests that must never trigger a refresh-and-retry loop. Logout is not one of
-// them: with an expired access token it would fail, and the refresh cookie would
-// quietly keep the session alive. `_retry` limits it to one attempt like the rest.
-const NO_RETRY_PATHS = ['/auth/refresh']
+// Requests that must never trigger a refresh-and-retry loop
+const NO_RETRY_PATHS = ['/auth/refresh', '/auth/logout', '/auth/login', '/auth/verify-password', '/oauth/google/callback', '/setup/admin']
 
 // Response interceptor - handle token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    response.config.assertOperation?.()
+    if (response.config.authGeneration !== useAuthStore.getState().generation ||
+        response.config.vaultGeneration !== useVaultKeyStore.getState().generation) {
+      throw new OperationCancelledError()
+    }
+    return response
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as
       | (InternalAxiosRequestConfig & { _retry?: boolean })
       | undefined
     const url = originalRequest?.url ?? ''
+    originalRequest?.assertOperation?.()
+    const generation = useAuthStore.getState().generation
+    if (originalRequest && (originalRequest.authGeneration !== generation ||
+        originalRequest.vaultGeneration !== useVaultKeyStore.getState().generation)) {
+      return Promise.reject(new OperationCancelledError())
+    }
+    if (error.response?.status === 429 && originalRequest && (originalRequest.rateRetries ?? 0) < 2) {
+      const seconds = Number(error.response.headers['retry-after'])
+      if (Number.isFinite(seconds) && seconds > 0 && seconds <= 60) {
+        originalRequest.rateRetries = (originalRequest.rateRetries ?? 0) + 1
+        await new Promise((resolve) => setTimeout(resolve, seconds * 1000))
+        // The synchronous request interceptor checks both captured generations again.
+        return api(originalRequest)
+      }
+    }
 
     if (
       error.response?.status === 401 &&
@@ -74,10 +135,11 @@ api.interceptors.response.use(
       originalRequest._retry = true
       try {
         const token = await refreshAccessToken()
+        if (useAuthStore.getState().generation !== generation) throw new OperationCancelledError()
         originalRequest.headers.Authorization = `Bearer ${token}`
         return api(originalRequest)
       } catch (refreshError) {
-        useAuthStore.getState().logout()
+        if (useAuthStore.getState().generation === generation) useAuthStore.getState().logout()
         return Promise.reject(refreshError)
       }
     }

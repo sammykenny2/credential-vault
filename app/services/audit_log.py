@@ -19,6 +19,13 @@ class AuditLogService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def log_failure(self, request: Request, reason: str) -> None:
+        """Call before raising an auth error, with no pending application writes."""
+        await self.log_from_request(
+            request, action=AuditAction.LOGIN_FAILURE, details={"reason": reason}
+        )
+        await self.db.commit()
+
     async def log(
         self,
         action: AuditAction,

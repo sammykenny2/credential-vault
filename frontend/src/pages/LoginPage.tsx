@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
@@ -9,9 +9,10 @@ import { beginOAuthFlow, clearOAuthFlow, consumeOAuthFlow, peekOAuthFlow } from 
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { setAccessToken, setUser, isAuthenticated, isBootstrapping } = useAuthStore()
-  const [error, setError] = useState('')
+  const { setUser, user, isAuthenticated, isBootstrapping } = useAuthStore()
+  const [error, setError] = useState<string>(location.state?.logoutError ?? '')
   const [isRedirecting, setIsRedirecting] = useState(false)
   // No setup check while an OAuth callback is being processed
   const [isOAuthCallback] = useState(() => Boolean(searchParams.get('code')))
@@ -33,7 +34,7 @@ export default function LoginPage() {
   useEffect(() => {
     const code = searchParams.get('code')
     const pending = peekOAuthFlow()
-    if (isAuthenticated && !(code && pending?.action === 'link')) {
+    if (isAuthenticated && !code && pending?.action !== 'link') {
       navigate('/dashboard')
     }
   }, [isAuthenticated, navigate, searchParams])
@@ -50,9 +51,14 @@ export default function LoginPage() {
       if (!flow) throw new Error('OAuth state mismatch')
 
       if (flow.action === 'link') {
+        if (!useAuthStore.getState().isAuthenticated || !useAuthStore.getState().user) {
+          throw new Error('Link session expired')
+        }
+        if (!flow.linkToken) throw new Error('Password verification expired. Start linking again.')
         // Link Google account flow — user is already authenticated
         const updatedUser = await authService.linkGoogleAccount({
           code,
+          link_token: flow.linkToken,
           redirect_uri: `${window.location.origin}/login`,
         })
         setUser(updatedUser)
@@ -68,17 +74,17 @@ export default function LoginPage() {
     },
     onSuccess: async (data) => {
       if (!data) return // Link flow already handled
-      setAccessToken(data.access_token)
-      const user = await authService.getMe()
-      setUser(user)
+      await authService.acceptSession(data)
       navigate('/dashboard')
     },
     onError: (err: unknown) => {
       clearOAuthFlow()
       const mismatch = err instanceof Error && err.message === 'OAuth state mismatch'
+      const expired = err instanceof Error && err.message === 'Link session expired'
       setError(
         mismatch
           ? 'Sign-in could not be verified (state mismatch). Please start again from this page.'
+          : expired ? 'Your session expired. Sign in and start linking Google again from Settings.'
           : 'Authentication failed. Please try again.'
       )
       // Clear the OAuth code from URL
@@ -100,11 +106,14 @@ export default function LoginPage() {
       return
     }
     if (code && !oauthProcessed.current) {
+      if (peekOAuthFlow()?.action === 'link') {
+        if (isBootstrapping || (isAuthenticated && !user)) return
+      }
       oauthProcessed.current = true
       window.history.replaceState({}, '', '/login')
       oauthCallbackMutation.mutate()
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isBootstrapping, isAuthenticated, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGoogleLogin = async () => {
     setError('')
@@ -156,14 +165,14 @@ export default function LoginPage() {
         {needsAdmin && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm mb-6">
             <p className="font-medium">No administrator yet</p>
-            <p className="mt-1">
+            {setupStatus.data?.can_create_admin ? <p className="mt-1">
               The first Google account to sign in becomes the administrator. To use an email
               and a break-glass password instead,{' '}
               <Link to="/admin/setup" className="underline">
                 create the administrator here
               </Link>
               .
-            </p>
+            </p> : <p className="mt-1">Administrator setup is restricted. Sign in with the configured identity or contact the operator.</p>}
           </div>
         )}
 

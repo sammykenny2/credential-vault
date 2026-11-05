@@ -1,4 +1,5 @@
 import api from './api'
+import { captureOperation, type OperationCheck } from '@/lib/operationGuard'
 import { useVaultKeyStore } from '@/hooks/useVaultKey'
 import type { VaultSigner } from '@/lib/crypto'
 import {
@@ -45,9 +46,12 @@ function assertRequestedRecord(record: { id: string }, id: string): void {
 async function readBackAndVerify(
   state: SignedRecordState,
   signed: RecordSignature,
-  signer: VaultSigner
+  signer: VaultSigner,
+  assertActive: OperationCheck = () => {}
 ): Promise<Credential> {
-  const { data } = await api.get<Credential>(`/credentials/${state.id}`)
+  assertActive()
+  const { data } = await api.get<Credential>(`/credentials/${state.id}`, { assertOperation: assertActive })
+  assertActive()
   assertRequestedRecord(data, state.id)
   if (
     data.encrypted_data !== state.encrypted_data ||
@@ -57,6 +61,7 @@ async function readBackAndVerify(
     throw new Error('Storage integrity check failed: the re-read record does not match what was signed.')
   }
   await verifyRecord(data, signer)
+  assertActive()
   return data
 }
 
@@ -80,14 +85,23 @@ async function writeNextState(
   send: (
     state: SignedRecordState,
     signed: RecordSignature,
-    headers: Record<string, string>
-  ) => Promise<unknown>
+    headers: Record<string, string>,
+    assertOperation: OperationCheck,
+  ) => Promise<unknown>,
+  assertActive?: OperationCheck,
 ): Promise<Credential> {
   const signer = requireSigner()
-  const state = derive(await verifyRecord(reviewed, signer))
-  const signed = await signRecord(state, signer)
-  await send(state, signed, await vaultProofHeaders())
-  return readBackAndVerify(state, signed, signer)
+  const operation = captureOperation(true, assertActive)
+  try {
+    const state = derive(await verifyRecord(reviewed, signer))
+    operation.assertActive()
+    const signed = await signRecord(state, signer)
+    operation.assertActive()
+    const headers = await vaultProofHeaders()
+    operation.assertActive()
+    await send(state, signed, headers, operation.assertActive)
+    return await readBackAndVerify(state, signed, signer, operation.assertActive)
+  } finally { operation.cancel() }
 }
 
 export const credentialService = {
@@ -99,15 +113,21 @@ export const credentialService = {
   },
 
   /** Every record, including revoked ones, across all pages. */
-  async listAll(): Promise<CredentialListItem[]> {
+  async listAll(assertActive: OperationCheck = captureOperation(false).assertActive): Promise<CredentialListItem[]> {
     const records: CredentialListItem[] = []
     for (;;) {
+      assertActive()
       const { data } = await api.get<CredentialListItem[]>('/credentials/', {
         params: { include_revoked: true, skip: records.length, limit: LIST_PAGE_SIZE },
+        assertOperation: assertActive,
       })
+      assertActive()
       records.push(...data)
-      if (data.length < LIST_PAGE_SIZE) return records
+      if (new Set(records.map((record) => record.id)).size !== records.length) {
+        throw new Error('Credential listing changed or contains duplicate records. Please retry.')
+      }
       if (records.length > MAX_LISTED_RECORDS) throw new Error('Too many credentials to list.')
+      if (data.length < LIST_PAGE_SIZE) return records
     }
   },
 
@@ -117,59 +137,55 @@ export const credentialService = {
     return data
   },
 
-  async create(data: CredentialCreate): Promise<Credential> {
+  async create(data: CredentialCreate, assertActive?: OperationCheck): Promise<Credential> {
     const signer = requireSigner()
-    const state: SignedRecordState = {
-      id: data.id,
-      revision: 1,
-      encrypted_data: data.encrypted_data,
-      is_active: true,
-      expires_at: toIsoTimestamp(data.expires_at),
-      revoked_at: null,
-      origin: 'authored',
-    }
-    const signed = await signRecord(state, signer)
-    const headers = await vaultProofHeaders()
-    await api.post<Credential>(
-      '/credentials/',
-      {
-        id: state.id,
-        encrypted_data: state.encrypted_data,
-        expires_at: state.expires_at,
-        ...signedFields(state, signed),
-      },
-      { headers }
-    )
-
+    const operation = captureOperation(true, assertActive)
     try {
-      return await readBackAndVerify(state, signed, signer)
-    } catch (err) {
-      // A brand-new record has nothing to lose: remove it rather than leave a bad copy.
-      await api.delete(`/credentials/${state.id}`, { headers })
-      if (err instanceof Error && err.message.startsWith('Storage integrity check failed')) {
-        throw new Error(`${err.message} The credential was not saved.`, { cause: err })
+      const state: SignedRecordState = {
+        id: data.id,
+        revision: 1,
+        encrypted_data: data.encrypted_data,
+        is_active: true,
+        expires_at: toIsoTimestamp(data.expires_at),
+        revoked_at: null,
+        origin: 'authored',
       }
-      throw err
-    }
+      const signed = await signRecord(state, signer)
+      operation.assertActive()
+      const headers = await vaultProofHeaders()
+      operation.assertActive()
+      await api.post<Credential>(
+        '/credentials/',
+        {
+          id: state.id,
+          encrypted_data: state.encrypted_data,
+          expires_at: state.expires_at,
+          ...signedFields(state, signed),
+        },
+        { headers, assertOperation: operation.assertActive }
+      )
+
+      return await readBackAndVerify(state, signed, signer, operation.assertActive)
+    } finally { operation.cancel() }
   },
 
   /**
    * The user has read a legacy-unverified record and accepts it as theirs. Only ever
    * called from an explicit action, with the record they read, never in the background.
    */
-  async confirmOrigin(reviewed: Credential): Promise<Credential> {
+  async confirmOrigin(reviewed: Credential, assertActive?: OperationCheck): Promise<Credential> {
     return writeNextState(
       reviewed,
       () => ({ ...reviewed, revision: reviewed.revision + 1, origin: 'authored' }),
-      (state, signed, headers) => api.patch(
+      (state, signed, headers, assertOperation) => api.patch(
         `/credentials/${reviewed.id}`,
         signedFields(state, signed),
-        { headers }
-      )
+        { headers, assertOperation }
+      ), assertActive
     )
   },
 
-  async revoke(reviewed: Credential): Promise<Credential> {
+  async revoke(reviewed: Credential, assertActive?: OperationCheck): Promise<Credential> {
     return writeNextState(
       reviewed,
       (origin) => ({
@@ -179,16 +195,22 @@ export const credentialService = {
         revoked_at: new Date().toISOString(),
         origin,
       }),
-      (state, signed, headers) => api.post(
+      (state, signed, headers, assertOperation) => api.post(
         `/credentials/${reviewed.id}/revoke`,
         { revoked_at: state.revoked_at, ...signedFields(state, signed) },
-        { headers }
-      )
+        { headers, assertOperation }
+      ), assertActive
     )
   },
 
-  async delete(id: string): Promise<void> {
-    await api.delete(`/credentials/${id}`, { headers: await vaultProofHeaders() })
+  async delete(id: string, assertActive?: OperationCheck): Promise<void> {
+    const operation = captureOperation(true, assertActive)
+    try {
+      const headers = await vaultProofHeaders()
+      operation.assertActive()
+      await api.delete(`/credentials/${id}`, { headers, assertOperation: operation.assertActive })
+      operation.assertActive()
+    } finally { operation.cancel() }
   },
 
   /**
@@ -197,38 +219,82 @@ export const credentialService = {
    * wrote them.
    */
   async importBatch(
-    credentials: Array<{ id: string; encrypted_data: string; expires_at?: string | null }>,
-    origin: RecordOrigin = 'legacy-unverified'
+    credentials: Array<{ id: string; encrypted_data: string; expires_at?: string | null;
+      is_active?: boolean; revoked_at?: string | null }>,
+    origin: RecordOrigin = 'legacy-unverified',
+    assertActive?: OperationCheck,
   ): Promise<{ imported: number; skipped: number; errors: string[] }> {
     const signer = requireSigner()
-    const signedCredentials = await Promise.all(credentials.map(async (credential) => {
-      const state: SignedRecordState = {
-        id: credential.id,
-        revision: 1,
-        encrypted_data: credential.encrypted_data,
-        is_active: true,
-        expires_at: toIsoTimestamp(credential.expires_at),
-        revoked_at: null,
-        origin,
+    const operation = captureOperation(true, assertActive)
+    try {
+      const signedCredentials = await Promise.all(credentials.map(async (credential) => {
+        const state: SignedRecordState = {
+          id: credential.id,
+          revision: 1,
+          encrypted_data: credential.encrypted_data,
+          is_active: credential.is_active ?? true,
+          expires_at: toIsoTimestamp(credential.expires_at),
+          revoked_at: toIsoTimestamp(credential.revoked_at),
+          origin,
+        }
+        return {
+          id: state.id,
+          encrypted_data: state.encrypted_data,
+          expires_at: state.expires_at,
+          is_active: state.is_active,
+          revoked_at: state.revoked_at,
+          ...signedFields(state, await signRecord(state, signer)),
+        }
+      }))
+      operation.assertActive()
+      // Preflight all batches before writing; stay below nginx's 1 MiB request cap.
+      const batches: Array<typeof signedCredentials> = []
+      let batch: typeof signedCredentials = []
+      let bytes = 64
+      for (const credential of signedCredentials) {
+        const size = new TextEncoder().encode(JSON.stringify(credential)).length + 1
+        if (size > 900_000) throw new Error('A credential exceeds the restore request limit.')
+        if (batch.length >= 500 || bytes + size > 900_000) {
+          batches.push(batch); batch = []; bytes = 64
+        }
+        batch.push(credential); bytes += size
       }
-      return {
-        id: state.id,
-        encrypted_data: state.encrypted_data,
-        expires_at: state.expires_at,
-        ...signedFields(state, await signRecord(state, signer)),
+      if (batch.length) batches.push(batch)
+      for (const chunk of batches) {
+        const headers = await vaultProofHeaders()
+        operation.assertActive()
+        const { data } = await api.post<{ imported: number; skipped: number; errors: string[] }>(
+          '/credentials/import', { credentials: chunk, format: 'json' },
+          { headers, assertOperation: operation.assertActive }
+        )
+        operation.assertActive()
+        if (data.imported !== chunk.length || data.skipped !== 0 || data.errors.length) {
+          throw new Error('Restore did not finish. Some earlier batches may have been saved; inspect the vault before retrying.')
+        }
       }
-    }))
-    const response = await api.post<{ imported: number; skipped: number; errors: string[] }>(
-      '/credentials/import',
-      { credentials: signedCredentials, format: 'json' },
-      { headers: await vaultProofHeaders() }
-    )
-    return response.data
+      const stored = new Map((await credentialService.listAll(operation.assertActive)).map((r) => [r.id, r]))
+      for (const expected of signedCredentials) {
+        operation.assertActive()
+        const record = stored.get(expected.id)
+        if (!record || record.encrypted_data !== expected.encrypted_data ||
+            record.revision !== 1 || record.signature !== expected.signature) {
+          throw new Error('Restore verification failed. Some records may have been saved; inspect the vault before retrying.')
+        }
+        await verifyRecord(record, signer)
+      }
+      operation.assertActive()
+      return { imported: signedCredentials.length, skipped: 0, errors: [] }
+    } finally { operation.cancel() }
   },
 
   async deleteAll(ids: string[]): Promise<void> {
-    const headers = await vaultProofHeaders()
-    await Promise.all(ids.map((id) => api.delete(`/credentials/${id}`, { headers })))
+    const operation = captureOperation()
+    try {
+      for (const id of ids) {
+        operation.assertActive()
+        await credentialService.delete(id, operation.assertActive)
+      }
+    } finally { operation.cancel() }
   },
 }
 

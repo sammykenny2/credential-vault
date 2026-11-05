@@ -6,6 +6,7 @@ it, and commits before answering so that a success response means durable.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from pydantic import ValidationError
 
 from app.api.deps import CurrentUser, DbSession, VaultProvenUser, VaultSigningUser
 from app.models.audit_log import AuditAction
@@ -28,6 +29,7 @@ REVISION_CONFLICT_DETAIL = "Credential changed since it was read: reload it and 
 
 @router.get("/", response_model=list[CredentialListItem])
 async def list_credentials(
+    request: Request,
     current_user: CurrentUser,
     db: DbSession,
     skip: int = Query(0, ge=0),
@@ -44,6 +46,16 @@ async def list_credentials(
         skip=skip,
         limit=limit,
         include_revoked=include_revoked,
+    )
+    await AuditLogService(db).log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_LISTED,
+        user_id=current_user.id,
+        resource_type="credential",
+        details={
+            "count": len(credentials),
+            "encoded_bytes": sum(len(c.encrypted_data) for c in credentials),
+        },
     )
     return credentials
 
@@ -94,23 +106,43 @@ async def get_expiring_credentials(
 
 @router.get("/export")
 async def export_credentials(
+    request: Request,
     current_user: CurrentUser,
     db: DbSession,
 ):
     """Export all credentials as JSON."""
     service = CredentialService(db)
-    data = await service.export_all(current_user.id)
+    try:
+        data = await service.export_all(current_user.id)
+    except ValueError as exc:
+        raise HTTPException(413, str(exc)) from exc
+    await AuditLogService(db).log_from_request(
+        request,
+        action=AuditAction.CREDENTIAL_EXPORTED,
+        user_id=current_user.id,
+        resource_type="credential",
+        details={"count": len(data), "encoded_bytes": sum(len(c["encrypted_data"]) for c in data)},
+    )
     return {"credentials": data, "count": len(data)}
 
 
 @router.post("/import", response_model=CredentialImportResult)
 async def import_credentials(
     request: Request,
-    data: CredentialImportRequest,
     current_user: VaultSigningUser,
     db: DbSession,
 ):
     """Import signed credentials from JSON."""
+    # No Pydantic body parameter: authentication/proof must run before reading it.
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 1_048_576:
+            raise HTTPException(413, "Import request exceeds 1 MiB")
+        body.extend(chunk)
+    try:
+        data = CredentialImportRequest.model_validate_json(body)
+    except ValidationError as exc:
+        raise HTTPException(422, "Invalid credential import") from exc
     service = CredentialService(db)
     creds_data = [c.model_dump() for c in data.credentials]
     result = await service.import_credentials(current_user.id, creds_data)

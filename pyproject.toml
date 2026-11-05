@@ -38,6 +38,7 @@ dependencies = [
     "email-validator>=2.1.0",
     # Rate Limiting
     "slowapi>=0.1.9",
+    "limits>=5.0",
     # Utilities
     "python-multipart>=0.0.32",
     "httpx>=0.26.0",

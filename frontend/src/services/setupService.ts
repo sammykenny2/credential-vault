@@ -3,6 +3,7 @@ import type { TokenResponse } from '@/types'
 
 export interface SetupStatus {
   is_initialized: boolean
+  can_create_admin: boolean
 }
 
 export const setupService = {
