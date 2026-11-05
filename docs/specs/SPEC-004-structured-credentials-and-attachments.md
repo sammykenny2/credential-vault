@@ -21,6 +21,7 @@
 
 本規格描述預期的新行為，不宣告現有程式已符合。需求與驗收 ID 供實作及測試追蹤。
 2026-11-05 外部設計審閱已納入修訂；它是獨立設計輸入，不是對修正版、熱修補或 Phase 1 的核准。
+紀錄簽章、key bundle 與 proof v2 已對既有 credential 實作（見 ADR-004），尚未發版；集合、附件與 batch 協定仍未實作。
 進入 Task 1.2／Task 2.5 前必須通過 PLAN Phase 0；不得只完成文件便宣稱 gate 已通過。
 
 ## Goals
@@ -66,7 +67,7 @@
 | FR-05 | 檔案欄位支援選檔、取消、下載、替換及移除；不要求紀錄必須有文字欄位才能保存 |
 | FR-06 | 附件 bytes、檔名、MIME 與解密材料在瀏覽器處理；清單及搜尋不下載附件內容 |
 | FR-07 | Metadata 與附件以 staged batch 提交，具 revision、冪等重試及完整性驗證 |
-| FR-08 | 新 vault 寫入檢查能力、來源簽章與狀態；使用有用途隔離及 session 綁定的 proof v2，所有存取以 owner 隔離 |
+| FR-08 | 新 vault 寫入檢查能力、來源簽章與狀態；使用簽署無狀態 nonce 的 proof v2，所有存取以 owner 隔離 |
 | FR-09 | 限制請求、檔案、每使用者及全域配額、磁碟保留、並行量、實例數與匯入大小；所有暫存及退休資料計入容量 |
 | FR-10 | 上鎖、登出、取消或卸載時終止明文工作；過期的非同步結果不得重填 UI 或發起下載 |
 | FR-11 | 完整備份包含所有 active／revoked 紀錄、有效集合、關聯與被引用附件，跨帳號不依賴來源私鑰即可還原 |
@@ -74,7 +75,7 @@
 | FR-13 | 刪除集合不刪憑證、附件或子集合；永久刪除憑證明確處理其附件，兩種操作在 UI 區分 |
 | FR-14 | 新增／調整六種情境的 template，並更新使用說明、API、schema、備份及安全文件 |
 | FR-15 | 公鑰由 KEK 解開的私鑰導出並比對；每種 RSA-OAEP 用途有固定不同 label，禁止 empty-label fallback |
-| FR-16 | KEK 保護的簽章金鑰驗證新 credential／collection／狀態，驗證前不解密或提供附件；legacy 來源不自動升級為可信 |
+| FR-16 | KEK 保護的簽章金鑰驗證 credential／collection／狀態，未簽章或驗證失敗者一律拒絕且不解密；舊資料在明確升級時簽署並標 legacy-unverified，不自動升級為可信 |
 | FR-17 | Batch／operation／upload 使用原始 Request，在認證、proof、能力及限流成功前不讀 body，之後逐 chunk 計數才解析 |
 | FR-18 | SQLite FK、journal、durability 與鎖定模式明定；條件式 CAS／quota 更新及明確 commit 完成後才回成功 receipt |
 | FR-19 | Commit 時清除 batch payload，只保留有 TTL 的最小 receipt；限流與稽核覆蓋 metadata、附件、proof 及匯出 |
@@ -111,7 +112,7 @@ Collection（最多三層）
 | DB schema | 新 Alembic revision | 新增式變更；不改寫舊密文 |
 | Vault 寫入協定 | `X-Vault-Protocol: 2` | 缺少或不支援時拒絕 vault 寫入，回 426 |
 | Credential 內容 | `schemaVersion: 2` | 無版本的既有文字 map 視為 v1，只在瀏覽器轉換 |
-| Credential 加密 envelope | 新 crypto blob v3 | RSA label、AAD 與來源簽章；v1／v2 僅明確 legacy read mode |
+| Credential 加密 envelope | 新 crypto blob v3 | RSA label 與 AAD；v1／v2 只有在紀錄簽章驗證通過後才讀取 |
 | Collection 內容／envelope | 內容 v1／collection envelope v2 | 獨立 RSA label、AAD 與來源簽章；無 legacy fallback |
 | Template | 定義 `schemaVersion: 2`、storage v2、export v2 | `sync_version` 繼續代表 optimistic locking；不兼作格式版本 |
 | Attachment envelope | v2 | 4 KiB padding，格式不支援就拒絕，不猜其他格式 |
@@ -208,9 +209,11 @@ label 為 `credential-vault/collection-key/v2`。兩者仍用 RSA-OAEP SHA-256�
 AAD 各自綁定 domain、版本、vault／owner／實體 ID，且不含會改名的顯示路徑。
 新 RSA 用途必須分配不同 label；不接受跨用途、未識別版本或 empty-label retry。
 
-外層 signed state 與密文一起保存，包含 signer ID、簽章版本、實體／owner／vault ID、內容及 envelope 版本、
-密文 SHA-256、下一 row revision，以及 `is_active`、`expires_at`、`revoked_at`、`is_deleted`。
-ECDSA P-256 SHA-256 的固定順序編碼依 ADR-004；client 先驗來源簽章及所有狀態，再驗雜湊與解密。
+外層 signed state 與密文一起保存，訊息格式已定案於 ADR-004 §3：vault ID、signer ID、實體種類與 ID、row revision、
+密文 SHA-256、`is_active`、`expires_at`、`revoked_at` 與 `origin`。Envelope 與內容版本在被雜湊的 bytes 內。
+Collection 使用同一訊息格式，實體種類為 `collection`，並另含 `is_deleted`。
+ECDSA P-256 SHA-256 的固定順序編碼依 ADR-004；client 先驗來源簽章及所有狀態，才解密。
+從已存紀錄衍生新狀態時只能簽署使用者看過的那筆紀錄並先驗證，不得重新向伺服器取資料；重讀必須與剛簽的狀態完全相符。解密內容要檢查形狀。
 Client 不得依伺服器未驗證的 active／expiry／tombstone 先過濾紀錄，伺服器必須回傳含 tombstone 的快照。
 簽章無法證明服務沒有刪漏紀錄、回放合法舊快照或拒絕服務；不得把這些情況當作可自動修復的內容變更。
 
@@ -266,7 +269,7 @@ Nginx 按 descriptor／operation／binary 路徑設定 client_max_body_size、li
 對 pending quota 的保留與釋放必須是原子操作，並限制並行接收的檔案數與 batch 數，避免記憶體及配額競態。
 
 新增實體為 `vault_state`、`vault_collections`、`vault_batches`、`credential_attachments`、
-`vault_proof_slots` 與全域容量帳本。全域配額涵蓋所有帳號的 key bundle／template／metadata、
+與全域容量帳本。全域配額涵蓋所有帳號的 key bundle／template／metadata、
 附件、retired、batch payload 及 reservations；receipt／audit 有數量與時間上限，磁碟預留另涵蓋 DB／WAL／journal overhead。
 帳號建立、key／template 寫入、metadata staging 與附件保留都檢查全域額度，不能靠新增帳號繞過。
 磁碟 free-space 檢查與 ENOSPC rollback 是額外防線，不作為可競態的唯一配額機制。
@@ -340,15 +343,15 @@ Abort／expire 同樣清除 payload／reservations；已提交的正常紀錄只
 Cleanup 有限流、數量與時間界線，與 commit 鎖定協調。Receipt 過期後不自動重試不明提交，先取 snapshot 確認。
 secure_delete 不能抹除 WAL、snapshot、SSD 舊頁面或歷史備份；維護需有 checkpoint／備份保留政策，不保證安全抹除。
 
-新增 AuditAction：challenge issued／proof verified、snapshot read／export、attachment uploaded／downloaded、
+新增 AuditAction：snapshot read／export、attachment uploaded／downloaded、
 batch prepared／committed／aborted、quota denied、cleanup、signature verification failure、import complete／failed。
-後端僅記 actor／session／opaque IDs、密文大小／bucket、數量、狀態及時間；不記 proof、nonce、檔名、密文 body 或金鑰。
+後端僅記 actor／opaque IDs、密文大小／bucket、數量、狀態及時間；不記 proof、nonce、檔名、密文 body 或金鑰。
 客戶端簽章失敗可送有界的 ID／error code 事件，伺服器拒絕附帶內容；不視為對惡意主機的可靠告警。
 
-初版限流：challenge 每 owner 5/min、每可信來源 IP 10/min；snapshot pages 每 owner 60/min；
+初版限流：challenge 只按可信來源 IP 計（proof v2 無狀態，按 owner 限流只會讓偷到 token 的人鎖住使用者）；snapshot pages 每 owner 60/min；
 附件傳輸每 owner 60/min、100 MiB/min；batch create 6/min、同 owner 最多 2 個 pending batch。
 每 owner／IP 附件並行最多 2；多 worker 使用共享／持久計數，不能以各 process memory 假裝全域限流。
-Nginx limit_req／limit_conn 是外層防線，app 另按 owner／session／bytes 控制並回 429／Retry-After；
+Nginx limit_req／limit_conn 是外層防線，app 另按 owner／bytes 控制並回 429／Retry-After；
 對預期長時間備份／還原採進度、有限退避及 proof 更新，不能把限流重試變成重複提交。
 
 ### 5. 完整備份與還原
@@ -401,9 +404,10 @@ Manifest 包含來源驗證公鑰、簽章、signed state、來源可信程度�
 - 舊 template 轉成一個非重複 section，保留 label／required／validation 與可用的遮蔽設定。
   舊非秘密 `defaultValue` 的移除先顯示差異，由使用者明確轉換後才保存；不默默丟棄原定義。
 - V1 credential backup 仍能讀，來源標為未驗證並保留 provenance；template `.cvault` 不得誤當 credential backup。
-- 正式資料 envelope 版本須先唯讀盤點。證明沒有 v1 後移除 runtime v1 reader；否則只提供明確 legacy mode，無 magic 不可直接 fallback。
-  新格式／無效簽章永遠不能落入 legacy；不得依過去曾清空 DB 的紀錄推定目前沒有 v1。
-  Legacy envelope 僅能承載舊文字 map；出現 sections／附件 manifest／file 欄位即拒絕，附件永遠不能走未簽章相容路徑。
+- 解鎖 RSA-only vault 前必須完成一次性升級（ADR-004 §6）：使用者確認後，單一 transaction 存入 key bundle 並簽署全部既有紀錄，標 `legacy-unverified`。
+  升級後沒有未簽章的讀取路徑，所以未知或偽造的 blob 到不了 v1 解析。v1 reader 只服務已簽署的舊紀錄；
+  正式資料 envelope 版本可唯讀盤點，證明沒有 v1 後移除，不得依過去曾清空 DB 的紀錄推定。
+  `legacy-unverified` 的紀錄僅能承載舊文字 map；出現 sections／附件 manifest／file 欄位即拒絕。
 - 未知未來版本以不可編輯狀態顯示更新提示，原始密文保持不動；不猜測成 legacy。
 - 升版前做可驗證的 DB snapshot，後端與前端成套發布。所有舊寫入路徑先完成 capability gate。
   `VERSION` 是產品版本，與本規格的內容版本分開；本次文件工作不修改它。
@@ -434,20 +438,20 @@ Manifest 包含來源驗證公鑰、簽章、signed state、來源可信程度�
 | AC-18 | DB snapshot 在附件 staged／committed 狀態下還原仍一致；正式 nginx 的 body limit、no-store 與 SW 行為實測正確 | FR-07、09、11、14 |
 | AC-19 | RSA 各用途正向向量成功、交叉 label 全數失敗，proof 無 empty-label retry；Phase 0 成套部署證據存在 | FR-15 |
 | AC-20 | API 提供另一公鑰或無效材料時不能解鎖／新寫入／還原；正常解鎖只保留導出公鑰及 non-extractable 私鑰 | FR-15 |
-| AC-21 | 只有公鑰的偽造、簽章置換、外部 active／expiry／tombstone／revision 改動均被拒絕；來源未驗證資料不獲自動簽署 | FR-16 |
+| AC-21 | 只有公鑰的偽造（含舊格式）、簽章置換、外部 active／expiry／revoked／origin／revision 改動均被拒絕且不解密；未驗證或非使用者檢視的狀態不被簽署，伺服器回傳其他紀錄或丟棄寫入都會被發現；舊資料只在使用者確認的升級中簽署並標 legacy-unverified | FR-16 |
 | AC-22 | 未認證／未 proof 的大 body 在 ASGI receive 第一次讀取前被拒絕；真 nginx 路徑上限、限速／並行及 chunked 邊界通過 | FR-17 |
 | AC-23 | 注入 commit failure 不回成功 receipt，正常 receipt 只在 durable commit 後可見；override fixture 不掩蓋 teardown 順序 | FR-18 |
 | AC-24 | 每個新連線 FK=1，既有 foreign_key_check 違規阻擋 migration；無效 FK 寫入失敗、真 user／credential cascade 清除 BLOB | FR-18 |
 | AC-25 | 兩個真實連線持相同 revision 時只有一個 CAS 成功，quota 亦不超收；journal=WAL、synchronous=FULL、busy_timeout 有斷言 | FR-18 |
 | AC-26 | 新備份 8／11 字元拒絕、12 字元可還原；舊短密碼備份仍可讀，復原秘密使用 CSPRNG 且至少 128 bits | FR-21 |
-| AC-27 | 多分頁／被限流 challenge 不逐出 live slots，nonce 不重用、session 不混用，長時間還原可續 proof 且不丟 staged 資料 | FR-08 |
+| AC-27 | 新 challenge 不使使用中的 proof（v1、v2）失效，多分頁互不干擾；proof 綁 user 與 token_version，登出即撤銷；proof v1 只能用於升級；長時間還原可續 proof 且不丟 staged 資料 | FR-08 |
 | AC-28 | 多帳號與並行 reservation 無法超過全域／owner 配額，低磁碟與 ENOSPC 不留假成功，metadata 亦計入容量 | FR-09 |
 | AC-29 | Commit／abort／expire 後 batch 無 ciphertext／body 副本，receipt 期滿清除；secure_delete 已設定且不宣稱抹除 WAL／備份 | FR-19 |
 | AC-30 | Snapshot／附件下載／challenge／batch 的稽核與共享限流有效，429 可續作；log 無原始檔名、秘密、proof、nonce 或 body | FR-19 |
 | AC-31 | 空檔與 bucket 邊界有正反向測試，不同原始小檔同 bucket 長度相同；原始大小／padding 損毀不能下載 | FR-21 |
 | AC-32 | 所選 ZIP library 在既有正式 CSP 下完成 round-trip，未新增 blob: worker／CDN／JS eval，也未降低 CSP | FR-20 |
 | AC-33 | 被竄改 type／isSecret 的 template 不啟用拼字檢查／autofill；所有值 input／textarea 無條件套 secretFieldProps | FR-20 |
-| AC-34 | 有正式版本盤點證據才移除 v1；沒有 magic、未知版本或壞簽章都不能靜默 fallback，legacy provenance 保留 | FR-12、16 |
+| AC-34 | 有正式版本盤點證據才移除 v1；未知版本與未簽章的紀錄不會進入 v1 解析，legacy-unverified 標籤保留到使用者確認 | FR-12、16 |
 | AC-35 | 真實附件 GET 有 octet-stream、attachment、no-store、nosniff、sandbox，header 不洩漏原始檔名 | FR-06、20 |
 | AC-36 | 畫面與下載檔名均清理雙向／控制字元；下載前明文副本提示可見，壞簽章／未知來源沒有下載捷徑 | FR-20、21 |
 

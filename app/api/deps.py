@@ -6,8 +6,9 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.security import SecurityService
-from app.core.vault_proof import VAULT_PROOF_HEADER, verify_proof
+from app.core.vault_proof import VAULT_PROOF_HEADER, verify_signed_proof, verify_upgrade_proof
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.services.user import UserService
@@ -83,12 +84,18 @@ async def get_current_admin_user(
 def ensure_vault_proof(request: Request, user: User) -> None:
     """Raise 403 unless the request carries a valid X-Vault-Proof for this user.
 
-    A session token alone must not be enough to destroy ciphertext; the client
-    proves it holds the unlocked private key by answering a challenge from
-    POST /auth/vault/challenge.
+    A session token alone must not be enough to change vault data; the client
+    proves it holds the unlocked vault key by answering a challenge from
+    POST /auth/vault/challenge. Only proof v2 counts here: a vault that has not
+    been upgraded must upgrade first, which unlocking does.
     """
-    proof = request.headers.get(VAULT_PROOF_HEADER)
-    if not verify_proof(proof, user.vault_proof_hash, user.vault_proof_expires_at):
+    if not user.signing_public_key or not verify_signed_proof(
+        request.headers.get(VAULT_PROOF_HEADER),
+        user.id,
+        user.token_version,
+        get_settings().secret_key,
+        user.signing_public_key,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Vault proof required: unlock the vault and retry this action",
@@ -100,6 +107,43 @@ async def get_vault_proven_user(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> User:
     """Current user, additionally proven to hold the unlocked vault key."""
+    ensure_vault_proof(request, current_user)
+    return current_user
+
+
+async def get_vault_upgrading_user(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
+    """Current user proven to hold the RSA key: proof v1, for POST /auth/vault/upgrade only."""
+    if not verify_upgrade_proof(
+        request.headers.get(VAULT_PROOF_HEADER),
+        current_user.id,
+        current_user.token_version,
+        get_settings().secret_key,
+        current_user.vault_proof_key,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vault proof required: unlock the vault and retry this action",
+        )
+    return current_user
+
+
+async def get_vault_signing_user(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
+    """Current user with a signed vault, proven to hold the unlocked signing key.
+
+    Every credential write goes through this: browsers refuse unsigned records,
+    so storing one for a vault that cannot sign would only hide data.
+    """
+    if not current_user.signing_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault upgrade required: unlock the vault to finish the upgrade",
+        )
     ensure_vault_proof(request, current_user)
     return current_user
 
@@ -121,5 +165,7 @@ async def get_vault_proven_admin_user(
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 VaultProvenUser = Annotated[User, Depends(get_vault_proven_user)]
+VaultSigningUser = Annotated[User, Depends(get_vault_signing_user)]
+VaultUpgradingUser = Annotated[User, Depends(get_vault_upgrading_user)]
 VaultProvenAdmin = Annotated[User, Depends(get_vault_proven_admin_user)]
 DbSession = Annotated[AsyncSession, Depends(get_db)]

@@ -5,8 +5,9 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Eye, EyeOff, Copy, ExternalLink, X, Check } from 'lucide-react'
+import { Eye, EyeOff, Copy, ExternalLink, X, Check, ShieldAlert } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
+import { credentialService } from '@/services/credentialService'
 import type { Credential } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
 
@@ -14,6 +15,8 @@ interface CredentialDetailProps {
   credential: Credential | null
   isOpen: boolean
   onClose: () => void
+  /** The user confirmed a legacy-unverified record; it now has a new signed state. */
+  onOriginConfirmed?: (updated: Credential) => void
 }
 
 // Detect if a field should be treated as secret based on its key
@@ -29,17 +32,20 @@ export default function CredentialDetail({
   credential,
   isOpen,
   onClose,
+  onOriginConfirmed,
 }: CredentialDetailProps) {
   const { decrypt, isProcessing, error } = useCredentialCrypto()
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState('')
 
   // Decrypt through a query so the plaintext is dropped (gcTime 0) as soon as
   // the dialog unmounts; the parent remounts it via `key` per credential.
   const current = credential
   const { data: decryptedData = null } = useQuery<CredentialData | null>({
-    queryKey: ['credential-plaintext', current?.id, current?.updated_at],
-    queryFn: () => (current ? decrypt(current.encrypted_data, current.id) : Promise.resolve(null)),
+    queryKey: ['credential-plaintext', current?.id, current?.revision, current?.signature],
+    queryFn: () => (current ? decrypt(current) : Promise.resolve(null)),
     enabled: current !== null && isOpen,
     gcTime: 0,
     staleTime: Infinity,
@@ -67,6 +73,21 @@ export default function CredentialDetail({
     }
   }
 
+  const confirmOrigin = async () => {
+    if (!credential) return
+    setConfirmError('')
+    setIsConfirming(true)
+    try {
+      // Pass the record the user just read: what gets signed is what they reviewed.
+      onOriginConfirmed?.(await credentialService.confirmOrigin(credential))
+    } catch (err) {
+      console.error('Confirming the record failed:', err)
+      setConfirmError('Could not confirm this record. Close this view and check it before trying again.')
+    } finally {
+      setIsConfirming(false)
+    }
+  }
+
   if (!isOpen || !credential) return null
 
   return (
@@ -76,7 +97,7 @@ export default function CredentialDetail({
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {decryptedData?.name || 'Decrypting...'}
+              {decryptedData?.name || (error ? 'Record not opened' : 'Decrypting...')}
             </h2>
             {decryptedData?.description && (
               <p className="text-gray-500 text-sm mt-1">{decryptedData.description}</p>
@@ -104,6 +125,29 @@ export default function CredentialDetail({
           </div>
         ) : decryptedData ? (
           <div className="space-y-4">
+            {/* decryptedData is only set after the signature verified, so origin is signed */}
+            {credential.origin === 'legacy-unverified' && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <div className="flex gap-2">
+                  <ShieldAlert className="w-5 h-5 shrink-0" />
+                  <p>
+                    <strong>Origin unverified.</strong> This record existed before the vault could
+                    sign, or came from a backup without signatures. Nothing proves who wrote it.
+                    Check that it looks right, especially any website address.
+                  </p>
+                </div>
+                {confirmError && <p className="mt-2 text-red-600">{confirmError}</p>}
+                <button
+                  type="button"
+                  onClick={confirmOrigin}
+                  disabled={isConfirming}
+                  className="btn btn-secondary text-sm mt-2"
+                >
+                  {isConfirming ? 'Confirming...' : 'I checked this record, it is mine'}
+                </button>
+              </div>
+            )}
+
             {/* Website */}
             {decryptedData.website_url && (
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">

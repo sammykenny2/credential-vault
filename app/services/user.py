@@ -1,9 +1,10 @@
 """User service for business logic."""
 
 import logging
+import secrets
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credential import Credential
@@ -82,13 +83,27 @@ class UserService:
         encrypted_private_key: str,
         key_salt: str,
         kdf_version: int = 2,
-    ) -> User:
-        """Set up E2EE vault keys for user."""
-        user.public_key = public_key
-        user.encrypted_private_key = encrypted_private_key
-        user.key_salt = key_salt
-        user.kdf_version = kdf_version
-        await self.db.flush()
+        signing_public_key: str | None = None,
+    ) -> User | None:
+        """Set up E2EE vault keys. None when the user already has them.
+
+        A conditional write, so a second request cannot replace keys that a first
+        one stored after this request's check. Replacing them would lose the vault.
+        """
+        result = await self.db.execute(
+            update(User)
+            .where(User.id == user.id, User.public_key.is_(None))
+            .values(
+                public_key=public_key,
+                encrypted_private_key=encrypted_private_key,
+                key_salt=key_salt,
+                kdf_version=kdf_version,
+                signing_public_key=signing_public_key,
+            )
+        )
+        if result.rowcount != 1:  # type: ignore[attr-defined]
+            return None
+        await self.db.refresh(user)
         logger.info("Vault keys configured for user: %s", user.email)
         return user
 
@@ -106,6 +121,47 @@ class UserService:
         await self.db.flush()
         logger.info("Vault key re-wrapped for user: %s", user.email)
         return user
+
+    async def ensure_vault_proof_key(self, user: User) -> str:
+        """The user's proof v1 key, created on first use and never rewritten.
+
+        Not rewriting it is what keeps a stolen session token from invalidating a
+        proof by asking for challenges.
+        """
+        if user.vault_proof_key:
+            return user.vault_proof_key
+        await self.db.execute(
+            update(User)
+            .where(User.id == user.id, User.vault_proof_key.is_(None))
+            .values(vault_proof_key=secrets.token_hex(32))
+        )
+        await self.db.commit()
+        await self.db.refresh(user)
+        assert user.vault_proof_key is not None
+        return user.vault_proof_key
+
+    async def complete_vault_upgrade(
+        self,
+        user: User,
+        encrypted_private_key: str,
+        signing_public_key: str,
+    ) -> bool:
+        """Store the key bundle and signing key. False when the vault is already upgraded.
+
+        A conditional write, so concurrent upgrades cannot replace a signing key.
+        """
+        result = await self.db.execute(
+            update(User)
+            .where(User.id == user.id, User.signing_public_key.is_(None))
+            .values(
+                encrypted_private_key=encrypted_private_key,
+                signing_public_key=signing_public_key,
+            )
+        )
+        if result.rowcount != 1:  # type: ignore[attr-defined]
+            return False
+        logger.info("Vault upgraded to signed records for user: %s", user.email)
+        return True
 
     async def update(self, user: User, data: UserUpdate) -> User:
         """Update user profile."""

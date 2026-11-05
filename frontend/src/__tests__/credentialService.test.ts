@@ -1,15 +1,12 @@
 /**
- * Credential Service Storage Integrity Tests
- *
- * Tests the post-write re-read verification and rollback logic
- * in credentialService.create() and credentialService.update().
+ * credentialService: every write is signed and proven, and a state derived from
+ * a stored record is only signed after that record verifies. Keys are synthetic.
  *
  * Run with: npm test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock the api module before importing credentialService
 vi.mock('@/services/api', () => ({
   default: {
     get: vi.fn(),
@@ -19,14 +16,24 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
-// Destructive calls attach a proof of vault unlock; stub it with a fixed value
 const PROOF_HEADERS = { 'X-Vault-Proof': 'test-proof' }
-vi.mock('@/lib/vaultProof', () => ({
+vi.mock('@/lib/vaultProof', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vaultProof')>()),
   vaultProofHeaders: vi.fn(async () => ({ 'X-Vault-Proof': 'test-proof' })),
 }))
 
 import api from '@/services/api'
 import { credentialService } from '@/services/credentialService'
+import { useVaultKeyStore } from '@/hooks/useVaultKey'
+import type { VaultSigner } from '@/lib/crypto'
+import {
+  RecordVerificationError,
+  signRecord,
+  verifyRecord,
+  type SignedRecordState,
+} from '@/lib/recordSigning'
+import { VaultLockedError } from '@/lib/vaultProof'
+import type { Credential } from '@/types'
 
 const mockedApi = api as unknown as {
   get: ReturnType<typeof vi.fn>
@@ -35,149 +42,321 @@ const mockedApi = api as unknown as {
   delete: ReturnType<typeof vi.fn>
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+const BLOB = btoa('encrypted-blob')
+const OTHER_BLOB = btoa('other-blob')
+const ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+const OTHER_ID = 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+const ECDSA = { name: 'ECDSA', namedCurve: 'P-256' } as const
 
-const BLOB = 'ZW5jcnlwdGVkLWJsb2ItYmFzZTY0'
-const DIFFERENT_BLOB = 'Y29ycnVwdGVkLWJsb2ItYmFzZTY0'
-const OLD_BLOB = 'b2xkLWVuY3J5cHRlZC1ibG9i'
-const CREDENTIAL_ID = 'cred-uuid-123'
+let signer: VaultSigner
 
-function makeResponse(encrypted_data: string, id = CREDENTIAL_ID) {
+async function newSigner(): Promise<VaultSigner> {
+  const pair = await crypto.subtle.generateKey(ECDSA, false, ['sign', 'verify'])
   return {
-    data: {
-      id,
-      encrypted_data,
-      is_active: true,
-      expires_at: null,
-      revoked_at: null,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    },
+    signingKey: pair.privateKey,
+    verifyKey: pair.publicKey,
+    vaultId: '11111111-2222-4333-8444-555555555555',
+    signerId: 'a'.repeat(64),
   }
 }
 
-// ── Tests ───────────────────────────────────────────────────────────────
+function asRow(state: SignedRecordState, signature: string | null): Credential {
+  return {
+    ...state,
+    signature,
+    signature_version: signature ? 1 : null,
+    created_at: '2026-01-01T00:00:00',
+    updated_at: '2026-01-01T00:00:00',
+  }
+}
 
-describe('credentialService storage integrity', () => {
+async function storedRow(overrides: Partial<SignedRecordState> = {}, key = signer): Promise<Credential> {
+  const state: SignedRecordState = {
+    id: ID,
+    revision: 1,
+    encrypted_data: BLOB,
+    is_active: true,
+    expires_at: null,
+    revoked_at: null,
+    origin: 'authored',
+    ...overrides,
+  }
+  return asRow(state, (await signRecord(state, key)).signature)
+}
+
+/** Answer a read-back with whatever the client just sent, as a real server would. */
+function serveWhatWasSent(call: ReturnType<typeof vi.fn>, base: Credential) {
+  call.mockImplementation(async (_url: string, body: Partial<Credential>) => {
+    const row = { ...base, ...body }
+    mockedApi.get.mockResolvedValue({ data: row })
+    return { data: row }
+  })
+}
+
+beforeAll(async () => {
+  signer = await newSigner()
+})
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockedApi.get.mockReset()
+  mockedApi.post.mockReset()
+  mockedApi.patch.mockReset()
+  mockedApi.delete.mockReset()
+  useVaultKeyStore.getState().setKeys({} as CryptoKey, {} as CryptoKey, 'pub', signer)
+})
+
+afterEach(() => {
+  useVaultKeyStore.getState().clearKeys()
+})
+
+describe('create()', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    serveWhatWasSent(mockedApi.post, asRow(
+      { id: ID, revision: 1, encrypted_data: BLOB, is_active: true, expires_at: null, revoked_at: null, origin: 'authored' },
+      null
+    ))
   })
 
-  describe('create()', () => {
-    it('should succeed when re-read blob matches sent data', async () => {
-      mockedApi.post.mockResolvedValue(makeResponse(BLOB))
-      mockedApi.get.mockResolvedValue(makeResponse(BLOB))
+  it('sends a signed record with a proof, at revision 1', async () => {
+    const result = await credentialService.create({ id: ID, encrypted_data: BLOB })
 
-      const result = await credentialService.create({ encrypted_data: BLOB })
-
-      expect(result.encrypted_data).toBe(BLOB)
-      // Should have done an independent re-read
-      expect(mockedApi.get).toHaveBeenCalledWith(`/credentials/${CREDENTIAL_ID}`)
-    })
-
-    it('should delete and throw when re-read blob differs from sent data', async () => {
-      mockedApi.post.mockResolvedValue(makeResponse(BLOB))
-      mockedApi.get.mockResolvedValue(makeResponse(DIFFERENT_BLOB))
-      mockedApi.delete.mockResolvedValue({})
-
-      await expect(
-        credentialService.create({ encrypted_data: BLOB })
-      ).rejects.toThrow('Storage integrity check failed')
-
-      // Should have deleted the corrupted credential, proving vault unlock
-      expect(mockedApi.delete).toHaveBeenCalledWith(`/credentials/${CREDENTIAL_ID}`, {
-        headers: PROOF_HEADERS,
-      })
-    })
-
-    it('should perform re-read against the created credential ID', async () => {
-      const customId = 'new-cred-456'
-      mockedApi.post.mockResolvedValue(makeResponse(BLOB, customId))
-      mockedApi.get.mockResolvedValue(makeResponse(BLOB, customId))
-
-      await credentialService.create({ encrypted_data: BLOB })
-
-      expect(mockedApi.get).toHaveBeenCalledWith(`/credentials/${customId}`)
-    })
+    const [url, body, config] = mockedApi.post.mock.calls[0]
+    expect(url).toBe('/credentials/')
+    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(body.revision).toBe(1)
+    expect(body.origin).toBe('authored')
+    expect(body.signature_version).toBe(1)
+    expect(await verifyRecord(result, signer)).toBe('authored')
+    expect(mockedApi.get).toHaveBeenCalledWith(`/credentials/${ID}`)
   })
 
-  describe('update() with encrypted_data', () => {
-    it('should fetch previous data, update, re-read, and succeed when blob matches', async () => {
-      // 1st GET: fetch previous data for rollback
-      mockedApi.get.mockResolvedValueOnce(makeResponse(OLD_BLOB))
-      // PATCH: apply update
-      mockedApi.patch.mockResolvedValue(makeResponse(BLOB))
-      // 2nd GET: re-read verification
-      mockedApi.get.mockResolvedValueOnce(makeResponse(BLOB))
-
-      const result = await credentialService.update(CREDENTIAL_ID, { encrypted_data: BLOB })
-
-      expect(result.encrypted_data).toBe(BLOB)
-      // Should have called GET twice (previous + verification)
-      expect(mockedApi.get).toHaveBeenCalledTimes(2)
-      // Ciphertext overwrite carries the proof header
-      expect(mockedApi.patch).toHaveBeenCalledWith(
-        `/credentials/${CREDENTIAL_ID}`,
-        { encrypted_data: BLOB },
-        { headers: PROOF_HEADERS }
-      )
+  it('signs the expiry it sends', async () => {
+    const result = await credentialService.create({
+      id: ID,
+      encrypted_data: BLOB,
+      expires_at: '2027-06-01',
     })
 
-    it('should rollback and throw when re-read blob differs after update', async () => {
-      // 1st GET: fetch previous data
-      mockedApi.get.mockResolvedValueOnce(makeResponse(OLD_BLOB))
-      // PATCH: apply update
-      mockedApi.patch.mockResolvedValueOnce(makeResponse(BLOB))
-      // 2nd GET: re-read returns different data
-      mockedApi.get.mockResolvedValueOnce(makeResponse(DIFFERENT_BLOB))
-      // Rollback PATCH
-      mockedApi.patch.mockResolvedValueOnce(makeResponse(OLD_BLOB))
-
-      await expect(
-        credentialService.update(CREDENTIAL_ID, { encrypted_data: BLOB })
-      ).rejects.toThrow('Storage integrity check failed')
-
-      // Should have called patch twice: update + rollback
-      expect(mockedApi.patch).toHaveBeenCalledTimes(2)
-      // Rollback should restore previous blob, still carrying the proof
-      expect(mockedApi.patch).toHaveBeenLastCalledWith(
-        `/credentials/${CREDENTIAL_ID}`,
-        { encrypted_data: OLD_BLOB },
-        { headers: PROOF_HEADERS }
-      )
-    })
-
-    it('should rollback to correct previous blob even when update response looks fine', async () => {
-      // The update response might look correct but re-read reveals corruption
-      mockedApi.get.mockResolvedValueOnce(makeResponse(OLD_BLOB))
-      mockedApi.patch.mockResolvedValueOnce(makeResponse(BLOB))
-      // Re-read shows corruption
-      mockedApi.get.mockResolvedValueOnce(makeResponse(DIFFERENT_BLOB))
-      mockedApi.patch.mockResolvedValueOnce(makeResponse(OLD_BLOB))
-
-      await expect(
-        credentialService.update(CREDENTIAL_ID, { encrypted_data: BLOB })
-      ).rejects.toThrow('Rolled back to previous data')
-
-      // Verify rollback used the OLD_BLOB, not the BLOB or DIFFERENT_BLOB
-      expect(mockedApi.patch.mock.calls[1][1]).toEqual({ encrypted_data: OLD_BLOB })
-    })
+    expect(mockedApi.post.mock.calls[0][1].expires_at).toBe('2027-06-01T00:00:00.000Z')
+    expect(await verifyRecord(result, signer)).toBe('authored')
   })
 
-  describe('update() without encrypted_data', () => {
-    it('should skip verification when only metadata is updated', async () => {
-      mockedApi.patch.mockResolvedValue(makeResponse(BLOB))
+  it('refuses while the vault is locked, before sending anything', async () => {
+    useVaultKeyStore.getState().clearKeys()
 
-      const result = await credentialService.update(CREDENTIAL_ID, { expires_at: '2025-12-31' })
+    await expect(
+      credentialService.create({ id: ID, encrypted_data: BLOB })
+    ).rejects.toBeInstanceOf(VaultLockedError)
+    expect(mockedApi.post).not.toHaveBeenCalled()
+  })
 
-      expect(result.encrypted_data).toBe(BLOB)
-      // No GET calls — no blob verification needed
-      expect(mockedApi.get).not.toHaveBeenCalled()
-      // Only one PATCH — no rollback, and no proof needed for metadata
-      expect(mockedApi.patch).toHaveBeenCalledTimes(1)
-      expect(mockedApi.patch).toHaveBeenCalledWith(`/credentials/${CREDENTIAL_ID}`, {
-        expires_at: '2025-12-31',
-      })
+  it('removes the record and reports it when the re-read blob differs', async () => {
+    mockedApi.post.mockResolvedValue({ data: {} })
+    mockedApi.get.mockResolvedValue({ data: await storedRow({ encrypted_data: OTHER_BLOB }) })
+    mockedApi.delete.mockResolvedValue({})
+
+    await expect(
+      credentialService.create({ id: ID, encrypted_data: BLOB })
+    ).rejects.toThrow('Storage integrity check failed')
+
+    expect(mockedApi.delete).toHaveBeenCalledWith(`/credentials/${ID}`, { headers: PROOF_HEADERS })
+  })
+
+  it('removes the record when the re-read is not what was signed', async () => {
+    mockedApi.post.mockResolvedValue({ data: {} })
+    mockedApi.get.mockResolvedValue({ data: await storedRow({}, await newSigner()) })
+    mockedApi.delete.mockResolvedValue({})
+
+    await expect(
+      credentialService.create({ id: ID, encrypted_data: BLOB })
+    ).rejects.toThrow('Storage integrity check failed')
+
+    expect(mockedApi.delete).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a read-back of another record', async () => {
+    mockedApi.post.mockResolvedValue({ data: {} })
+    mockedApi.get.mockResolvedValue({ data: await storedRow({ id: OTHER_ID }) })
+    mockedApi.delete.mockResolvedValue({})
+
+    await expect(
+      credentialService.create({ id: ID, encrypted_data: BLOB })
+    ).rejects.toBeInstanceOf(RecordVerificationError)
+  })
+})
+
+describe('get()', () => {
+  it('refuses a validly signed record that is not the one requested', async () => {
+    mockedApi.get.mockResolvedValue({ data: await storedRow({ id: OTHER_ID }) })
+    await expect(credentialService.get(ID)).rejects.toBeInstanceOf(RecordVerificationError)
+  })
+})
+
+describe('writes derived from a record the user reviewed', () => {
+  it.each([
+    ['revoke', (row: Credential) => credentialService.revoke(row)],
+    ['confirmOrigin', (row: Credential) => credentialService.confirmOrigin(row)],
+  ])('%s refuses to sign over a record that fails verification', async (_label, write) => {
+    // Signing here would launder a blob the server forged.
+    const forged = asRow(
+      { id: ID, revision: 1, encrypted_data: btoa('forged'), is_active: true, expires_at: null, revoked_at: null, origin: 'authored' },
+      null
+    )
+    const sign = vi.spyOn(crypto.subtle, 'sign')
+
+    await expect(write(forged)).rejects.toBeInstanceOf(RecordVerificationError)
+
+    expect(sign).not.toHaveBeenCalled()
+    expect(mockedApi.patch).not.toHaveBeenCalled()
+    expect(mockedApi.post).not.toHaveBeenCalled()
+    sign.mockRestore()
+  })
+
+  it.each([
+    ['revoke', (row: Credential) => credentialService.revoke(row)],
+    ['confirmOrigin', (row: Credential) => credentialService.confirmOrigin(row)],
+  ])('%s signs the reviewed record, not a fresh answer from the server', async (_label, write) => {
+    // The attack: answer a GET with another validly signed record, so the browser
+    // signs that one as if the user had chosen it. There must be no such GET to answer.
+    const reviewed = await storedRow({ origin: 'legacy-unverified' })
+    const planted = await storedRow({ id: OTHER_ID, encrypted_data: btoa('planted'), origin: 'legacy-unverified' })
+    const signedBlobs: string[] = []
+    const send = async (_url: string, body: Partial<Credential>) => {
+      signedBlobs.push(body.signature as string)
+      return { data: {} }
+    }
+    mockedApi.patch.mockImplementation(send)
+    mockedApi.post.mockImplementation(send)
+    mockedApi.get.mockResolvedValue({ data: planted })
+
+    // The read-back gets the planted record too, and must not be accepted.
+    await expect(write(reviewed)).rejects.toBeInstanceOf(RecordVerificationError)
+
+    // Only the read-back fetched anything, and the one signature made covers the reviewed blob.
+    expect(mockedApi.get).toHaveBeenCalledTimes(1)
+    expect(signedBlobs).toHaveLength(1)
+    const url = (mockedApi.patch.mock.calls[0] ?? mockedApi.post.mock.calls[0])[0]
+    expect(url).toContain(ID)
+    expect(url).not.toContain(OTHER_ID)
+    const sent = mockedApi.patch.mock.calls[0]?.[1] ?? mockedApi.post.mock.calls[0]?.[1]
+    await expect(verifyRecord(
+      { ...reviewed, ...sent, is_active: sent.revoked_at ? false : true },
+      signer
+    )).resolves.toBeDefined()
+    await expect(verifyRecord(
+      { ...planted, ...sent, is_active: sent.revoked_at ? false : true },
+      signer
+    )).rejects.toBeInstanceOf(RecordVerificationError)
+  })
+
+  it.each([
+    ['revoke', (row: Credential) => credentialService.revoke(row)],
+    ['confirmOrigin', (row: Credential) => credentialService.confirmOrigin(row)],
+  ])('%s reports a write the server dropped', async (_label, write) => {
+    // The server answers 200 and keeps serving the old, validly signed row.
+    const reviewed = await storedRow()
+    mockedApi.patch.mockResolvedValue({ data: {} })
+    mockedApi.post.mockResolvedValue({ data: {} })
+    mockedApi.get.mockResolvedValue({ data: reviewed })
+
+    await expect(write(reviewed)).rejects.toThrow('Storage integrity check failed')
+  })
+
+  it.each([
+    ['revoke', (row: Credential) => credentialService.revoke(row)],
+    ['confirmOrigin', (row: Credential) => credentialService.confirmOrigin(row)],
+  ])('%s refuses while the vault is locked', async (_label, write) => {
+    const reviewed = await storedRow()
+    useVaultKeyStore.getState().clearKeys()
+    await expect(write(reviewed)).rejects.toBeInstanceOf(VaultLockedError)
+    expect(mockedApi.patch).not.toHaveBeenCalled()
+    expect(mockedApi.post).not.toHaveBeenCalled()
+  })
+
+  it('does not write the old blob back after a failed re-read', async () => {
+    // Rolling back could overwrite someone else's newer revision.
+    const reviewed = await storedRow()
+    mockedApi.patch.mockResolvedValue({ data: {} })
+    mockedApi.get.mockResolvedValue({ data: await storedRow({ encrypted_data: btoa('corrupt') }) })
+
+    await expect(credentialService.confirmOrigin(reviewed)).rejects.toThrow('Storage integrity check failed')
+
+    expect(mockedApi.patch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('confirmOrigin()', () => {
+  it('moves a verified legacy record to authored without touching the ciphertext', async () => {
+    const reviewed = await storedRow({ origin: 'legacy-unverified' })
+    serveWhatWasSent(mockedApi.patch, reviewed)
+
+    const result = await credentialService.confirmOrigin(reviewed)
+
+    const [url, body, config] = mockedApi.patch.mock.calls[0]
+    expect(url).toBe(`/credentials/${ID}`)
+    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(body).not.toHaveProperty('encrypted_data')
+    expect(body.revision).toBe(2)
+    expect(body.origin).toBe('authored')
+    expect(result.encrypted_data).toBe(BLOB)
+    expect(await verifyRecord(result, signer)).toBe('authored')
+  })
+})
+
+describe('revoke()', () => {
+  it('signs the revoked state, including the time it sends, and keeps the origin', async () => {
+    const reviewed = await storedRow({ origin: 'legacy-unverified' })
+    mockedApi.post.mockImplementation(async (_url: string, body: Partial<Credential>) => {
+      const row = { ...reviewed, ...body, is_active: false }
+      mockedApi.get.mockResolvedValue({ data: row })
+      return { data: row }
+    })
+
+    const result = await credentialService.revoke(reviewed)
+
+    const [url, body, config] = mockedApi.post.mock.calls[0]
+    expect(url).toBe(`/credentials/${ID}/revoke`)
+    expect(config).toEqual({ headers: PROOF_HEADERS })
+    expect(body.revision).toBe(2)
+    expect(body.origin).toBe('legacy-unverified')
+    expect(typeof body.revoked_at).toBe('string')
+    expect(await verifyRecord(result, signer)).toBe('legacy-unverified')
+  })
+})
+
+describe('importBatch()', () => {
+  it('signs restored records as legacy-unverified: a backup cannot prove authorship', async () => {
+    mockedApi.post.mockResolvedValue({ data: { imported: 1, skipped: 0, errors: [] } })
+
+    await credentialService.importBatch([{ id: ID, encrypted_data: BLOB, expires_at: null }])
+
+    const [url, body, config] = mockedApi.post.mock.calls[0]
+    expect(url).toBe('/credentials/import')
+    expect(config).toEqual({ headers: PROOF_HEADERS })
+    const [sent] = body.credentials
+    expect(sent.origin).toBe('legacy-unverified')
+    expect(sent.revision).toBe(1)
+    expect(await verifyRecord(
+      { ...sent, is_active: true, revoked_at: null, expires_at: null },
+      signer
+    )).toBe('legacy-unverified')
+  })
+})
+
+describe('listAll()', () => {
+  it('reads every page, including revoked records', async () => {
+    const page = (count: number) => ({ data: Array.from({ length: count }, () => ({})) })
+    mockedApi.get.mockResolvedValueOnce(page(500)).mockResolvedValueOnce(page(3))
+
+    const records = await credentialService.listAll()
+
+    expect(records).toHaveLength(503)
+    expect(mockedApi.get).toHaveBeenCalledTimes(2)
+    expect(mockedApi.get.mock.calls[1][1].params).toEqual({
+      include_revoked: true,
+      skip: 500,
+      limit: 500,
     })
   })
 })

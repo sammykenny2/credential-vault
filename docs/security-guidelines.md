@@ -44,9 +44,15 @@ Before committing, verify:
 
 - Verify a vault public key against the public components derived from the
   KEK-protected private key before storing session keys or encrypting any data.
-- Separate RSA-OAEP operations by purpose. The current proof protocol uses
-  `credential-vault/vault-proof/v1`; its frontend and backend must be deployed
-  together. A stale frontend must refresh, never retry with another label.
+- Separate RSA-OAEP operations by purpose. Proof v1 uses
+  `credential-vault/vault-proof/v1` and only authorizes the one-time vault
+  upgrade; signed vaults use proof v2, which signs a nonce. Frontend and backend
+  must be deployed together. A stale frontend must refresh, never retry with
+  another label.
+- Verify a record's signature before decrypting it. Sign a derived state only from
+  the row the user reviewed, never from a fresh server response. Compare the id, and
+  on read-back compare everything that was signed. Report records that fail; do not
+  hide them. Unsigned records are refused, not labelled.
 - Vault session private keys stay non-extractable. New backup passwords require
   at least 12 characters; the UI can generate a 32-character CSPRNG password.
   Older backups remain readable with their original password.
@@ -54,8 +60,9 @@ Before committing, verify:
   masking flags or field type. Masking is a display preference, not an encryption
   or cloud spell-check boundary.
 - [ADR-004](decisions/004-vault-authenticity-and-key-trust.md) and
-  [SPEC-004](specs/SPEC-004-structured-credentials-and-attachments.md) define the
-  proposed signed data, padding, guarded streaming, quotas and durability rules.
+  [SPEC-004](specs/SPEC-004-structured-credentials-and-attachments.md) define
+  signing for existing credentials (implemented) and the padding, guarded
+  streaming, quotas and durability rules for attachments (not implemented).
   Those future requirements must not be described as already implemented.
 
 ### Dependencies

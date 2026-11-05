@@ -1,18 +1,34 @@
 /**
  * Modal for entering the vault password to unlock the E2EE vault.
  *
- * First time: Creates RSA key pair, encrypts private key with vault password, sends to server.
- * Subsequent: Decrypts RSA private key using vault password.
+ * First time: Creates the key pairs, encrypts them with the vault password, sends them to the server.
+ * Subsequent: Decrypts them using the vault password.
+ * A vault with no signing key yet must finish a one-time upgrade before it unlocks,
+ * so the app never runs with records it could not sign or verify.
  */
 
-import { useState } from 'react'
-import { Lock, Eye, EyeOff, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Lock, Eye, EyeOff, X, ShieldCheck } from 'lucide-react'
 import { useVaultKey } from '@/hooks/useVaultKey'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import api from '@/services/api'
-import { setupVault, unlockVault, KDF_VERSION } from '@/lib/crypto'
-import type { VaultKeyMaterial } from '@/types'
+import { credentialService } from '@/services/credentialService'
+import {
+  setupVault,
+  unlockVault,
+  KDF_VERSION,
+  VaultKeyMismatchError,
+  type UnlockedVault,
+} from '@/lib/crypto'
+import {
+  hasSeenAnySignedVault,
+  hasSeenSignedVault,
+  performVaultUpgrade,
+  rememberSignedVault,
+  VaultRollbackError,
+} from '@/lib/vaultUpgrade'
+import type { CredentialListItem, VaultKeyMaterial } from '@/types'
 import { secretFieldProps } from '@/lib/inputProps'
 import { MIN_VAULT_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
 
@@ -21,6 +37,9 @@ import { MIN_VAULT_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
  * so the vault password must resist offline guessing. 12 characters minimum.
  */
 export { MIN_VAULT_PASSWORD_LENGTH } from '@/lib/passwordPolicy'
+
+/** The upgrade prompt holds the KEK; do not leave it waiting on an unattended screen. */
+const UPGRADE_PROMPT_TIMEOUT_MS = 5 * 60 * 1000
 
 interface MasterPasswordModalProps {
   isOpen: boolean
@@ -42,8 +61,42 @@ export default function MasterPasswordModal({
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [pendingUpgrade, setPendingUpgrade] = useState<{
+    unlocked: UnlockedVault
+    records: CredentialListItem[]
+  } | null>(null)
 
   const needsSetup = isFirstTime || !user?.has_vault_keys
+
+  useEffect(() => {
+    if (!pendingUpgrade) return
+    const timer = setTimeout(() => setPendingUpgrade(null), UPGRADE_PROMPT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [pendingUpgrade])
+
+  const handleUpgrade = async () => {
+    if (!pendingUpgrade) return
+    setError('')
+    setIsLoading(true)
+    try {
+      const { unlocked, records } = pendingUpgrade
+      const signer = await performVaultUpgrade(unlocked, records)
+      await rememberSignedVault(unlocked.publicKeyBase64)
+      setKeys(unlocked.privateKey, unlocked.publicKey, unlocked.publicKeyBase64, signer)
+      setPendingUpgrade(null)
+      onUnlock()
+    } catch (err) {
+      console.error('Vault upgrade failed:', err)
+      setPendingUpgrade(null)
+      setError(
+        err instanceof VaultRollbackError
+          ? err.message
+          : 'The upgrade did not complete and nothing was changed. Unlock again to retry.'
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,14 +124,21 @@ export default function MasterPasswordModal({
           encrypted_private_key: vaultKeys.encryptedPrivateKeyBase64,
           key_salt: vaultKeys.saltBase64,
           kdf_version: vaultKeys.kdfVersion,
+          signing_public_key: vaultKeys.signingPublicKeyBase64,
         })
 
-        // Store the locally generated, matching key pair in memory.
-        setKeys(vaultKeys.privateKey, vaultKeys.publicKey, vaultKeys.publicKeyBase64)
+        // Store the locally generated, matching keys in memory.
+        setKeys(
+          vaultKeys.privateKey,
+          vaultKeys.publicKey,
+          vaultKeys.publicKeyBase64,
+          vaultKeys.signer
+        )
 
         // Update user state to reflect vault setup
         const updatedUser = await authService.getMe()
         setUser(updatedUser)
+        await rememberSignedVault(vaultKeys.publicKeyBase64)
 
         onUnlock()
       } else {
@@ -100,13 +160,24 @@ export default function MasterPasswordModal({
           keyData.kdf_version ?? KDF_VERSION,
         )
 
+        if (!keys.signer) {
+          // No signing key yet: finish the upgrade first, unless this browser has
+          // seen this vault signed, which means the server replayed old keys.
+          if (await hasSeenSignedVault(keys.publicKeyBase64)) throw new VaultRollbackError()
+          setPendingUpgrade({ unlocked: keys, records: await credentialService.listAll() })
+          return
+        }
+
         // Only retain the public key derived from the authenticated private key.
-        setKeys(keys.privateKey, keys.publicKey, keys.publicKeyBase64)
+        await rememberSignedVault(keys.publicKeyBase64)
+        setKeys(keys.privateKey, keys.publicKey, keys.publicKeyBase64, keys.signer)
         onUnlock()
       }
     } catch (err) {
       console.error('Vault operation failed:', err)
-      if (needsSetup) {
+      if (err instanceof VaultKeyMismatchError || err instanceof VaultRollbackError) {
+        setError(err.message)
+      } else if (needsSetup) {
         const detail = err instanceof Error ? err.message : String(err)
         setError(`Failed to set up vault: ${detail}`)
       } else {
@@ -126,6 +197,7 @@ export default function MasterPasswordModal({
       setError('')
       setPasswordInput('')
       setConfirmPassword('')
+      setPendingUpgrade(null)
       onClose()
     }
   }
@@ -147,6 +219,48 @@ export default function MasterPasswordModal({
           </button>
         )}
 
+        {pendingUpgrade ? (
+          <div className="space-y-4">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
+                <ShieldCheck className="w-8 h-8 text-primary-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Upgrade Your Vault</h2>
+            </div>
+            <p className="text-sm text-gray-600">
+              This one-time step adds a signing key to your vault, so a compromised server
+              cannot plant or alter records without you noticing. Your data is not re-encrypted.
+            </p>
+            <p className="text-sm text-gray-600">
+              <strong>{pendingUpgrade.records.length}</strong> existing record(s) will be
+              signed and labelled <em>origin unverified</em>, because nothing can prove who wrote
+              them. You can confirm each one when you open it. Only continue if you were expecting
+              this upgrade.
+            </p>
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                {error}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              disabled={isLoading}
+              className="btn btn-primary w-full"
+            >
+              {isLoading ? 'Upgrading...' : 'Upgrade and Unlock'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingUpgrade(null)}
+              disabled={isLoading}
+              className="btn btn-secondary w-full"
+            >
+              Cancel and Stay Locked
+            </button>
+          </div>
+        ) : (
+        <>
         {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
@@ -161,6 +275,13 @@ export default function MasterPasswordModal({
               : 'Enter your vault password to decrypt your credentials.'}
           </p>
         </div>
+
+        {needsSetup && hasSeenAnySignedVault() && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            This browser has unlocked a vault before. If this account already has one, stop here:
+            the server may be hiding it, and a new vault cannot open your existing records.
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -230,6 +351,8 @@ export default function MasterPasswordModal({
             If you forget it, you will lose access to all encrypted credentials.
           </p>
         </div>
+        </>
+        )}
       </div>
     </div>
   )

@@ -39,7 +39,7 @@ The following documents describe proposed behavior and have not been implemented
 | Document | Status | Description |
 |----------|--------|-------------|
 | [ADR-003](./decisions/003-structured-credentials-and-attachments.md) | Proposed | 結構化憑證、集合、紀錄關聯與端到端加密附件的架構取捨 |
-| [ADR-004](./decisions/004-vault-authenticity-and-key-trust.md) | Proposed | 金鑰信任、簽章、proof 及 padding；格式定案前置條件 |
+| [ADR-004](./decisions/004-vault-authenticity-and-key-trust.md) | Accepted; 簽章與 proof 已實作未發版 | 金鑰信任、簽章、proof 及 padding；格式定案前置條件 |
 | [SPEC-004](./specs/SPEC-004-structured-credentials-and-attachments.md) | Draft; gate closed | 型別化欄位、來源簽章、安全保存、完整備份與 36 項驗收條件 |
 | [PLAN-004](./plans/PLAN-004-structured-credentials-and-attachments.md) | Draft; gate closed | Phase 0 前置修補與八個後續階段、16 項審閱處置及部署計畫 |
 

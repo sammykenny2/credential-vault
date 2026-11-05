@@ -17,18 +17,32 @@ project-specific procedures that are too detailed for always-loaded instructions
   status columns. See `docs/decisions/001-e2ee-architecture.md`.
 - Key trust: unlock derives the RSA public key from the KEK-protected private
   material, rejects a mismatched API key, and retains only the derived public
-  key. Current proof v1 uses the dedicated OAEP label
-  `credential-vault/vault-proof/v1`; frontend and backend require paired rollout.
-  New signed records, protected signing keys and proof v2 are proposed in
-  ADR-004, not implemented by the existing-service security patch.
+  key. A mismatch is a security event, reported separately from a wrong password.
+- Record signatures: the KEK-protected key bundle (`users.encrypted_private_key`)
+  also holds an ECDSA P-256 key. It signs the ciphertext hash, revision and status
+  of every record (`frontend/src/lib/recordSigning.ts`, ADR-004). Browsers verify
+  with the key from the bundle before decrypting: an unsigned or altered record
+  is refused and reported, never hidden. A new state derived from a stored record
+  must be signed from the row the user reviewed, verified first, with no fresh GET
+  (`credentialService.writeNextState`). A verified row only proves a state was
+  signed, not that it is the record asked for, so a server answering a new GET
+  could get another record signed. The server treats record signatures as opaque.
+- An RSA-only vault must finish a one-time upgrade before it unlocks, which signs
+  its records as `legacy-unverified`. There is no unlocked state without a signer.
 - Invariant: the server never receives, produces, logs, or returns plaintext
   secrets. Features that need plaintext (generation, strength, breach checks)
   belong in `frontend/src/lib/`, not in `app/`.
-- Destructive operations (`DELETE /credentials/{id}`, `PATCH` with
-  `encrypted_data`) require an `X-Vault-Proof` header: the client decrypts a
-  challenge from `POST /auth/vault/challenge` with the in-memory private key
-  (`frontend/src/lib/vaultProof.ts`). A stolen session token alone cannot
-  destroy data. Keep new destructive endpoints behind `VaultProvenUser`.
+- Every credential write (`VaultSigningUser`) and `DELETE /credentials/{id}`
+  (`VaultProvenUser`) require an `X-Vault-Proof` header: the client signs a nonce
+  from `POST /auth/vault/challenge` with the in-memory signing key
+  (`frontend/src/lib/vaultProof.ts`). The nonce is stateless, so issuing one never
+  invalidates another. A stolen session token alone cannot change data. Proof v1
+  (RSA with the OAEP label `credential-vault/vault-proof/v1`, also stateless) only
+  authorizes `POST /auth/vault/upgrade`; never add a proof that returns an RSA
+  decryption for a signed vault.
+  Known gap: `POST /auth/vault/setup` needs only a session token, so a stolen token
+  on an account with no vault can install its own keys and then pass these checks.
+  Keep new destructive endpoints behind `VaultProvenUser`.
   Changes that would let a stolen token keep access need it too: adding a
   sign-in password (`PUT /users/me/password`) and every admin change to
   accounts (create, update, role, reactivate, delete) use `VaultProvenAdmin`,

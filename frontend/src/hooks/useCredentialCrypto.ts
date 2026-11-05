@@ -3,7 +3,8 @@
  *
  * Uses RSA-OAEP public key for encryption and private key for decryption.
  * Every blob is bound to its credential id (AES-GCM additional data), so the
- * id must be known before encrypting and supplied again when decrypting.
+ * id must be known before encrypting. Reading a record checks its signature
+ * first: an unsigned or altered record is never decrypted.
  */
 
 import { useCallback, useState } from 'react'
@@ -15,12 +16,13 @@ import {
   generatePassword,
   type CredentialData,
 } from '@/lib/crypto'
+import { RecordVerificationError, verifyRecord, type StoredRecord } from '@/lib/recordSigning'
 
 interface UseCredentialCryptoResult {
   // Encrypt credential data for the credential with this id
   encrypt: (data: CredentialData, credentialId: string) => Promise<string | null>
-  // Decrypt credential data; the id is required for id-bound (v2) blobs
-  decrypt: (encryptedData: string, credentialId?: string) => Promise<CredentialData | null>
+  // Verify a record's signature, then decrypt it. Null means it was not opened.
+  decrypt: (record: StoredRecord) => Promise<CredentialData | null>
   // Generate a random password
   generatePassword: typeof generatePassword
   // Loading state
@@ -35,7 +37,7 @@ interface UseCredentialCryptoResult {
  * Hook for encrypting and decrypting credentials with hybrid E2EE.
  */
 export function useCredentialCrypto(): UseCredentialCryptoResult {
-  const { getPrivateKey, getPublicKey, getExpectedPublicKeyBase64 } = useVaultKey()
+  const { getPrivateKey, getPublicKey, getExpectedPublicKeyBase64, getSigner } = useVaultKey()
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,10 +79,11 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
   )
 
   const decrypt = useCallback(
-    async (encryptedData: string, credentialId?: string): Promise<CredentialData | null> => {
+    async (record: StoredRecord): Promise<CredentialData | null> => {
       const privateKey = getPrivateKey()
+      const signer = getSigner()
 
-      if (!privateKey) {
+      if (!privateKey || !signer) {
         setError('Vault is locked. Please enter your vault password.')
         return null
       }
@@ -89,16 +92,21 @@ export function useCredentialCrypto(): UseCredentialCryptoResult {
       setError(null)
 
       try {
-        return await decryptCredential(encryptedData, privateKey, credentialId)
+        await verifyRecord(record, signer)
+        return await decryptCredential(record.encrypted_data, privateKey, record.id)
       } catch (err) {
-        setError('Decryption failed. Wrong vault password or corrupted data.')
-        console.error('Decryption error:', err)
+        if (err instanceof RecordVerificationError) {
+          setError(err.message)
+        } else {
+          setError('Decryption failed. Wrong vault password or corrupted data.')
+          console.error('Decryption error:', err)
+        }
         return null
       } finally {
         setIsProcessing(false)
       }
     },
-    [getPrivateKey]
+    [getPrivateKey, getSigner]
   )
 
   const clearError = useCallback(() => {

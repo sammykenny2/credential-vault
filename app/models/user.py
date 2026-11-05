@@ -66,6 +66,10 @@ class User(Base, TimestampMixin):
         server_default="2",
         nullable=False,
     )
+    # ECDSA P-256 SPKI (base64), set by vault setup or the one-time upgrade. The
+    # server only uses it to check X-Vault-Proof. Browsers verify records with
+    # the copy inside the KEK-protected key bundle, never with this column.
+    signing_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Role
     role: Mapped[UserRole] = mapped_column(
@@ -86,14 +90,19 @@ class User(Base, TimestampMixin):
         nullable=False,
     )
 
-    # Proof of unlock: sha256 of the last challenge secret the client must
-    # decrypt with the vault private key before deleting or overwriting data.
-    vault_proof_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    vault_proof_expires_at: Mapped[datetime | None] = mapped_column(
+    last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-    last_login_at: Mapped[datetime | None] = mapped_column(
+
+    # Per-user secret mixed into proof v1, so SECRET_KEY alone cannot forge one. Set
+    # once, never rewritten and never returned by the API. The column keeps its old
+    # name, and vault_proof_expires_at stays unused, because dropping or renaming a
+    # column rebuilds this table (see migration 7a4e1c9d2b60).
+    vault_proof_key: Mapped[str | None] = mapped_column(
+        "vault_proof_hash", String(64), nullable=True
+    )
+    vault_proof_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

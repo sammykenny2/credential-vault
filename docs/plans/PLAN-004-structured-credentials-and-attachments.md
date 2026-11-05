@@ -26,8 +26,8 @@
 完成前不發版，避免形成只能保存、無法完整還原的附件功能。
 這項限制針對新附件功能；Phase 0 的既有服務熱修補應獨立發版，不等待新格式實作。
 
-本文件區分既有服務熱修補與尚未實作的新格式。用途隔離、公私鑰綁定、備份密碼門檻已有本地修補與回歸測試，
-尚未以部署或獨立重審驗收；其餘 gate 不因文件更新而視為完成。不執行資料重置或未授權 migration。
+本文件區分既有服務熱修補與尚未實作的新格式。用途隔離、公私鑰綁定、備份密碼門檻已在 main（`97224aa`）；
+紀錄簽章、key bundle 與 proof v2 已在分支實作。兩者都未部署；其餘 gate 不因文件更新而視為完成。不執行資料重置或未授權 migration。
 
 ## Implementation Phases
 
@@ -36,11 +36,13 @@
 - [ ] Task 0.1：驗證既有 proof 專用 OAEP label 的前後端向量、交叉用途拒絕、TTL／長度界線與鎖定 race。
   本地修補及 regression 已建立，須獨立驗證後成套部署；不提供 empty-label 相容回退。
 - [ ] Task 0.2：驗證由解開的 PKCS8 導出公鑰、API 不符即拒絕、之後只用導出值；確認 session 私鑰 non-extractable。
-  本地修補及正常／替換／壞格式測試已建立，須驗證 setup／unlock／rekey／restore 完整流程與部署版本。
+  本地修補及正常／替換／壞格式測試已建立，介面會把不符與密碼錯誤分開顯示；須驗證部署版本。
 - [ ] Task 0.3：新備份門檻至少 12 字元、CSPRNG 復原秘密至少 128 bits，舊短密碼備份可讀。
   本地 helper／UI 修補已建立；部署驗收與新 v2 備份仍需各自驗證。
-- [ ] Task 0.4：ADR-004 的簽章 key bundle、signed state、proof v2 與 4 KiB padding 獲獨立設計重審，
-  明確定義 legacy-unverified 與信任遷移，不能以重新簽署代替原始來源證明。
+- [x] Task 0.4a：實作 ADR-004 的 key bundle、紀錄簽章、proof v2 與 RSA-only vault 的一次性升級（既有 credential）。
+- [ ] Task 0.4b：上述實作與 4 KiB padding 設計獲獨立重審，記錄意見及解決狀態。
+  2026-11-05 已有兩輪獨立審查，提出的問題已修正，最後一批小修正未再審；padding 尚未審閱。
+- [ ] Task 0.4c：決定 `POST /auth/vault/setup` 的 step-up。目前只要 session token，偷到 token 的人可在沒有 vault 的帳號上安裝自己的金鑰，再通過 `VaultProvenAdmin`。
 - [ ] Task 0.5：先盤點正式 envelope 版本、DB foreign_key_check 與 journal／FK 預設，只讀取得結果。
   沒有證據不能刪 v1 reader；有 FK 違規時另提修復，禁止清空或自動刪 row。
 - [ ] Task 0.6：記錄修補 release／部署版本與瀏覽器重載證據；未部署的利用流程與 PoC 留在本機，
@@ -53,8 +55,8 @@
 
 - [ ] Task 1.1：將 SPEC-004 的型別整理為 TypeScript discriminated unions 與 runtime parsers，
   分開 legacy read adapter、新格式 writer 與 unknown-version errors。
-- [ ] Task 1.2：Phase 0 gate 通過後，定義 template v2、signed credential v3、collection／attachment v2、
-  key bundle、各用途 OAEP label、簽章 canonicalization、padding、batch operations 與 backup v2。
+- [ ] Task 1.2：Phase 0 gate 通過後，定義 template v2、credential v3、collection／attachment v2、
+  各用途 OAEP label、padding、batch operations 與 backup v2。Key bundle 與簽章 canonicalization 已由 ADR-004 定案。
   為 UUID 大小寫、UTF-8、長度邊界、secret flag、未知型別及重複 ID 建立測試向量。
 - [ ] Task 1.3：明確定義 capabilities、426／409 等 error codes、row revisions、整體 revision 及冪等 receipt。
   列出現有 credential／template 所有 write、sync、import 路徑，確保沒有 legacy bypass。
@@ -74,7 +76,7 @@
 - [ ] Task 2.1：新增 `credentials.revision`、`content_schema_version`；舊 row 設為 1。
   Template 定義另有 schema version，保留現有 `sync_version` 語意。
 - [ ] Task 2.2：新增 `vault_state`、`vault_collections`、`vault_batches`、`credential_attachments`，
-  另新增 key bundle／signer state、proof slots、全域容量帳本與必要 owner／FK／unique／check constraints。
+  另新增全域容量帳本與必要 owner／FK／unique／check constraints。Signer state 與 `credentials.revision` 已存在。
   Runtime、maintenance 與 test engine 每連線在 transaction 前開 foreign_keys=ON；先驗 foreign_key_check。
   維護階段切 WAL，確認 synchronous=FULL、secure_delete=ON、busy_timeout=5000 ms 與顯式 transaction 模式。
   Staged 的預定 credential ID 與 committed FK 分開，支援尚未可見的新紀錄。
@@ -85,9 +87,8 @@
 - [ ] Task 2.4：以條件式原子 UPDATE 保留／釋放 owner 與全域 quota，包含 metadata、retired、staging 及 reservations；
   重複 prepare／upload／commit 不重複占額。新增帳號也不能繞過全域配額，維持 free-space 保留及 ENOSPC rollback。
   不將明文檔名、MIME、金鑰、parent、membership 或關聯放入外部 operation metadata。
-- [ ] Task 2.5：僅在 Phase 0 gate 通過後，讓所有 writer 接入 protocol、來源簽章／signed state、proof v2、revision 與附件一致性。
-  Proof v2 採 domain-bound nonce 簽章、session-bound slots、nonce 單次使用及 TTL；新 challenge 不使 live proof 失效。
-  限 pending／live slot 數並加共享限流，多分頁與長時間還原可續作。
+- [ ] Task 2.5：僅在 Phase 0 gate 通過後，讓新 writer 接入 protocol 與附件一致性；來源簽章、signed state、proof v2 與 row revision 已套用於既有 credential 寫入。
+  多分頁與長時間還原可續 proof；集合與附件沿用同一簽章與 proof。
   現有 template write／sync／import 也檢查 schema 能力；不能由舊欄位 schema 忽略新內容後存回。
 - [ ] Task 2.6：實作全量 snapshot cursor，以一致 revision 取得 metadata；分頁中有提交則回衝突。
   同時涵蓋 revoked 紀錄及集合 tombstone，不載入附件 BLOB。
@@ -235,11 +236,11 @@
 | `app/api/v1/vault.py`、`attachments.py` | Create | 新 API 與 owner／proof 保護 |
 | `app/api/v1/credentials.py`、`templates.py`、`router.py` | Modify | 新路由、舊介面 gate 與 status mutation revision |
 | `app/config.py`、`app/maintenance.py`、`.env.example` | Modify | owner／global 限制、free-space、cleanup／receipt retention |
-| `app/db/session.py`、`app/core/vault_proof.py`、`app/core/rate_limit.py`、`app/models/audit_log.py` | Modify | 連線 PRAGMA／transaction、proof slots、共享限流及 audit actions |
-| `app/models/vault_proof_slot.py`、`app/models/vault_capacity.py` | Create | Session slots、全域容量帳本 |
+| `app/db/session.py`、`app/core/rate_limit.py`、`app/models/audit_log.py` | Modify | 連線 PRAGMA／transaction、共享限流及 audit actions |
+| `app/models/vault_capacity.py` | Create | 全域容量帳本 |
 | `frontend/src/types/credential.ts`、`lib/credentialSchema.ts` | Create | Typed fields／sections／manifest 與 legacy adapters |
 | `frontend/src/types/template.ts`、`types/index.ts` | Modify | Template v2、capabilities 與 API types |
-| `frontend/src/lib/crypto.ts`、`attachmentCrypto.ts`、`collectionCrypto.ts`、`vaultSigning.ts` | Modify / Create | 私鑰導出公鑰、OAEP label、signed envelope／padding／key bundle |
+| `frontend/src/lib/crypto.ts`、`attachmentCrypto.ts`、`collectionCrypto.ts` | Modify / Create | OAEP label、新 envelope 與 padding；key bundle 與 `recordSigning.ts` 已實作 |
 | `frontend/src/lib/attachmentDownload.ts`、`vaultSession.ts` | Create | 安全下載、取消與 session generation |
 | `frontend/src/services/vaultService.ts`、`attachmentService.ts` | Create | Batch／snapshot／binary clients |
 | `frontend/src/services/credentialService.ts`、`templateService.ts` | Modify | CAS 保存、驗證與 capability gate |
@@ -311,7 +312,7 @@ npm run build
 | AC-22 | Phase 3／8：ASGI receive／真 nginx 在 body 讀取前拒絕，串流／rate／conn 邊界 |
 | AC-23、AC-24、AC-25 | Phase 2／8：真連線 commit failure、FK 反向測試、CAS／quota 與 PRAGMA |
 | AC-26 | Phase 0／7：12 字元門檻、舊備份可讀、CSPRNG 復原秘密 |
-| AC-27 | Phase 2／7：proof slots、多分頁、session、nonce 與長時間還原 |
+| AC-27 | Phase 0／7：無狀態 nonce、多分頁、登出撤銷與長時間還原 |
 | AC-28、AC-29 | Phase 2／3／8：全域／owner 容量、payload 清除、receipt TTL 與磁碟故障 |
 | AC-30 | Phase 3／8：audit 無秘密、共享限流及 429 續作 |
 | AC-31 | Phase 1／4／7：padding bucket／原始大小／邊界與恢復 bytes |
@@ -328,18 +329,18 @@ npm run build
 |------|------|-----------|
 | 1 | 既有 proof label、TTL／長度及鎖定 race 修補；未來 proof 改 nonce 簽章 | 本地修補已測，待獨立驗證／部署；AC-19 |
 | 2 | 由 PKCS8 導出 RSA 公鑰，拒絕 API 不符值；還原沿用可信金鑰 | 本地修補已測，待獨立驗證／部署；AC-20 |
-| 3 | ADR-004 必要簽章與 signed state、legacy-unverified 遷移 | 設計已修訂、尚未實作；AC-21 |
+| 3 | ADR-004 必要簽章與 signed state、一次性升級與 legacy-unverified | 既有 credential 已實作並有測試，待獨立重審／部署；集合與附件隨格式實作；AC-21 |
 | 4 | 原始 Request 先驗證再讀，分筆 operation、nginx 分路徑限額／限流 | 設計已修訂、尚未實作；AC-22 |
 | 5 | 明確 commit、FK preflight／ON、WAL／FULL、條件式 CAS／quota | 設計已修訂、尚未實作；AC-23～25 |
 | 6 | 新備份至少 12 字元及 CSPRNG 復原秘密，舊短密碼仍可讀 | 本地修補已測，v2 待實作；AC-26 |
-| 7 | Session proof 多槽、不逐出 live slot、共享限流及續作 | 同頁請求合併已修補，多槽待實作；AC-27 |
+| 7 | Proof v2 無狀態 nonce，新 challenge 不使 proof 失效；不用多槽 | 已實作並有測試，待獨立重審／部署；AC-27 |
 | 8 | 全域 logical quota、metadata／帳號建立計額、磁碟保留 | 設計已修訂、尚未實作；AC-28 |
 | 9 | Commit 同步清 payload、receipt TTL、secure_delete 限制 | 設計已修訂、尚未實作；AC-29 |
 | 10 | AuditAction、snapshot／下載／challenge 的共享限流與 bytes 限額 | 設計已修訂、尚未實作；AC-30 |
 | 11 | 4 KiB padding，接受 bucket／數量／時間洩漏 | ADR-004 已明定、尚未實作；AC-31 |
 | 12 | ZIP 維持現有 CSP，停動態 worker；實測選型而非憑記憶 | 設計已修訂、尚未選型；AC-32 |
 | 13 | 所有值無條件 secretFieldProps，惡意 template 回歸測試 | 現況已有保護，新 editors 仍必須覆蓋；AC-33 |
-| 14 | 先盤點正式 envelope，按證據移除或隔離 v1 reader | 尚未盤點，不先移除；AC-34 |
+| 14 | 未知版本與未簽章紀錄到不了 v1 解析；盤點後才移除 v1 reader | Fallback 已封閉，盤點未做，v1 reader 保留；AC-34 |
 | 15 | Binary GET 的 octet-stream／attachment／no-store／nosniff／sandbox | 設計已修訂、附件 API 尚未實作；AC-35 |
 | 16 | 顯示及下載檔名均清理雙向字元，下載前提示明文副本 | 設計已修訂、附件 UI 尚未實作；AC-36 |
 
@@ -372,6 +373,8 @@ npm run build
 | Date | Update |
 |------|--------|
 | 2026-11-05 | 建立原稿，收到外部設計審閱後新增 ADR-004／Phase 0、逐項處置與 AC-19～36；既有服務修補有本地測試，修正版尚未獨立驗證或部署 |
+| 2026-11-05 | 審閱 `97224aa`／`7c7dd05` 後修正：公鑰不符不再顯示成密碼錯誤、未知 blob 版本不落入 v1、自動上鎖清 proof；設計改為強制升級與無狀態 proof。實作 key bundle、紀錄簽章（含 status 與 revision）、proof v1／v2 及一次性升級，寫入改為條件式 CAS 並在回應前明確 commit |
+| 2026-11-05 | 獨立審查後修正：只簽使用者看過的紀錄、重讀比對完整簽章狀態、回滾標記改用導出公鑰為鍵、proof v1 不存每次狀態且只限升級、解密內容檢查形狀、upgrade／setup 條件式寫入。第二輪再修：migration 不重建表、proof v1 混入每位使用者金鑰、失敗後重新載入清單，並補 migration 與頁面測試。端到端以暫存資料庫驗證；未部署。Setup 的 step-up 待決定 |
 | 2026-11-05 | 既有服務修補本地驗證：pytest 242 passed（Windows private tmp 需完整使用者權限）、Vitest 219 passed（maxWorkers=2）、ruff／mypy／ESLint／production build 通過。文件 78 個本機連結、21 個 FR、36 個 AC 與 Phase 0～8 檢查通過；不等於新格式實作或部署驗收 |
 
 ---

@@ -24,6 +24,7 @@ class AuditAction(enum.StrEnum):
     VAULT_SETUP = "vault_setup"
     VAULT_UNLOCK = "vault_unlock"
     VAULT_REKEY = "vault_rekey"
+    VAULT_UPGRADED = "vault_upgraded"
 
     # Credential
     CREDENTIAL_CREATED = "credential_created"

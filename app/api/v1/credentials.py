@@ -1,8 +1,13 @@
-"""Credential management endpoints."""
+"""Credential management endpoints.
+
+Every write requires proof of vault unlock and carries the browser's signature
+over the record (ADR-004). The server stores the signature without interpreting
+it, and commits before answering so that a success response means durable.
+"""
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.api.deps import CurrentUser, DbSession, VaultProvenUser, ensure_vault_proof
+from app.api.deps import CurrentUser, DbSession, VaultProvenUser, VaultSigningUser
 from app.models.audit_log import AuditAction
 from app.schemas.credential import (
     CredentialCreate,
@@ -10,12 +15,15 @@ from app.schemas.credential import (
     CredentialImportResult,
     CredentialListItem,
     CredentialRead,
+    CredentialRevoke,
     CredentialUpdate,
 )
 from app.services.audit_log import AuditLogService
 from app.services.credential import CredentialService
 
 router = APIRouter()
+
+REVISION_CONFLICT_DETAIL = "Credential changed since it was read: reload it and retry"
 
 
 @router.get("/", response_model=list[CredentialListItem])
@@ -44,16 +52,16 @@ async def list_credentials(
 async def create_credential(
     request: Request,
     data: CredentialCreate,
-    current_user: CurrentUser,
+    current_user: VaultSigningUser,
     db: DbSession,
 ):
-    """Create a new credential.
+    """Create a new signed credential.
 
-    Clients generate the id themselves and bind the ciphertext to it, so a
-    reused id is refused rather than silently replaced.
+    Clients generate the id themselves and bind the ciphertext and signature to
+    it, so a reused id is refused rather than silently replaced.
     """
     service = CredentialService(db)
-    if data.id is not None and await service.exists(str(data.id)):
+    if await service.exists(str(data.id)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A credential with this id already exists",
@@ -68,6 +76,7 @@ async def create_credential(
         resource_type="credential",
         resource_id=credential.id,
     )
+    await db.commit()
 
     return credential
 
@@ -98,10 +107,10 @@ async def export_credentials(
 async def import_credentials(
     request: Request,
     data: CredentialImportRequest,
-    current_user: CurrentUser,
+    current_user: VaultSigningUser,
     db: DbSession,
 ):
-    """Import credentials from JSON."""
+    """Import signed credentials from JSON."""
     service = CredentialService(db)
     creds_data = [c.model_dump() for c in data.credentials]
     result = await service.import_credentials(current_user.id, creds_data)
@@ -114,6 +123,7 @@ async def import_credentials(
         resource_type="credential",
         details={"action": "import", "count": result["imported"]},
     )
+    await db.commit()
 
     return CredentialImportResult(**result)
 
@@ -152,15 +162,10 @@ async def update_credential(
     request: Request,
     credential_id: str,
     data: CredentialUpdate,
-    current_user: CurrentUser,
+    current_user: VaultSigningUser,
     db: DbSession,
 ):
-    """Update a credential.
-
-    Replacing the ciphertext is destructive (the old blob is gone), so it
-    requires proof of vault unlock like a delete. Metadata-only changes such
-    as the expiry date do not.
-    """
+    """Apply a signed update. `revision` must be the stored revision plus one."""
     service = CredentialService(db)
     credential = await service.get_by_id(credential_id, owner_id=current_user.id)
 
@@ -170,10 +175,11 @@ async def update_credential(
             detail="Credential not found",
         )
 
-    if data.encrypted_data is not None:
-        ensure_vault_proof(request, current_user)
-
-    updated = await service.update(credential, data)
+    if not await service.update(credential, data):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=REVISION_CONFLICT_DETAIL,
+        )
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -183,18 +189,21 @@ async def update_credential(
         resource_type="credential",
         resource_id=credential.id,
     )
+    await db.commit()
+    await db.refresh(credential)
 
-    return updated
+    return credential
 
 
 @router.post("/{credential_id}/revoke", response_model=CredentialRead)
 async def revoke_credential(
     request: Request,
     credential_id: str,
-    current_user: CurrentUser,
+    data: CredentialRevoke,
+    current_user: VaultSigningUser,
     db: DbSession,
 ):
-    """Revoke (soft delete) a credential."""
+    """Apply a signed revocation (soft delete)."""
     service = CredentialService(db)
     credential = await service.get_by_id(credential_id, owner_id=current_user.id)
 
@@ -210,7 +219,11 @@ async def revoke_credential(
             detail="Credential is already revoked",
         )
 
-    revoked = await service.revoke(credential)
+    if not await service.revoke(credential, data):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=REVISION_CONFLICT_DETAIL,
+        )
 
     audit_service = AuditLogService(db)
     await audit_service.log_from_request(
@@ -220,8 +233,10 @@ async def revoke_credential(
         resource_type="credential",
         resource_id=credential.id,
     )
+    await db.commit()
+    await db.refresh(credential)
 
-    return revoked
+    return credential
 
 
 @router.delete("/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -251,3 +266,4 @@ async def delete_credential(
         resource_type="credential",
         resource_id=credential_id,
     )
+    await db.commit()

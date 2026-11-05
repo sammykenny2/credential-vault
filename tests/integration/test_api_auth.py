@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from app.core.security import SecurityService
 from app.models.user import UserRole
 from app.services.user import UserService
+from tests.vault_helpers import new_signing_public_key
 
 
 class TestAuthAPI:
@@ -195,6 +196,7 @@ class TestAuthAPI:
                 "public_key": "test-public-key-base64",
                 "encrypted_private_key": "test-encrypted-private-key-base64",
                 "key_salt": "test-salt-base64",
+                "signing_public_key": new_signing_public_key(),
             },
         )
 
@@ -210,6 +212,31 @@ class TestAuthAPI:
         assert keys.json()["public_key"] == "test-public-key-base64"
 
     @pytest.mark.asyncio
+    async def test_vault_setup_requires_a_signing_key(
+        self, client: AsyncClient, db_session, test_user_data
+    ):
+        """A new vault is signed from the start, so it never has unsigned records."""
+        token, _ = await self._create_user_and_get_token(db_session, email=test_user_data["email"])
+        body = {
+            "public_key": "test-public-key-base64",
+            "encrypted_private_key": "test-encrypted-private-key-base64",
+            "key_salt": "test-salt-base64",
+        }
+
+        for bad in (body, {**body, "signing_public_key": "not-a-key"}):
+            response = await client.post(
+                "/api/v1/auth/vault/setup",
+                headers={"Authorization": f"Bearer {token}"},
+                json=bad,
+            )
+            assert response.status_code == 422
+
+        keys = await client.get(
+            "/api/v1/auth/vault/keys", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert keys.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_vault_setup_duplicate(self, client: AsyncClient, db_session, test_user_data):
         """Test that vault setup fails if keys already exist."""
         token, _ = await self._create_user_and_get_token(db_session, email=test_user_data["email"])
@@ -218,6 +245,7 @@ class TestAuthAPI:
             "public_key": "test-public-key-base64",
             "encrypted_private_key": "test-encrypted-private-key-base64",
             "key_salt": "test-salt-base64",
+            "signing_public_key": new_signing_public_key(),
         }
 
         # First setup should succeed

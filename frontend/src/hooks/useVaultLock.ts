@@ -1,8 +1,8 @@
 /**
  * Locking the vault.
  *
- * Locking drops the decrypted private key and the cached vault proof from
- * memory; pages that show plaintext drop it when they see the vault locked.
+ * Locking drops the decrypted keys and the cached vault proof from memory;
+ * pages that show plaintext drop it when they see the vault locked.
  */
 
 import { useEffect } from 'react'
