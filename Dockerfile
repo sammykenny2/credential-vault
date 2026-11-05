@@ -6,7 +6,7 @@
 # Build Stage
 # ============================================
 # Base images are pinned by digest (Dependabot moves tag and digest together)
-FROM python:3.14-slim@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8 AS builder
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS builder
 
 WORKDIR /build
 
@@ -37,13 +37,16 @@ RUN pip install --no-cache-dir --no-deps .
 # ============================================
 # Production Stage
 # ============================================
-FROM python:3.14-slim@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966
 
 WORKDIR /app
 
-# Runtime dependencies only (curl for the health check). The base image's pip
+# Runtime dependencies only (curl for the health check). Packages are upgraded
+# because a base image can lag behind Debian's security updates, and the release
+# scan fails on any High or Critical issue that has a fix. The base image's pip
 # goes too: the app runs from /opt/venv and installs nothing at runtime.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip uninstall --yes --no-cache-dir pip
