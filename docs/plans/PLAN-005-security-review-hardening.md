@@ -126,7 +126,8 @@ sign-in path and the setup authorization's limits.
     dashboard reads, with no session restore in between.
   - The first unlock completed the one-time ADR-004 upgrade. A later signed
     credential write was accepted.
-  - Page loads restored the session from the cookie, and the vault unlocked again.
+  - Page loads restored the session from the cookie, and the vault keys were
+    fetched again to unlock.
   - After about 22 idle minutes, with the access token expired, logout got 401,
     exchanged the refresh cookie and revoked with the new token. No warning was shown.
 - **Not verified in a browser:** password sign-in, first-run setup and creating a
