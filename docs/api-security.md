@@ -46,4 +46,4 @@ All credential write signatures, vault proof and key trust still follow
 [ADR-004](decisions/004-vault-authenticity-and-key-trust.md).
 See [SPEC-005](specs/SPEC-005-security-boundaries.md) for backup formats and limits.
 
-*Last updated: 2026-11-05. Implemented in branch; deployment not yet verified.*
+*Last updated: 2026-11-07. Deployed in v0.4.2; verified in a browser on v0.4.3.*

@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Implemented, independently reviewed and deployed in v0.4.2 (2026-11-06); browser verification pending |
+| Status | Implemented, independently reviewed and deployed in v0.4.2 (2026-11-06); verified in a browser on v0.4.3 (2026-11-07) |
 | Scope | Findings from the 2026-11-05 review, based on main e4dee31 |
 | Review | Independent review completed; findings resolved and rechecked |
 
@@ -97,12 +97,46 @@ sign-in path and the setup authorization's limits.
   - On the tailnet, health reports 0.4.2 at `f0fd0e2`. The served bundle contains
     the new logout and setup code. Refresh, logout and vault setup without
     credentials return 401.
-- **Not yet verified:** signing in, unlocking, the one-time ADR-004 upgrade and logout
-  after an idle session, in a real browser. When this was recorded, no one had
-  signed in since the deployment.
-- **Rollback:** the migration cannot be downgraded. `Deploy-CredentialVault.ps1
-  -Rollback` restores the pre-deploy backup and loses anything written after the
-  deployment.
+- **Browser regression (2026-11-07):** on v0.4.2, Google sign-in showed
+  "Authentication failed" in Firefox and Chrome although the server had signed the
+  user in; reloading restored the session. The page-load session restore signed out
+  locally when it found no session, or installed another tab's session, and either
+  cancelled the code exchange still in flight. Finding no session also cancelled a
+  password sign-in or first-run setup check sent during the restore. #10 skips the
+  restore when the page returns from Google, and signs out only a session the
+  restore itself set up.
+- **Release:** `v0.4.3` was cut from `0627a80` (#11), carrying #10. CI built,
+  scanned and attested the images; the scan found no High or Critical vulnerability
+  with a fix.
+  - backend `sha256:41d7e885a0930f241335b74897daffddab8e6a514ebfd5b16584b05ad0dcfcbc`
+  - frontend `sha256:ce6d4724a0ede9492e1b681565c538b5292c540e19773eac257f6d6e39efc8a6`
+- **Deployment (2026-11-07):** `Deploy-CredentialVault.ps1 -Tag 0.4.3` verified both
+  build attestations, kept the previous images, took a pre-deploy backup and passed
+  its health checks.
+  - The running images are the release digests. There was no migration, and
+    neither container restarted.
+  - Read-only checks of the live database matched the pre-deploy backup's table
+    counts, ciphertext and user keys, and integrity was clean.
+  - On the tailnet, health reports 0.4.3 at `0627a80`, and the served bundle is
+    0.4.3. Refresh, logout and vault setup without credentials return 401.
+- **Browser verification (2026-11-07, v0.4.3):** the maintainer signed in and out in
+  a real browser; the server's request log confirms each step.
+  - Logout with a live access token revoked the sessions.
+  - Five Google sign-ins went straight from the callback to the account and
+    dashboard reads, with no session restore in between.
+  - The first unlock completed the one-time ADR-004 upgrade. A later signed
+    credential write was accepted.
+  - Page loads restored the session from the cookie, and the vault keys were
+    fetched again to unlock.
+  - After about 22 idle minutes, with the access token expired, logout got 401,
+    exchanged the refresh cookie and revoked with the new token. No warning was shown.
+- **Not verified in a browser:** password sign-in, first-run setup and creating a
+  vault with `X-Vault-Setup`; tests cover them.
+- **Rollback:** `Deploy-CredentialVault.ps1 -Rollback` now returns to the v0.4.2
+  images and restores the v0.4.3 pre-deploy backup, losing anything written since.
+  That backup predates the ADR-004 upgrade, and a browser that has seen the signed
+  vault refuses to unlock the restored RSA-only one (ADR-004 §6). The v0.4.2
+  migration cannot be downgraded.
 
 ## Testing strategy
 

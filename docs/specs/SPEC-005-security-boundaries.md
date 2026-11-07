@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Implemented, independently reviewed and deployed in v0.4.2 (2026-11-06); browser verification pending |
+| Status | Implemented, independently reviewed and deployed in v0.4.2 (2026-11-06); verified in a browser on v0.4.3 (2026-11-07) |
 | Related decision | [ADR-005](../decisions/005-session-and-operation-boundaries.md) |
 | Related plan | [PLAN-005](../plans/PLAN-005-security-review-hardening.md) |
 
@@ -93,7 +93,8 @@ token-only vault setup, delayed unlock/restore across account changes, more than
 100 records, revoked status, changed snapshots and invalid backup content.
 Migration tests must preserve existing ciphertext and require a fresh sign-in for
 old stateless refresh cookies. Independent review and release/deployment evidence
-remain separate from author-run tests. Deployment evidence for v0.4.2 is in the
+remain separate from author-run tests. Deployment and browser evidence for v0.4.2
+and v0.4.3 is in the
 [PLAN-005 deployment record](../plans/PLAN-005-security-review-hardening.md#deployment-record).
 
 *Created: 2026-11-05*
