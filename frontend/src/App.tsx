@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
@@ -40,6 +40,11 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const { setUser, finishBootstrap } = useAuthStore()
+  // Decided while rendering: the login page takes the code out of the address bar
+  // in its own effect, and a child's effects run before this component's.
+  const [isSigningIn] = useState(
+    () => new URLSearchParams(window.location.search).has('code') && peekOAuthFlow()?.action === 'login'
+  )
 
   // Restore the session on page load: the refresh token is an HttpOnly cookie,
   // so the only way to get an access token back is to ask the server.
@@ -48,17 +53,26 @@ function App() {
     const generation = useAuthStore.getState().generation
 
     const restoreSession = async () => {
-      if (new URLSearchParams(window.location.search).has('code') && peekOAuthFlow()?.action === 'login') {
+      // The sign-in brings its own session, so the cookie is not worth spending.
+      // A session restored from it meanwhile would install its own user, and that
+      // cancels the sign-in still waiting for its answer.
+      if (isSigningIn) {
         finishBootstrap()
         return
       }
+      let restored = false
       try {
         await refreshAccessToken()
+        restored = true
         const me = await authService.getMe()
         if (!cancelled && generation === useAuthStore.getState().generation) setUser(me)
       } catch {
-        // No valid session cookie: stay signed out.
-        if (!cancelled && generation === useAuthStore.getState().generation) useAuthStore.getState().logout()
+        // Undo only a session this restore set up. Finding none changed nothing,
+        // and signing out anyway would cancel requests already on their way, such
+        // as a password sign-in or the first-run setup check.
+        if (restored && !cancelled && generation === useAuthStore.getState().generation) {
+          useAuthStore.getState().logout()
+        }
       } finally {
         if (!cancelled) finishBootstrap()
       }
@@ -68,7 +82,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [setUser, finishBootstrap])
+  }, [setUser, finishBootstrap, isSigningIn])
 
   return (
     <>
