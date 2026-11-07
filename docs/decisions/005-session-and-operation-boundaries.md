@@ -3,8 +3,9 @@
 ## Status
 
 Accepted and implemented; independent review completed. Deployed in v0.4.2 on
-2026-11-06 and verified on the server; sign-in in a real browser is not yet verified
-([deployment record](../plans/PLAN-005-security-review-hardening.md#deployment-record)).
+2026-11-06 and verified on the server. A sign-in regression found in a real browser
+was fixed in v0.4.3; sign-in, unlock and logout were then verified in a browser on
+2026-11-07 ([deployment record](../plans/PLAN-005-security-review-hardening.md#deployment-record)).
 
 ## Context
 
