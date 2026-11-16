@@ -90,6 +90,7 @@ Add your project-specific automation scripts here.
 | [research/](./research/) | Directory | Research notes and external sources |
 | [2026-11-05 結構化憑證與加密附件](./research/2026-11-05-structured-vault-use-cases.md) | Complete | 六種開發者／雲端情境的一手來源、現況證據及設計推論；尚未實作 |
 | [2026-10-23 儲存與認證面安全審查](./research/2026-10-23-security-review-storage-and-auth-surface.md) | Complete | 全專案安全掃描：E2EE 儲存結論、弱點清單與修復順序 |
+| [2026-11-16 Release dependency audit](./research/2026-11-16-release-dependency-audit.md) | Complete | v0.5.0 CI 找出的既有 Python 依賴修補與一手公告 |
 
 ## Context-Driven Development
 

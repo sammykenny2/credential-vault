@@ -13,7 +13,7 @@ Decision: [ADR-006](../decisions/006-credential-editing-and-small-files.md).
 - [x] Extend template definitions/editor and Google JSON file fields.
 - [x] Add regressions for updates, conflicts, file limits, padding, masking, async
   cancellation and encrypted backup/restore across destination keys.
-- [ ] Run frontend build/lint/tests and backend lint/type/tests; fix failures.
+- [x] Run frontend build/lint/tests and backend lint/type/tests; fix failures.
 - [x] Complete independent review and resolve findings.
 - [ ] Publish a versioned commit, push, and verify CI/release.
 - [ ] Deploy the CI images to this machine with a pre-deploy backup; record actual
@@ -30,6 +30,17 @@ fixes: ignore file-template defaults, require exact string field types, replace
 parse errors that can disclose input, align save size with restore capacity, and
 clarify cancellation after an accepted save. Parser fixes were checked directly
 with Node; full tests and release checks are separate tasks above.
+
+## Validation
+
+- PR #20 first CI run: frontend 426 tests / 28 files passed, lint and production
+  build passed; backend 342 tests passed, Ruff/format and mypy passed.
+- The first security audit found existing dnspython / opentelemetry-api issues;
+  update the lockfile to 2.9.2 / 1.45.2 and require a clean audit before release.
+  [Audit sources](../research/2026-11-16-release-dependency-audit.md).
+- Local Windows build, mypy and Ruff passed. Initial local suites encountered
+  sandbox temporary-directory errors and crypto timeouts; the complete clean CI
+  runs above are the regression evidence. Superseded local retries were stopped.
 
 ## Recovery
 
