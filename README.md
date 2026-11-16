@@ -10,7 +10,7 @@ Credential Vault 是一個自託管的憑證管理系統，專為安全性設計
 - **Google OAuth 登入**：透過 Google 帳號驗證身份
 - **零信任存取**：僅透過 Tailscale VPN 連入，不暴露 Web Port
 - **角色分離**：Admin 管理使用者但無法查看個人憑證
-- **個人保險箱**：每位使用者獨立管理自己的 credentials (新增/刪除/撤銷)
+- **個人保險箱**：每位使用者獨立管理自己的 credentials (新增/編輯/刪除/撤銷)，支援小型加密檔案欄位
 - **NAS 部署**：透過 Docker Compose 部署至 NAS
 
 ## Current Status
@@ -60,6 +60,7 @@ See [docs/](./docs/) for detailed documentation:
 
 - [快速開始指南 (繁體中文)](./QUICKSTART.zh-TW.md)
 - [Setup Guide](./docs/setup-guide.md)
+- [編輯憑證與小型檔案欄位](./docs/credential-fields.md)
 - [Architecture](./docs/architecture.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Script Standards](./docs/SCRIPT-STANDARDS.md)

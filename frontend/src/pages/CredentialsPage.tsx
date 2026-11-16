@@ -8,7 +8,7 @@ import MasterPasswordModal from '@/components/MasterPasswordModal'
 import CredentialForm from '@/components/CredentialForm'
 import CredentialDetail from '@/components/CredentialDetail'
 import TemplateSelector from '@/components/TemplateSelector'
-import { Plus, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive, AlertTriangle, ShieldAlert } from 'lucide-react'
+import { Plus, Pencil, Search, Key, ExternalLink, MoreVertical, Lock, Trash2, Ban, Archive, AlertTriangle, ShieldAlert } from 'lucide-react'
 import clsx from 'clsx'
 import type { Credential, CredentialListItem, CredentialTemplate } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
@@ -44,6 +44,7 @@ export default function CredentialsPage() {
   const [showCredentialForm, setShowCredentialForm] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<CredentialTemplate | null>(null)
   const [selectedCredential, setSelectedCredential] = useState<Credential | null>(null)
+  const [editing, setEditing] = useState<{ record: Credential; data: CredentialData } | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
@@ -126,6 +127,7 @@ export default function CredentialsPage() {
     if (!isUnlocked) {
       setShowDetail(false)
       setSelectedCredential(null)
+      setEditing(null)
       setShowCredentialForm(false)
       setSelectedTemplate(null)
       setShowBackupDialog(false)
@@ -186,6 +188,32 @@ export default function CredentialsPage() {
     }
   }
 
+  const openEditor = (record: Credential, data: CredentialData) => {
+    setActiveMenu(null)
+    setShowDetail(false)
+    setSelectedCredential(null)
+    setSelectedTemplate(null)
+    setEditing({ record, data })
+    setShowCredentialForm(true)
+  }
+
+  const handleEdit = async (id: string) => {
+    setActiveMenu(null)
+    setActionError('')
+    const operation = captureOperation()
+    try {
+      const record = credentials?.find((entry) => entry.id === id)
+      if (!record) throw new Error('Credential not loaded')
+      const data = await decrypt(record)
+      operation.assertActive()
+      if (!data) throw new Error('Credential could not be verified or decrypted.')
+      openEditor(record, data)
+    } catch (err) {
+      try { operation.assertActive() } catch { return }
+      setActionError(err instanceof Error ? err.message : 'Could not edit credential.')
+    } finally { operation.cancel() }
+  }
+
   const handleRevoke = async (id: string) => {
     setActiveMenu(null)
     if (!confirm('Are you sure you want to revoke this credential?')) {
@@ -235,6 +263,7 @@ export default function CredentialsPage() {
 
   // Handle template selection
   const handleTemplateSelect = (template: CredentialTemplate | null) => {
+    setEditing(null)
     setSelectedTemplate(template)
     setShowTemplateSelector(false)
     setShowCredentialForm(true)
@@ -242,6 +271,7 @@ export default function CredentialsPage() {
 
   // Handle credential form close
   const handleCredentialFormClose = () => {
+    setEditing(null)
     setShowCredentialForm(false)
     setSelectedTemplate(null)
   }
@@ -458,6 +488,10 @@ export default function CredentialsPage() {
 
                 {activeMenu === entry.id && (
                   <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                    <button onClick={() => { void handleEdit(entry.id) }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
+                      <Pencil className="w-4 h-4" /> Edit
+                    </button>
                     {entry.is_active && (
                       <button
                         onClick={() => handleRevoke(entry.id)}
@@ -505,10 +539,18 @@ export default function CredentialsPage() {
       />
 
       <CredentialForm
-        key={showCredentialForm ? (selectedTemplate?.id ?? 'blank') : 'closed'}
+        key={showCredentialForm ? (editing?.record.id ?? selectedTemplate?.id ?? 'blank') : 'closed'}
         isOpen={showCredentialForm}
         onClose={handleCredentialFormClose}
         onSave={async (data, templateId, assertActive) => {
+          if (editing) {
+            try {
+              await credentialService.update(editing.record, data.encrypted_data, assertActive)
+            } finally {
+              queryClient.invalidateQueries({ queryKey: ['credentials'] })
+            }
+            return
+          }
           const result = await createMutation.mutateAsync({ data, assertActive })
           assertActive?.()
           // Record template usage if a template was used
@@ -517,6 +559,8 @@ export default function CredentialsPage() {
           }
         }}
         template={selectedTemplate}
+        credentialId={editing?.record.id}
+        initialData={editing ? { ...editing.data, credentialData: editing.data } : undefined}
       />
 
       <CredentialDetail
@@ -532,6 +576,7 @@ export default function CredentialsPage() {
           setSelectedCredential(updated)
           queryClient.invalidateQueries({ queryKey: ['credentials'] })
         }}
+        onEdit={openEditor}
       />
 
       <CredentialBackupDialog

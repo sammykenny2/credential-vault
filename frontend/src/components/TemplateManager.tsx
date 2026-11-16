@@ -86,6 +86,10 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
       setError('At least one field is required')
       return
     }
+    if (new Set(validFields.map((field) => field.key.trim())).size !== validFields.length) {
+      setError('Field names must be unique')
+      return
+    }
 
     onSave({
       name: name.trim(),
@@ -94,7 +98,8 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
       category: category || undefined,
       fields: validFields.map((f) => ({
         key: f.key.trim(),
-        isSecret: f.isSecret,
+        type: f.type ?? 'text',
+        isSecret: f.type === 'file' || f.isSecret,
         placeholder: f.placeholder,
         required: f.required,
       })),
@@ -209,7 +214,7 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
             </div>
 
             {fields.map((field, index) => (
-              <div key={index} className="flex items-center gap-2">
+              <div key={index} className="flex flex-wrap items-center gap-2">
                 <input
                   {...privateFieldProps}
                   type="text"
@@ -219,15 +224,29 @@ function TemplateEditor({ isOpen, onClose, onSave, initialData, mode }: Template
                   placeholder="Field name (e.g., API Key)"
                   disabled={isReadOnly}
                 />
+                <select value={field.type ?? 'text'} disabled={isReadOnly} className="input w-auto"
+                  aria-label={`Type for ${field.key || 'new field'}`}
+                  onChange={(event) => handleFieldChange(index, {
+                    type: event.target.value as 'text' | 'file',
+                    isSecret: event.target.value === 'file' || field.isSecret,
+                  })}>
+                  <option value="text">Text</option>
+                  <option value="file">File</option>
+                </select>
                 <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={field.isSecret}
                     onChange={(e) => handleFieldChange(index, { isSecret: e.target.checked })}
                     className="rounded-sm border-gray-300"
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || field.type === 'file'}
                   />
                   Secret
+                </label>
+                <label className="flex items-center gap-1 text-sm text-gray-600">
+                  <input type="checkbox" checked={field.required ?? false} disabled={isReadOnly}
+                    onChange={(event) => handleFieldChange(index, { required: event.target.checked })} />
+                  Required
                 </label>
                 {!isReadOnly && (
                   <button

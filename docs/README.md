@@ -20,6 +20,7 @@ These important documents live in the project root:
 | [architecture.md](./architecture.md) | Template | System architecture |
 | [api.md](./api.md) | Template | API specification (REST/WebSocket) |
 | [api-security.md](./api-security.md) | Complete | 已實作的登入、session、初次設定與還原 API 契約 |
+| [credential-fields.md](./credential-fields.md) | Implemented; validation pending | 編輯既有憑證、必要／秘密欄位、小型檔案與備份操作 |
 
 ## Development Guides
 
@@ -46,6 +47,9 @@ The following documents describe proposed behavior and have not been implemented
 | [ADR-005](./decisions/005-session-and-operation-boundaries.md) | Accepted; review pending | Session 輪替、操作生命週期、穩定身分與提交邊界 |
 | [SPEC-005](./specs/SPEC-005-security-boundaries.md) | Implemented in branch | 安全修補行為、備份相容性與驗收要求 |
 | [PLAN-005](./plans/PLAN-005-security-review-hardening.md) | In Progress | 2026-11-05 審查修補與驗證進度 |
+| [ADR-006](./decisions/006-credential-editing-and-small-files.md) | Accepted | 既有密文內的小型檔案欄位與安全編輯 |
+| [SPEC-006](./specs/SPEC-006-credential-editing-and-small-files.md) | Implemented; validation pending | 編輯與小型檔案的範圍、限制與驗收 |
+| [PLAN-006](./plans/PLAN-006-credential-editing-and-small-files.md) | In Progress | 測試、獨立審查、CI 與本機部署紀錄 |
 
 ## Scripts
 
@@ -86,6 +90,7 @@ Add your project-specific automation scripts here.
 | [research/](./research/) | Directory | Research notes and external sources |
 | [2026-11-05 結構化憑證與加密附件](./research/2026-11-05-structured-vault-use-cases.md) | Complete | 六種開發者／雲端情境的一手來源、現況證據及設計推論；尚未實作 |
 | [2026-10-23 儲存與認證面安全審查](./research/2026-10-23-security-review-storage-and-auth-surface.md) | Complete | 全專案安全掃描：E2EE 儲存結論、弱點清單與修復順序 |
+| [2026-11-16 Release dependency audit](./research/2026-11-16-release-dependency-audit.md) | Complete | v0.5.0 CI 找出的既有 Python 依賴修補與一手公告 |
 
 ## Context-Driven Development
 

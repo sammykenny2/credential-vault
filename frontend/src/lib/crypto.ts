@@ -28,6 +28,7 @@
 
 import { argon2id } from 'hash-wasm'
 import { randomInt } from './passwordTools'
+import { assertFieldOptions, type CredentialFieldOptions } from './credentialFields'
 
 // === Constants ===
 const AES_ALGORITHM = 'AES-GCM'
@@ -687,6 +688,9 @@ export interface CredentialData {
   category?: string
   /** Key-value pairs for all credential fields */
   fields: Record<string, string>
+  /** Encrypted rendering hints; legacy records omit both properties. */
+  fieldOptionsVersion?: 1
+  fieldOptions?: Record<string, CredentialFieldOptions>
   /** Optional notes */
   notes?: string
 }
@@ -754,6 +758,8 @@ export function assertCredentialData(value: unknown): asserts value is Credentia
   ) {
     throw new Error('Invalid credential content')
   }
+  if ('schemaVersion' in value) throw new Error('Unsupported credential schema version')
+  assertFieldOptions(value)
 }
 
 async function decryptBody(

@@ -35,6 +35,7 @@ import {
 import { VaultLockedError } from '@/lib/vaultProof'
 import { captureOperation, OperationCancelledError } from '@/lib/operationGuard'
 import type { Credential } from '@/types'
+import { MAX_ENCRYPTED_RECORD_CHARS } from '@/lib/credentialFields'
 
 const mockedApi = api as unknown as {
   get: ReturnType<typeof vi.fn>
@@ -195,7 +196,52 @@ describe('get()', () => {
 })
 
 describe('writes derived from a record the user reviewed', () => {
+  it('rejects create and update sizes that would exceed restore capacity before sending', async () => {
+    const oversized = 'a'.repeat(MAX_ENCRYPTED_RECORD_CHARS + 1)
+    const reviewed = await storedRow()
+    await expect(credentialService.create({ id: ID, encrypted_data: oversized })).rejects.toThrow('too large')
+    await expect(credentialService.update(reviewed, oversized)).rejects.toThrow('too large')
+    expect(mockedApi.post).not.toHaveBeenCalled()
+    expect(mockedApi.patch).not.toHaveBeenCalled()
+  })
+
+  it('can save and restore a record at the shared ciphertext size boundary', async () => {
+    const boundary = 'a'.repeat(MAX_ENCRYPTED_RECORD_CHARS)
+    const reviewed = await storedRow()
+    serveWhatWasSent(mockedApi.patch, reviewed)
+    await expect(credentialService.update(reviewed, boundary)).resolves.toMatchObject({ encrypted_data: boundary })
+    mockedApi.post.mockImplementation(async (_url: string, body: { credentials: Credential[] }) => {
+      mockedApi.get.mockResolvedValue({ data: body.credentials })
+      return { data: { imported: body.credentials.length, skipped: 0, errors: [] } }
+    })
+    await expect(credentialService.importBatch([{ id: ID, encrypted_data: boundary }])).resolves.toMatchObject({ imported: 1 })
+  })
+  it('updates only ciphertext and revision, preserving ID, expiry, revocation and origin', async () => {
+    const reviewed = await storedRow({ is_active: false, revoked_at: '2026-11-05T00:00:00Z',
+      expires_at: '2027-01-01T00:00:00Z', origin: 'legacy-unverified' })
+    serveWhatWasSent(mockedApi.patch, reviewed)
+    const updated = await credentialService.update(reviewed, OTHER_BLOB)
+    expect(updated.id).toBe(reviewed.id)
+    expect(updated.encrypted_data).toBe(OTHER_BLOB)
+    expect(updated.revision).toBe(reviewed.revision + 1)
+    expect(updated.is_active).toBe(false)
+    expect(updated.revoked_at).toBe(reviewed.revoked_at)
+    expect(updated.expires_at).toBe(reviewed.expires_at)
+    expect(await verifyRecord(updated, signer)).toBe('legacy-unverified')
+    expect(mockedApi.post).not.toHaveBeenCalled()
+    expect(mockedApi.patch.mock.calls[0][2]).toEqual({ headers: PROOF_HEADERS, assertOperation: expect.any(Function) })
+  })
+
+  it('propagates an update conflict without retrying or writing the old ciphertext', async () => {
+    const reviewed = await storedRow()
+    mockedApi.patch.mockRejectedValue({ response: { status: 409 } })
+    await expect(credentialService.update(reviewed, OTHER_BLOB)).rejects.toEqual({ response: { status: 409 } })
+    expect(mockedApi.patch).toHaveBeenCalledTimes(1)
+    expect(mockedApi.get).not.toHaveBeenCalled()
+  })
+
   it.each([
+    ['update', (row: Credential) => credentialService.update(row, OTHER_BLOB)],
     ['revoke', (row: Credential) => credentialService.revoke(row)],
     ['confirmOrigin', (row: Credential) => credentialService.confirmOrigin(row)],
   ])('%s refuses to sign over a record that fails verification', async (_label, write) => {
@@ -215,6 +261,7 @@ describe('writes derived from a record the user reviewed', () => {
   })
 
   it.each([
+    ['update', (row: Credential) => credentialService.update(row, BLOB)],
     ['revoke', (row: Credential) => credentialService.revoke(row)],
     ['confirmOrigin', (row: Credential) => credentialService.confirmOrigin(row)],
   ])('%s signs the reviewed record, not a fresh answer from the server', async (_label, write) => {

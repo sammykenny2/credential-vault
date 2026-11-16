@@ -91,6 +91,7 @@ const googleTemplates: CredentialTemplate[] = [
       { key: 'Client ID', placeholder: 'xxx.apps.googleusercontent.com', isSecret: false, required: true },
       { key: 'Client Secret', placeholder: 'GOCSPX-xxxxxx', isSecret: true, required: true },
       { key: 'Redirect URI', placeholder: 'https://example.com/callback', isSecret: false, validation: 'url' },
+      { key: 'Credentials JSON', type: 'file', isSecret: true },
     ],
     'Google OAuth 2.0 client credentials'
   ),
@@ -111,6 +112,7 @@ const googleTemplates: CredentialTemplate[] = [
     [
       { key: 'Client Email', placeholder: 'service@project.iam.gserviceaccount.com', isSecret: false, required: true, validation: 'email' },
       { key: 'Private Key', placeholder: '-----BEGIN PRIVATE KEY-----', isSecret: true, required: true },
+      { key: 'Service Account JSON', type: 'file', isSecret: true },
       { key: 'Project ID', placeholder: 'my-project-123', isSecret: false, required: true },
     ],
     'Google Cloud service account credentials'

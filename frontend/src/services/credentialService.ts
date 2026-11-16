@@ -13,6 +13,7 @@ import {
 } from '@/lib/recordSigning'
 import { VaultLockedError, vaultProofHeaders } from '@/lib/vaultProof'
 import type { Credential, CredentialListItem, CredentialCreate } from '@/types'
+import { assertEncryptedRecordSize } from '@/lib/credentialFields'
 
 /** The server's maximum page size for GET /credentials/. */
 const LIST_PAGE_SIZE = 500
@@ -138,6 +139,7 @@ export const credentialService = {
   },
 
   async create(data: CredentialCreate, assertActive?: OperationCheck): Promise<Credential> {
+    assertEncryptedRecordSize(data.encrypted_data)
     const signer = requireSigner()
     const operation = captureOperation(true, assertActive)
     try {
@@ -180,6 +182,20 @@ export const credentialService = {
       (state, signed, headers, assertOperation) => api.patch(
         `/credentials/${reviewed.id}`,
         signedFields(state, signed),
+        { headers, assertOperation }
+      ), assertActive
+    )
+  },
+
+  /** Replace the ciphertext of the exact signed record the user edited. */
+  async update(reviewed: Credential, encryptedData: string, assertActive?: OperationCheck): Promise<Credential> {
+    assertEncryptedRecordSize(encryptedData)
+    return writeNextState(
+      reviewed,
+      (origin) => ({ ...reviewed, encrypted_data: encryptedData, revision: reviewed.revision + 1, origin }),
+      (state, signed, headers, assertOperation) => api.patch(
+        `/credentials/${reviewed.id}`,
+        { encrypted_data: state.encrypted_data, ...signedFields(state, signed) },
         { headers, assertOperation }
       ), assertActive
     )

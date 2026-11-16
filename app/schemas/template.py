@@ -1,6 +1,7 @@
 """Template schemas for API request/response validation."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -12,6 +13,7 @@ class TemplateField(BaseModel):
     """
 
     key: str = Field(min_length=1, max_length=100)
+    type: Literal["text", "file"] = "text"
     placeholder: str | None = Field(None, max_length=255)
     isSecret: bool = False
     required: bool | None = None
@@ -20,10 +22,12 @@ class TemplateField(BaseModel):
     @model_validator(mode="after")
     def _no_default_for_secret_fields(self) -> TemplateField:
         """Templates are stored unencrypted; a secret default would be plaintext on the server."""
-        if self.isSecret and self.defaultValue:
+        if (self.isSecret or self.type == "file") and self.defaultValue:
             raise ValueError(
                 "Secret fields cannot have a default value: templates are stored unencrypted"
             )
+        if self.type == "file":
+            self.isSecret = True
         return self
 
 
