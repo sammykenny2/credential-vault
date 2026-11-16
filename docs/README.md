@@ -20,7 +20,7 @@ These important documents live in the project root:
 | [architecture.md](./architecture.md) | Template | System architecture |
 | [api.md](./api.md) | Template | API specification (REST/WebSocket) |
 | [api-security.md](./api-security.md) | Complete | 已實作的登入、session、初次設定與還原 API 契約 |
-| [credential-fields.md](./credential-fields.md) | Implemented; validation pending | 編輯既有憑證、必要／秘密欄位、小型檔案與備份操作 |
+| [credential-fields.md](./credential-fields.md) | Complete | 編輯既有憑證、必要／秘密欄位、小型檔案與備份操作 |
 
 ## Development Guides
 
@@ -34,9 +34,10 @@ These important documents live in the project root:
 | [services.md](./services.md) | Complete | Service registry and port assignments |
 | [SCRIPT-STANDARDS.md](./SCRIPT-STANDARDS.md) | Bootstrap | Script standards and naming |
 
-## Current Design Proposals
+## Designs and Implementation Plans
 
-The following documents describe proposed behavior and have not been implemented.
+These records distinguish implemented behavior from remaining proposals. Consult
+each status and its deployment record before treating a feature as available.
 
 | Document | Status | Description |
 |----------|--------|-------------|
@@ -48,8 +49,9 @@ The following documents describe proposed behavior and have not been implemented
 | [SPEC-005](./specs/SPEC-005-security-boundaries.md) | Implemented in branch | 安全修補行為、備份相容性與驗收要求 |
 | [PLAN-005](./plans/PLAN-005-security-review-hardening.md) | In Progress | 2026-11-05 審查修補與驗證進度 |
 | [ADR-006](./decisions/006-credential-editing-and-small-files.md) | Accepted | 既有密文內的小型檔案欄位與安全編輯 |
-| [SPEC-006](./specs/SPEC-006-credential-editing-and-small-files.md) | Implemented; validation pending | 編輯與小型檔案的範圍、限制與驗收 |
-| [PLAN-006](./plans/PLAN-006-credential-editing-and-small-files.md) | In Progress | 測試、獨立審查、CI 與本機部署紀錄 |
+| [SPEC-006](./specs/SPEC-006-credential-editing-and-small-files.md) | Implemented; deployed v0.5.0 | 編輯與小型檔案的範圍、限制與驗收 |
+| [PLAN-006](./plans/PLAN-006-credential-editing-and-small-files.md) | Completed | 測試、獨立審查、CI 與本機部署紀錄 |
+| [ADR-007](./decisions/007-python-runtime-release.md) | Accepted | 已測試的 Python 3.15.2 容器執行環境與發布掃描 |
 
 ## Scripts
 

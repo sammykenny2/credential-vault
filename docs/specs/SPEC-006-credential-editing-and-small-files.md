@@ -1,9 +1,17 @@
 # SPEC-006: Credential editing and small file custom fields
 
-Status: approved task, implementation in progress. Requested 2026-11-16.
-Decision: [ADR-006](../decisions/006-credential-editing-and-small-files.md).
+## Metadata
 
-## Scope
+| Field | Value |
+|-------|-------|
+| Status | Implemented and deployed in v0.5.0, 2026-11-16 |
+| Owner | Project maintainer |
+| Reviewer | Independent review complete; see PLAN-006 |
+
+Decision: [ADR-006](../decisions/006-credential-editing-and-small-files.md).
+Deployment evidence: [PLAN-006](../plans/PLAN-006-credential-editing-and-small-files.md).
+
+## Summary
 
 An unlocked owner can edit an existing credential's details, field names and values,
 add optional text/file fields, remove optional fields, and replace or remove files.
@@ -20,7 +28,13 @@ safe filename, and cleans up its Blob URL. Files are not previewed or parsed.
 The template editor exposes Text/File, Secret and Required; definitions contain no
 real values. Google OAuth and Google Service Account include optional JSON fields.
 
-## Acceptance
+## Goals
+
+- Edit existing records and optional fields without recreating the credential.
+- Preserve small file bytes and encrypted backup/restore with existing signing,
+  ownership, revision and session boundaries.
+
+## Requirements and Acceptance
 
 1. A save updates the original ID, increments the reviewed revision, preserves
    signed expiry/revocation/origin, requires proof, and verifies the stored result.
@@ -39,8 +53,20 @@ real values. Google OAuth and Google Service Account include optional JSON field
    is complete, CI release passes, and deployment version/health/cache policy is
    recorded before claiming this is available on the current machine.
 
-## Excluded
+## Non-Goals
 
 Standalone 10 MiB attachments, collection/section graphs, ZIP backup v2, file
 previews, vendor-JSON parsing and automatic population of credential values.
 SPEC-004 / PLAN-004 remain pending for that broader system.
+
+## Design and Dependencies
+
+ADR-006 extends the existing encrypted string map with versioned rendering options;
+files remain inside the signed ciphertext. Existing Web Crypto, operation guards,
+vault proof and backend compare-and-swap updates are reused without new packages,
+listeners or migrations. ADR-007 records the independently reviewed, CI-tested
+Python container runtime needed for the release scan.
+
+## Open Questions
+
+None for this bounded release. The broader SPEC-004 design remains separate.

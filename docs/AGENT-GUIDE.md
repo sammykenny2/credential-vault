@@ -54,8 +54,9 @@ project-specific procedures that are too detailed for always-loaded instructions
   and checks them before later side effects. Closing/unmounting cancels dialog work.
   Never replace these checks with reading the current global keys after an await.
 - Backups fetch/verify every page including revoked rows, then compare the snapshot
-  again. The new text-only JSON type is `credential-record-backup` v1, distinct
-  from both legacy `credential-backup` v1 and planned ZIP v2. Restore preserves
+  again. The record JSON type is `credential-record-backup` v1 and preserves the
+  bounded embedded file fields from ADR-006. It is distinct from legacy
+  `credential-backup` v1 and planned standalone-attachment ZIP v2. Restore preserves
   revocation but labels origin unverified; completed batches can remain on failure.
 - FastAPI 0.162 uses included-router objects that stock SlowAPI middleware misses.
   `RequestLimitMiddleware` enforces the shared API budget before reading bodies,
@@ -75,6 +76,9 @@ project-specific procedures that are too detailed for always-loaded instructions
 - Backend: `app/main.py` (FastAPI). Run `uvicorn app.main:app --reload` after
   `uv sync --extra dev` and `alembic upgrade head`. Admin CLI: `vault-cli`
   (`app/cli.py`).
+- Python development supports 3.14+; CI tests 3.14 and 3.15. The production
+  container pins official Python 3.15.2 slim by digest (ADR-007), avoiding the
+  3.14.10-only FIPS regression without weakening the image scan.
 - Python dependencies are locked in `uv.lock` (universal, hashed). After editing
   `pyproject.toml` run `uv lock` with uv 0.12.24 (`uvx --from uv==0.12.24 uv lock`,
   the version CI and the Dockerfile pin); CI fails on a stale lock. CI and the

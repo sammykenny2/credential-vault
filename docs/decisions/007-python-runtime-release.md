@@ -2,8 +2,9 @@
 
 ## Status
 
-Proposed for independent review, 2026-11-16. Deployment remains gated on CI, Docker
-builds and the unchanged fixable High/Critical image vulnerability scan.
+Accepted after independent review and passing CI, Docker builds and the unchanged
+fixable High/Critical image vulnerability scan, 2026-11-16. Python 3.14 and 3.15
+application jobs both passed; actual deployment health is recorded in PLAN-006.
 
 ## Context
 
