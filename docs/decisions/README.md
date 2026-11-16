@@ -43,6 +43,7 @@ Use [000-template.md](./000-template.md) as the starting point for new ADRs.
 | [ADR-004](./004-vault-authenticity-and-key-trust.md) | Vault 金鑰信任、用途隔離與內容簽章；ADR-003 格式定案前置條件 | Accepted | 2026-11-05 |
 | [ADR-005](./005-session-and-operation-boundaries.md) | 登入 session、非同步操作與完整備份邊界 | Accepted | 2026-11-05 |
 <!-- Add new ADRs above this line -->
+| [ADR-006](./006-credential-editing-and-small-files.md) | Credential editing and bounded embedded file fields | Accepted | 2026-11-16 |
 
 ## For AI Agents
 

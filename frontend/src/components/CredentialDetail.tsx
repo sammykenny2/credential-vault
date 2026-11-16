@@ -5,13 +5,14 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Eye, EyeOff, Copy, ExternalLink, X, Check, ShieldAlert } from 'lucide-react'
+import { Eye, EyeOff, Copy, ExternalLink, X, Check, ShieldAlert, Download, Pencil } from 'lucide-react'
 import { useCredentialCrypto } from '@/hooks/useCredentialCrypto'
 import { useOperationGuard } from '@/hooks/useOperationGuard'
 import { OperationCancelledError } from '@/lib/operationGuard'
 import { credentialService } from '@/services/credentialService'
 import type { Credential } from '@/types'
 import type { CredentialData } from '@/lib/crypto'
+import { fieldOptions, readStoredFile, safeFileName, fileByteLength, downloadFieldFile } from '@/lib/credentialFields'
 
 interface CredentialDetailProps {
   credential: Credential | null
@@ -19,15 +20,7 @@ interface CredentialDetailProps {
   onClose: () => void
   /** The user confirmed a legacy-unverified record; it now has a new signed state. */
   onOriginConfirmed?: (updated: Credential) => void
-}
-
-// Detect if a field should be treated as secret based on its key
-const isSecretField = (key: string): boolean => {
-  const keyLower = key.toLowerCase()
-  return keyLower.includes('password') ||
-         keyLower.includes('secret') ||
-         keyLower.includes('key') ||
-         keyLower.includes('token')
+  onEdit?: (record: Credential, data: CredentialData) => void
 }
 
 export default function CredentialDetail({
@@ -35,6 +28,7 @@ export default function CredentialDetail({
   isOpen,
   onClose,
   onOriginConfirmed,
+  onEdit,
 }: CredentialDetailProps) {
   const { decrypt, isProcessing, error } = useCredentialCrypto()
   const { begin, cancel } = useOperationGuard(isOpen)
@@ -134,6 +128,10 @@ export default function CredentialDetail({
           </div>
         ) : decryptedData ? (
           <div className="space-y-4">
+            {onEdit && <button type="button" className="btn btn-secondary flex items-center gap-2"
+              onClick={() => { cancel(); onEdit(credential, decryptedData) }}>
+              <Pencil className="w-4 h-4" /> Edit Credential
+            </button>}
             {/* decryptedData is only set after the signature verified, so origin is signed */}
             {credential.origin === 'legacy-unverified' && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
@@ -179,8 +177,30 @@ export default function CredentialDetail({
             {decryptedData.fields && Object.keys(decryptedData.fields).length > 0 && (
               <div className="space-y-2">
                 {Object.entries(decryptedData.fields).map(([key, value]) => {
-                  const isSecret = isSecretField(key)
+                  const options = fieldOptions(decryptedData, key)
+                  const isSecret = options.isSecret
                   const isVisible = visibleFields.has(key)
+                  if (options.type === 'file') {
+                    const file = value ? readStoredFile(value) : null
+                    return <div key={key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500 uppercase">{key}</p>
+                        <p className="break-all">{file ? safeFileName(file.name) : 'No file'}</p>
+                        {file && <p className="text-xs text-gray-500">{fileByteLength(file)} bytes</p>}
+                      </div>
+                      {file && <button type="button" className="btn btn-secondary text-sm flex items-center gap-1"
+                        onClick={() => {
+                          const operation = begin()
+                          try {
+                            if (!confirm('Downloading creates a decrypted file on this device. Continue?')) return
+                            operation.assertActive()
+                            downloadFieldFile(value)
+                          } finally { operation.finish() }
+                        }}>
+                        <Download className="w-4 h-4" /> Download
+                      </button>}
+                    </div>
+                  }
 
                   return (
                     <div key={key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">

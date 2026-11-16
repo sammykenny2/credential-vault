@@ -20,6 +20,8 @@ export type FieldValidation = 'email' | 'url' | 'port' | 'none'
  * Describes a single field within a credential template.
  */
 export interface TemplateField {
+  /** Omitted on older templates, which use text fields. */
+  type?: 'text' | 'file'
   /** Field name displayed as label (e.g., "Username", "API Key") */
   key: string
   /** Placeholder text shown in input field */
