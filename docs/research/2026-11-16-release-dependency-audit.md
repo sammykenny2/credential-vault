@@ -14,3 +14,8 @@ Update only these two locked packages with the project's pinned uv 0.12.24, then
 rerun CI including the dependency audit before merging or deploying v0.5.0.
 
 Sources accessed 2026-11-16. [First CI run](https://github.com/sammykenny2/credential-vault/actions/runs/43822554324).
+
+The subsequent dependency audit passed. The main release image scan then blocked
+Python 3.14.10 on CVE-2026-119170. The official 3.14.11 Docker image was unavailable;
+[ADR-007](../decisions/007-python-runtime-release.md) records the tested 3.15.2
+runtime replacement, without weakening or suppressing the release scan.
